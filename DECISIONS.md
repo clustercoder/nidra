@@ -108,3 +108,28 @@ Compose bind-mounts `./artifacts` read-only into `api` and `inference`, so the d
 must exist in a fresh checkout; `artifacts/metrics/.gitkeep` provides that. Weights and
 the scaler are build outputs; evaluation metrics are a deliverable. Restates CLAUDE.md's
 commit policy as an actual ignore rule.
+
+**D18 — Password hashing calls `bcrypt` directly; `passlib` is dropped.**
+`passlib` 1.7.4 (last released 2020) fails at import-time backend detection against
+`bcrypt` 5.0 — its probe hashes a >72-byte secret, which bcrypt 5 now refuses with
+`ValueError` instead of truncating. The alternatives were pinning `bcrypt<5` to keep an
+unmaintained wrapper, or calling `bcrypt.hashpw`/`checkpw` directly, which is four lines
+and has no compatibility surface. Consequence: passwords are bounded to 8–72 UTF-8 bytes
+at the request schema, because silently hashing only the first 72 bytes is the failure
+mode the version bump was designed to stop. Overrides: PROMPTBOOK P0's `passlib[bcrypt]`
+dependency, replaced by `bcrypt>=4`.
+
+**D19 — Auth endpoints take JSON bodies; the security scheme is `HTTPBearer`.**
+`OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")` would advertise in OpenAPI a
+form-encoded endpoint with a `username` field that does not exist — and the frontend
+generates its types from that document. Login mirrors register: a JSON body with
+`email`. Extends: IMPLEMENTATION-Backend.md §8, whose `oauth2_scheme` line is
+illustrative rather than a wire format.
+
+**D20 — Access and refresh tokens are distinguished by a `type` claim, checked on decode.**
+A refresh token outlives an access token by roughly 336×; without the check, presenting
+one as a Bearer credential would work and quietly extend every session to seven days.
+`decode_token(token, expected_type=...)` is the only decode path, so the check cannot be
+skipped by a caller. The probe route the P3 tests authenticate against is defined in
+`tests/test_auth.py`, not in `api/` — P3's API surface is exactly register/login/refresh,
+and a permanently mounted test route is surface. Extends: IMPLEMENTATION-Backend.md §8.
