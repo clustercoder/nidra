@@ -158,3 +158,54 @@ its own process — drive the loop without installing process-wide signal handle
 `__main__` path keeps the default: SIGTERM/SIGINT set the event, the in-flight handler
 finishes, and nothing unprocessed is acked. Worst-case exit latency is one `block_ms`.
 Extends: PROMPTBOOK P4's "graceful shutdown on SIGTERM".
+
+**D24 — `RawEvent.label` is a top-level optional string, not a `fields` entry.**
+PROMPTBOOK P5 lists "label if present" inside the flow payload, but `fields` is
+`dict[str, float]` and a CIC label is `"DoS Hulk"`. Encoding it numerically would either
+lose the attack type or invent a code table nothing else reads. It is carried as
+`label: str | None` instead — visibly supervision rather than measurement, so nothing on
+the serving path can mistake it for an input. Extends: PROMPTBOOK P5.1.
+
+**D25 — `RawEvent.fields` is validated as a subset of a per-kind vocabulary, not an
+equality check.** A UDP packet has no `tcp_len` and a synthesised zero would be a lie the
+features service could not distinguish from a real zero-length segment. Unknown keys and
+non-finite values still fail loudly at the producer. Contrast with `StateVector`, where
+the check *is* equality because `FEATURE_ORDER` is canonical and complete.
+
+**D26 — Replay speed lives on the stream message and the Redis job hash, not in a new
+`ingest_jobs` column.** P5 says the speed is "stored on the job"; the §9 schema has no
+column for it and adding one means a second migration for a value that is consumed once,
+by the worker, at job start. `job:{job_id}` already carries the live job state the API
+merges into its status response. Extends: IMPLEMENTATION-Backend.md §9.
+
+**D27 — Ingest splits failures in two: `IngestError` is acked, everything else pends.**
+A file that cannot be parsed — wrong columns, missing tshark, deleted upload — fails
+identically on every redelivery, so retrying it forever via `XAUTOCLAIM` would occupy a
+worker permanently and never succeed. Those are recorded on the job (`status=error`,
+message in Redis and Postgres) and acked. A Redis or Postgres failure propagates and
+stays pending, which is what the at-least-once guarantee is for. The error path reports
+the events that *did* reach the bus, not zero. Extends: PROMPTBOOK Standing Rules
+"ack only after success".
+
+**D28 — tshark is invoked with `-E occurrence=f`; boolean fields are read in both
+renderings.** The field list is exactly IMPLEMENTATION-ML.md §2.2. The one added output
+option is `occurrence=f`: with tunnelled or repeated layers tshark emits several
+comma-joined values for a field, which under `separator=,` silently shifts every column
+after it. Separately, tshark 4 prints boolean fields (`ip.flags.mf`,
+`tcp.analysis.retransmission`) as `True`/`False` where 2.x printed `1`/`0` — verified
+against tshark 4 output for the fixture capture — so both are accepted and anything
+falsey is 0. Extends: IMPLEMENTATION-ML.md §2.2.
+
+**D29 — Upload root is `ingest.upload_dir` (default `data/uploads`), not a literal
+`/data/uploads`.** P5 names the path `/data/uploads/{tenant}/{job_id}/` and says "path
+from config"; an absolute `/data` is not writable on a developer machine, and `data/` is
+already the gitignored directory for captures. Compose sets `NIDRA_UPLOAD_DIR` to the
+shared `uploads` volume both `api` and `ingest` mount, so the container path is the
+deployment's business and the config stays the single source of truth. The stored file is
+named `{job_id}{ext}`; the client's filename is kept only for display.
+
+**D30 — The API opens one Redis client per request rather than a process-wide singleton.**
+A connection pool binds to the event loop it is first used on, and the API's ingest
+endpoints are low-traffic enough that a connection per request is not a cost worth a
+cross-loop failure that surfaces as an unrelated timeout. The P9 WebSocket consumer,
+which is long-lived and loop-stable, will own its own client.

@@ -26,6 +26,7 @@ x-app: &app
     NIDRA_REDIS_URL: redis://redis:6379/0
     NIDRA_POSTGRES_URL: postgresql+asyncpg://nidra:nidra@postgres:5432/nidra
     NIDRA_SECRET_KEY: ${NIDRA_SECRET_KEY:-dev-insecure-secret-change-me}
+    NIDRA_UPLOAD_DIR: /var/lib/nidra/uploads
     PYTHONUNBUFFERED: "1"
   depends_on:
     redis:

@@ -33,8 +33,15 @@ auth:
 ingest:
   max_upload_mb: 2048
   allowed_ext: [.pcap, .pcapng, .csv]
+  # Where validated uploads land: {upload_dir}/{tenant_id}/{job_id}/{job_id}{ext}.
+  # Relative paths resolve against the repo root; NIDRA_UPLOAD_DIR overrides (compose
+  # points it at the shared `uploads` volume mounted by api and ingest).
+  upload_dir: data/uploads
+  csv_chunk_rows: 5000
+  tshark_bin: tshark
 
 replay:
+  # 60x: one 30 s window every 0.5 s. 0 disables pacing (publish as fast as possible).
   default_speed: 60.0
 
 streams:

@@ -18,7 +18,7 @@ from importlib.metadata import PackageNotFoundError, version
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from api import auth
+from api import auth, ingest
 from nidra_common.db import dispose_engine
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.include_router(auth.router)
+    app.include_router(ingest.router)
 
     @app.get("/health", response_model=HealthResponse, tags=["ops"])
     async def health() -> HealthResponse:

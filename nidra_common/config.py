@@ -33,6 +33,7 @@ ENV_OVERRIDES: dict[str, tuple[str, ...]] = {
     f"{ENV_PREFIX}REDIS_URL": ("redis", "url"),
     f"{ENV_PREFIX}POSTGRES_URL": ("postgres", "url"),
     f"{ENV_PREFIX}SECRET_KEY": ("auth", "secret_key"),
+    f"{ENV_PREFIX}UPLOAD_DIR": ("ingest", "upload_dir"),
 }
 
 
