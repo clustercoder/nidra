@@ -28,8 +28,7 @@ from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.auth import credentials_error
-from api.deps import CurrentTenant
+from api.deps import CurrentTenant, tenant_uuid
 from nidra_common.bus import Bus, create_redis, stream_name
 from nidra_common.config import get_config
 from nidra_common.db import get_session
@@ -155,14 +154,6 @@ def default_speed() -> float:
 
 def _reject(code: int, detail: str) -> HTTPException:
     return HTTPException(status_code=code, detail=detail)
-
-
-def tenant_uuid(tenant_id: str) -> uuid.UUID:
-    """The tenant claim as a UUID. A token carrying anything else is not one of ours."""
-    try:
-        return uuid.UUID(tenant_id)
-    except ValueError as exc:
-        raise credentials_error("token does not carry a valid tenant") from exc
 
 
 def validated_extension(filename: str | None) -> str:

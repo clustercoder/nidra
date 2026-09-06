@@ -8,6 +8,7 @@ test; this module is what makes the test pass by construction.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from typing import Annotated, Any
 
@@ -55,6 +56,19 @@ async def current_tenant(principal: Annotated[Principal, Depends(current_princip
     return principal.tenant_id
 
 
+def tenant_uuid(tenant_id: str) -> uuid.UUID:
+    """The tenant claim as a UUID. A token carrying anything else is not one of ours."""
+    try:
+        return uuid.UUID(tenant_id)
+    except ValueError as exc:
+        raise credentials_error("token does not carry a valid tenant") from exc
+
+
+async def current_tenant_uuid(tenant_id: Annotated[str, Depends(current_tenant)]) -> uuid.UUID:
+    """The caller's tenant as the UUID every `tenant_id` column is typed as."""
+    return tenant_uuid(tenant_id)
+
+
 def verify_ws_token(token: str) -> Principal:
     """Authenticate a WebSocket handshake.
 
@@ -68,3 +82,4 @@ def verify_ws_token(token: str) -> Principal:
 
 CurrentPrincipal = Annotated[Principal, Depends(current_principal)]
 CurrentTenant = Annotated[str, Depends(current_tenant)]
+CurrentTenantUUID = Annotated[uuid.UUID, Depends(current_tenant_uuid)]

@@ -368,3 +368,46 @@ Extends: PROMPTBOOK P8.2 ("keep open-episode state in Redis").
 predictor is tenant-blind (D40). Rather than let asyncpg raise a cast error mid-transaction,
 `tenant_uuid()` fails loudly with the offending value. Extends: PROMPTBOOK Standing Rules
 (fail loudly at boundaries).
+
+**D52 — The socket's host filter is applied when the queue drains, the tenant filter when
+it is broadcast.** Tenant membership is fixed for the life of a connection, so filtering
+there means a queue never holds another tenant's bytes at all — a later filtering bug
+cannot leak them. The host filter can change mid-stream, so applying it at drain time
+means an update governs forecasts already queued rather than only ones that arrive after
+it. Extends: D2, PROMPTBOOK P9.2.
+
+**D53 — A filter update is acknowledged back to the client as `{"type":"filter","hosts":
+[...]}`.** The doc's design has no reply, which leaves a client unable to know when its
+update took effect and a test unable to publish deterministically after one. The
+acknowledgement is enqueued rather than written directly: one task owns sending on the
+socket, so no two coroutines ever write to it at once. Extends: IMPLEMENTATION-Backend.md
+§8 WebSocket.
+
+**D54 — The heartbeat is application-level JSON (`{"type":"ping"}` / `{"type":"pong"}`),
+not RFC 6455 control frames.** Starlette exposes no protocol-level ping, and a heartbeat
+the ASGI server owns is one neither the route nor a test can observe. The sending task
+pings after `api.ws_ping_interval_s` with nothing to send and closes with 1001 once
+`api.ws_max_missed_pongs` have gone unanswered. Extends: IMPLEMENTATION-Backend.md §8
+("heartbeat every 30 s; drop on two missed pongs").
+
+**D55 — `/health` reports lag per *consumer group*, so `forecasts` appears twice.**
+Pending count is a property of a group, not of a stream: the persister and this api
+process read `forecasts` under different groups and either can fall behind alone. The
+keys are `ingest_jobs`, `raw_events`, `state_vectors`, `forecasts` (persister) and
+`forecasts:api` (socket fan-out). `/health` stays 200 with `status: "degraded"` when Redis
+is unreachable — an endpoint that fails to answer is indistinguishable from a dead
+process. Extends: IMPLEMENTATION-Backend.md §8. This changed the shape P3 asserted, so
+`test_health_reports_status_and_empty_streams` became
+`test_health_reports_status_and_stream_lag` and now asserts the populated keys.
+
+**D56 — A page size above `api.max_page_limit` is clamped, not refused; a sort key outside
+the whitelist is a 422.** The two differ because one is a preference and the other is a
+correctness boundary: `limit=100000` means "as much as you'll give me", while a sort key
+reaches the `ORDER BY` and is only ever chosen from `HOST_SORT_COLUMNS` by lookup, never
+interpolated. Extends: PROMPTBOOK P9.1.
+
+**D57 — `tenant_uuid()` moved from `api/ingest.py` to `api/deps.py`, joined by a
+`CurrentTenantUUID` dependency.** Three routers now need the tenant as the UUID its
+columns are typed as; the alternative was the forecasts router importing from the ingest
+router, which reads as a dependency that is not one. Tenancy lives in one module.
+Extends: PROMPTBOOK Standing Rules (every query filters on `tenant_id`).

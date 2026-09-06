@@ -126,10 +126,19 @@ def _bearer(token: str) -> dict[str, str]:
 # ------------------------------------------------------------------------- app basics
 
 
-async def test_health_reports_status_and_empty_streams(client: httpx.AsyncClient) -> None:
+async def test_health_reports_status_and_stream_lag(client: httpx.AsyncClient) -> None:
+    """`streams` was empty until P9 wired the bus in; it now carries the pending counts."""
     response = await client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "streams": {}}
+    body = response.json()
+    assert body["status"] == "ok"
+    assert set(body["streams"]) == {
+        "ingest_jobs",
+        "raw_events",
+        "state_vectors",
+        "forecasts",
+        "forecasts:api",
+    }
 
 
 # --------------------------------------------------------------------------- register

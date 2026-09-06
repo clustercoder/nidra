@@ -65,6 +65,19 @@ replay:
   # 60x: one 30 s window every 0.5 s. 0 disables pacing (publish as fast as possible).
   default_speed: 60.0
 
+api:
+  # Read-endpoint pagination: the page size used when a request does not name one, and
+  # the ceiling a client may ask for (a larger `limit` is clamped, never refused).
+  page_limit: 50
+  max_page_limit: 500
+  # WebSocket fan-out. Each socket owns a queue of this many forecasts and drops its
+  # oldest when full — a stalled browser tab must not slow delivery to every other one.
+  ws_queue_size: 512
+  # Heartbeat: a ping after this long with nothing to send, and close once this many
+  # pings have gone unanswered. Idle proxies drop a quiet socket at about 60 s.
+  ws_ping_interval_s: 30
+  ws_max_missed_pongs: 2
+
 streams:
   raw_events: raw_events
   state_vectors: state_vectors
