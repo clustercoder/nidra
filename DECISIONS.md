@@ -281,3 +281,45 @@ Its window has already been published; amending the accumulator would produce a 
 different vector for a `window_ts` downstream has already consumed. Ingest publishes in
 timestamp order and logs its own chunk-boundary regressions (D27), so this is the second
 line of defence rather than the first. Extends: PROMPTBOOK P6.2.
+
+**D40 — The predictor is tenant-blind; the worker supplies `tenant_id`.**
+`NidraPredictor.forecast(states, host_id, origin_ts)` takes no tenant, so the backend doc's
+`Forecast(**result)` cannot validate on its own. `InferenceWorker` completes it with
+`Forecast(tenant_id=vector.tenant_id, **result)`. Tenancy is a serving-plane concern and
+the model has no business knowing about it — keeping it out of the interface also keeps
+the same predictor usable from offline evaluation, where there is no tenant at all.
+Extends: IMPLEMENTATION-Backend.md §7, IMPLEMENTATION-ML.md §7.
+
+**D41 — Stub risk drifts with the horizon at a rate set by the driver slopes, and the
+drift can be negative.** P7 asks for risk "rising with k". Implemented as
+`logit_k = logit_0 + k * (DRIFT_BASE + gain × weighted slope term)`: a flat host still
+drifts up slightly, because uncertainty accumulates over a horizon, but a host whose
+drivers are collapsing bends downward. Forcing monotone rise would make the counterfactual
+meaningless — clamping `syn_ratio` to zero has to visibly flatten the curve, and that is a
+demo-critical behaviour (CLAUDE.md "six things must work"). Extends: PROMPTBOOK P7.1.
+
+**D42 — `predictor.weights_dir` / `scaler_path` / `config_path` live in
+`config/default.yaml`.** `NidraPredictor.__init__` takes three artifact paths and nothing
+may be hardcoded in a script, so they are config keys, read only on the `impl: nidra`
+branch and resolved against the repo root when relative — the same rule `ingest.upload_dir`
+already follows. The stub branch reads none of them. Extends: IMPLEMENTATION-ML.md §7.
+
+**D43 — Sequence-buffer dedupe compares against the buffer tail only.**
+`LINDEX seq:{tenant}:{host} -1` and a `window_ts` equality check, not a scan of all L
+entries. The features service emits windows in ascending order per host, so the only
+duplicate at-least-once delivery can produce is an immediate repeat of the last one; a
+full scan would cost L round trips per message to catch a case the producer cannot create.
+Extends: PROMPTBOOK Standing Rules correction 4.
+
+**D44 — `driving_window` is an index into the context array, 0 = oldest.**
+Not a negative offset and not a timestamp. Ties resolve to the *later* window: when several
+windows moved the drivers equally, the most recent one is the more useful thing to point a
+console at. `explain()` returns the full normalised `window_importance` alongside it, so a
+caller that wants the whole profile does not have to infer it. Extends:
+IMPLEMENTATION-Backend.md §3 (`driving_window: int`).
+
+**D45 — The stub reimplements its 3-window OLS slope rather than importing the features
+service's.** `services.features.compute.ols_slope` computes the same quantity, but importing
+it would make the inference service depend on the features service's module tree for four
+lines of arithmetic. Service packages stay independent of each other; both depend only on
+`nidra_common` and `nidra.data.schema`. Extends: PROMPTBOOK Standing Rules (canonical layout).

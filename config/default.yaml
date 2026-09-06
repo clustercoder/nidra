@@ -15,6 +15,11 @@ episode_close_after: 4  # windows below threshold before an episode closes
 
 predictor:
   impl: stub            # stub | nidra
+  # Only read when impl == nidra; the stub needs no artifacts. Relative paths resolve
+  # against the repo root, as everywhere else in this file.
+  weights_dir: artifacts/weights
+  scaler_path: artifacts/scaler
+  config_path: config/default.yaml
 
 # Host-side URLs: docker compose publishes redis and postgres on the NIDRA port block
 # (DECISIONS.md D14). In-container services get NIDRA_REDIS_URL / NIDRA_POSTGRES_URL
