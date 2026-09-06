@@ -323,3 +323,48 @@ service's.** `services.features.compute.ols_slope` computes the same quantity, b
 it would make the inference service depend on the features service's module tree for four
 lines of arithmetic. Service packages stay independent of each other; both depend only on
 `nidra_common` and `nidra.data.schema`. Extends: PROMPTBOOK Standing Rules (canonical layout).
+
+**D46 — The persister re-asserts `origin_ts` causality even though `Forecast` already
+validates it.** `assert_causal()` runs before the insert, raising rather than coercing.
+The schema validator makes the check redundant for anything published through `Bus`, but
+this is the last gate before a number becomes durable and gets shown as "warned 90 s
+before onset"; a horizon at or before its own origin is a forecast that saw the future,
+and a boundary that silently trusts its producer is exactly the failure the project's
+central claim cannot absorb. Extends: PROMPTBOOK P8.1, IMPLEMENTATION-Backend.md §9.
+
+**D47 — Episode idempotency is keyed on a `last_ts` watermark in Redis, not on whether the
+forecast row was newly inserted.** `ep:{tenant}:{host}` carries the last `origin_ts`
+folded into the lifecycle, and a forecast at or before it is skipped. Gating the episode
+logic on `ON CONFLICT DO NOTHING` returning a row would look equivalent and would lose an
+update whenever a worker crashed between the commit and the Redis write: the replay would
+find the row already there and skip the episode step forever. With the watermark, the two
+stores recover independently — the insert conflicts, the episode still advances. Extends:
+PROMPTBOOK P8.2.
+
+**D48 — `started_at` is the first above-threshold forecast; `first_alert_at` is the
+forecast at which `lead_time_m` consecutive above-threshold windows completed.** The two
+columns exist in IMPLEMENTATION-Backend.md §9 without distinct definitions, and making
+them identical would waste one. A single window over the line is a spike, not an alert —
+`lead_time_m: 2` in `config/default.yaml` is described in CLAUDE.md as exactly that
+debounce. An episode that closes before the debounce completes keeps `first_alert_at`
+NULL: it happened, but nobody was warned. Extends: IMPLEMENTATION-Backend.md §9.
+
+**D49 — `ended_at` is the origin of the forecast that closed the episode, and `stages`
+accumulate over every forecast delivered while it was open.** The episode therefore spans
+its own cool-down: the alternative — dating the end at the last above-threshold window —
+back-dates a fact by `episode_close_after` windows that was not knowable then. `stages` is
+the arc in order of first appearance (`recon → initial_access → benign`), taken from
+`observed_stage`, which is measurement rather than prediction. Extends:
+IMPLEMENTATION-Backend.md §9, PROMPTBOOK P8.2.
+
+**D50 — The episode hash outlives the episode; closing deletes the aggregate fields and
+keeps `last_ts` under a 24 h TTL.** Deleting the whole key at close would let a redelivered
+above-threshold forecast — the same message a reclaim hands back — open a second episode
+next to the one it already closed. Keeping the watermark makes that redelivery a no-op.
+Extends: PROMPTBOOK P8.2 ("keep open-episode state in Redis").
+
+**D51 — A forecast whose `tenant_id` is not a UUID is refused at the persister boundary.**
+`forecasts.tenant_id` is `UUID`; the ML-facing `Forecast.tenant_id` is a `str` because the
+predictor is tenant-blind (D40). Rather than let asyncpg raise a cast error mid-transaction,
+`tenant_uuid()` fails loudly with the offending value. Extends: PROMPTBOOK Standing Rules
+(fail loudly at boundaries).
