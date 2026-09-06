@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "horizon"
+version = "0.1.0"
+description = "HORIZON predictive network world model — ML subsystem"
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.4",
+    "numpy",
+    "pandas",
+    "pyarrow",
+    "scikit-learn",
+    "shap",
+    "captum",
+    "pyyaml",
+    "matplotlib",
+    "tqdm",
+    "joblib",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov"]
+
+[tool.setuptools.packages.find]
+include = ["horizon*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
