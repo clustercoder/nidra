@@ -133,3 +133,28 @@ one as a Bearer credential would work and quietly extend every session to seven 
 skipped by a caller. The probe route the P3 tests authenticate against is defined in
 `tests/test_auth.py`, not in `api/` — P3's API surface is exactly register/login/refresh,
 and a permanently mounted test route is surface. Extends: IMPLEMENTATION-Backend.md §8.
+
+**D21 — `Bus.read()` is the primitive; `consume()` is a generator over it.**
+The doc's `consume()` is an infinite async generator, which a caller can only leave by
+breaking mid-iteration. `run_consumer` has to come up for air between polls to run its
+periodic `XAUTOCLAIM` sweep and to check the shutdown event, and abandoning a suspended
+generator on every cycle is not that. So one `XREADGROUP` poll is exposed as
+`read(count, block_ms) -> list[(msg_id, payload)]`, and `consume()` is a three-line
+generator over it — the documented API still exists and is what tests exercise.
+Extends: IMPLEMENTATION-Backend.md §4.
+
+**D22 — Redis clients are created with `decode_responses=False`.**
+Stream payloads are Pydantic JSON handed straight to `model_validate_json`, which takes
+bytes; decoding to `str` on the way out only to re-encode on the way in is waste on the
+hot path. Message ids *are* decoded to `str` at the Bus boundary, because they are
+compared and logged, never parsed. `Bus` reads its payload field tolerantly (bytes or
+str key) so a client configured the other way still works rather than failing on a
+`KeyError` three services later.
+
+**D23 — Worker shutdown is an injectable `asyncio.Event`, not a bare signal handler.**
+`run_consumer(..., stop=..., install_signals=False)` lets a test — and later the API
+process, which runs its `forecasts` consumer inside the FastAPI lifespan rather than as
+its own process — drive the loop without installing process-wide signal handlers. The
+`__main__` path keeps the default: SIGTERM/SIGINT set the event, the in-flight handler
+finishes, and nothing unprocessed is acked. Worst-case exit latency is one `block_ms`.
+Extends: PROMPTBOOK P4's "graceful shutdown on SIGTERM".
