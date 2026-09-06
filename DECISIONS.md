@@ -62,3 +62,19 @@ The reference docs (PRD, IMPLEMENTATION-*, PROMPTBOOK) and the overnight runner 
 inputs held locally, not repository deliverables; only `CLAUDE.md` and `DECISIONS.md` ship
 in-tree. CLAUDE.md's "reference docs live in `docs/`" therefore describes the working
 checkout, not the pushed branch. Recorded so the absence reads as deliberate.
+
+**D12 — `Forecast` validates `k = 1..horizon_K` with `horizon_K` read from config, not literal 6.**
+PROMPTBOOK P1 phrases the rule as "k=1..6"; hardcoding 6 in a schema would silently
+contradict `config/default.yaml` the day `horizon_K` changes. The validator reads the
+value once (cached) via `nidra_common.config.get_config()`. Naive timestamps are read as
+UTC in the causality check so a mixed-awareness payload fails as a validation error rather
+than a `TypeError`. Extends: IMPLEMENTATION-Backend.md §3.
+
+**D13 — `web-contract/forecast.example.json` extends the PRD §7.5 table from k=5 to k=6.**
+PRD §7.5 tabulates five steps; `horizon_K = 6`, so a schema-valid payload needs a sixth.
+k=1..5 reproduce the PRD numbers exactly (0.61→0.85, threshold crossed at k=3, lead time
+90 s); k=6 continues the trend (0.86, band 0.63–0.99). `predicted_features` carries all 45
+keys per step, with the delta and slope3 features derived from the trajectory itself so the
+mock is internally consistent. Stage distributions follow the PRD §4.6 exploitation branch:
+port entropy narrowing while upstream byte ratio rises. `model_version` is
+`nidra-0.1.0-stub` — no trained model exists yet and the payload should not imply one.
