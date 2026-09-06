@@ -411,3 +411,54 @@ interpolated. Extends: PROMPTBOOK P9.1.
 columns are typed as; the alternative was the forecasts router importing from the ingest
 router, which reads as a dependency that is not one. Tenancy lives in one module.
 Extends: PROMPTBOOK Standing Rules (every query filters on `tenant_id`).
+
+**D58 — Observed state vectors are stored in a Postgres `state_vectors` table written by
+the features worker, not kept in Redis.** P10 leaves the choice open between "a lightweight
+table or a Redis-backed cache, whichever is the simplest crash-safe option". Redis here is
+started `--appendonly no --save ""` and the inference sequence buffer is a rolling window
+of the last L entries under a one-hour TTL: it can explain the newest forecast and nothing
+older, and nothing at all after a restart. One row per `(tenant, host, window)` with
+`UNIQUE (tenant_id, host_id, window_ts)` reuses the persister's idempotency device — a
+reclaimed `raw_events` message rewrites the same window and `ON CONFLICT DO NOTHING` makes
+that a no-op — and its index is also the read path, so there is no second index. The write
+happens **before** the publish to `state_vectors`, so every forecast that exists has the
+context that produced it already durable behind it. Extends: PROMPTBOOK P10.1,
+IMPLEMENTATION-Backend.md §9 (migration `0002_state_vectors`).
+
+**D59 — `FeaturesWorker(store=...)` is optional; the process entry point always wires one.**
+The worker's other dependencies are Redis-only, and the P6 tests drive it against Redis
+alone with non-UUID tenant ids. Making the store required would have forced Postgres into
+those tests to prove nothing about windowing. `services/features/__main__.py` passes a
+`StateVectorStore`, and `test_the_features_worker_stores_every_vector_it_publishes` asserts
+the published-implies-durable property through the real worker. Extends: PROMPTBOOK P10.1.
+
+**D60 — `GET /api/v1/explain/{host}/{ts}` 404s unless a state vector exists at exactly
+`ts`, and reports `context_windows` against `context_l`.** A context that merely ends
+*before* `ts` would explain a different forecast than the one asked about, silently. Fewer
+than L windows is legitimate at the start of a capture, so it is served with both counts in
+the response rather than refused. `k` defaults to `horizon_K`: the end of the cone is the
+claim being made, so it is the step worth explaining unless the caller says otherwise.
+Extends: PROMPTBOOK P10.1.
+
+**D61 — The counterfactual's `"model-internal what-if"` label is verified at the API
+boundary, and a predictor that returns anything else is a 500.** The label is the claims
+discipline in CLAUDE.md §5, so serving an unlabelled what-if is the one failure this
+endpoint must not have. `ts` on each curve point is computed in the API as
+`origin_ts + k * window_delta` — the same rule `Forecast` timestamps its horizons by — so
+the console does not have to derive it. Extends: PROMPTBOOK P10.2, CLAUDE.md §5.
+
+**D62 — `/api/v1/benchmarks` serves every `*.json` under `api.metrics_dir` verbatim; an
+unreadable artifact is a 500, not a partial answer.** Serving the readable subset would
+present incomplete results as complete, which is the same failure as inventing a number
+with extra steps. An empty directory is `status: "pending"` with the detail
+`"evaluation artifacts not yet produced"`. The directory is config, not a literal.
+Extends: PROMPTBOOK P10.3.
+
+**D63 — `/api/v1/benchmarks` and `/api/v1/model` require a token, and the api process
+loads one predictor at construction and calls it on a worker thread.** Neither endpoint
+reads tenant data, but the console is the only client and an unauthenticated route is one
+more surface to reason about at judging time. The predictor is per process rather than per
+request because the trained one builds an ensemble and a scaler; it is called through
+`run_in_threadpool` because the api event loop also owns the WebSocket fan-out and a
+300 ms torch rollout on it would stall every open console. Extends: PROMPTBOOK P10.3–4,
+IMPLEMENTATION-ML.md §7.

@@ -77,6 +77,10 @@ api:
   # pings have gone unanswered. Idle proxies drop a quiet socket at about 60 s.
   ws_ping_interval_s: 30
   ws_max_missed_pongs: 2
+  # Where `/api/v1/benchmarks` reads evaluation results from. Every `*.json` under it is
+  # served verbatim; an empty directory answers "pending" rather than a fabricated
+  # number. Relative paths resolve against the repo root, as everywhere else here.
+  metrics_dir: artifacts/metrics
 
 streams:
   raw_events: raw_events

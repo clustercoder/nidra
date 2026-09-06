@@ -4,6 +4,10 @@ One consumer in the `features` group on `raw_events`, publishing `StateVector`s 
 `state_vectors`, with the watchdog running alongside the consume loop. Both stop on the
 same event, so SIGTERM drains the in-flight message and leaves anything unprocessed
 unacked for another worker to reclaim.
+
+Every published vector is also written to `state_vectors` in Postgres first, which is
+what `GET /api/v1/explain/{host}/{ts}` reads back to rebuild the context a forecast was
+produced from.
 """
 
 from __future__ import annotations
@@ -15,7 +19,9 @@ import socket
 
 from nidra_common.bus import Bus, create_redis, stream_name
 from nidra_common.config import get_config
+from nidra_common.db import dispose_engine, get_sessionmaker
 from nidra_common.worker import install_shutdown_handlers, run_consumer
+from services.features.store import StateVectorStore
 from services.features.worker import FeaturesWorker
 
 logger = logging.getLogger(__name__)
@@ -48,7 +54,7 @@ async def main() -> None:
         group=CONSUMER_GROUP,  # publish-only; the group is never read from here
         consumer=consumer_name(),
     )
-    worker = FeaturesWorker(redis, vectors_bus, cfg=cfg)
+    worker = FeaturesWorker(redis, vectors_bus, cfg=cfg, store=StateVectorStore(get_sessionmaker()))
 
     stop = asyncio.Event()
     install_shutdown_handlers(stop)
@@ -59,6 +65,7 @@ async def main() -> None:
         )
     finally:
         await redis.aclose()
+        await dispose_engine()
 
 
 if __name__ == "__main__":

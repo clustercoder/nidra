@@ -4,6 +4,10 @@ Run with `uvicorn api.main:app`. The factory exists so tests can build an isolat
 (and mount their own probe routes) without importing a module-level singleton that has
 already been configured.
 
+`explain`/`counterfactual` are served by the same predictor implementation the
+inference workers run, chosen by `predictor.impl` in the config and built here so one
+process holds one copy of it.
+
 The lifespan owns one background consumer: the `forecasts` fan-out behind the WebSocket
 (`api/ws.py`). It is built here rather than inside the socket route so a test can swap in
 a private stream before the app starts, and so a process with no sockets open still keeps
@@ -26,10 +30,11 @@ from fastapi import FastAPI, Request, Response
 from pydantic import BaseModel
 from redis.exceptions import RedisError
 
-from api import auth, forecasts, ingest, ws
+from api import auth, explain, forecasts, ingest, ws
 from api.metrics import CONTENT_TYPE, RequestCounter, render, stream_lag
 from nidra_common.bus import create_redis
 from nidra_common.db import dispose_engine
+from services.inference.predictor_loader import load_predictor
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +90,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.state.requests = RequestCounter()
+    # Loaded once per process, never per request: the trained predictor builds an
+    # ensemble and a scaler, and the explain endpoints call it on a worker thread.
+    app.state.predictor = load_predictor()
     app.state.ws_settings = ws.ws_settings()
     app.state.connections = ws.ConnectionManager(app.state.ws_settings.queue_size)
     app.state.fanout = ws.ForecastFanout(app.state.connections)
@@ -92,6 +100,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(ingest.router)
     app.include_router(forecasts.router)
+    app.include_router(explain.router)
     app.include_router(ws.router)
 
     @app.middleware("http")

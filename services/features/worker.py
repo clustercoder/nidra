@@ -60,6 +60,7 @@ from services.features.state import (
     window_start,
     write_history,
 )
+from services.features.store import StateVectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,10 @@ class FeaturesWorker:
 
     `now` is injectable so the watchdog can be driven deterministically in a test —
     the alternative is a test that spends the grace period waiting for it.
+
+    `store` is the durable copy of every vector published, which is what makes a forecast
+    explainable after its Redis context has expired. It is optional so the worker still
+    runs against Redis alone; the process entry point always wires one in.
     """
 
     def __init__(
@@ -84,11 +89,13 @@ class FeaturesWorker:
         *,
         cfg: dict[str, Any] | None = None,
         now: Callable[[], float] = time.time,
+        store: StateVectorStore | None = None,
     ) -> None:
         self.redis = redis
         self.bus = bus
         self.cfg = cfg if cfg is not None else get_config()
         self._now = now
+        self.store = store
         self._locks: dict[str, asyncio.Lock] = {}
 
     # ------------------------------------------------------------------ configuration
@@ -306,7 +313,13 @@ class FeaturesWorker:
     async def _publish(
         self, tenant_id: str, host: str, window_ts: int, features: dict[str, float]
     ) -> StateVector:
-        """Validate against `FEATURE_ORDER` one last time, then put it on the bus."""
+        """Validate against `FEATURE_ORDER` one last time, store it, then put it on the bus.
+
+        Stored before published, not after: a vector that reaches inference is then
+        already durable, so every forecast in the database has the context that produced
+        it sitting behind it. The other order leaves a window where a forecast exists and
+        the state it was computed from does not.
+        """
         validate_features(features)
         vector = StateVector(
             tenant_id=tenant_id,
@@ -314,5 +327,7 @@ class FeaturesWorker:
             window_ts=window_start(window_ts),
             features=features,
         )
+        if self.store is not None:
+            await self.store.save(vector)
         await self.bus.publish(vector)
         return vector
