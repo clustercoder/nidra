@@ -16,11 +16,14 @@ episode_close_after: 4  # windows below threshold before an episode closes
 predictor:
   impl: stub            # stub | nidra
 
+# Host-side URLs: docker compose publishes redis and postgres on the NIDRA port block
+# (DECISIONS.md D14). In-container services get NIDRA_REDIS_URL / NIDRA_POSTGRES_URL
+# pointing at the standard ports on the compose network.
 redis:
-  url: redis://localhost:6379/0
+  url: redis://localhost:6389/0
 
 postgres:
-  url: postgresql+asyncpg://nidra:nidra@localhost:5432/nidra
+  url: postgresql+asyncpg://nidra:nidra@localhost:5442/nidra
 
 auth:
   access_ttl_min: 30

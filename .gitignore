@@ -220,3 +220,10 @@ __marimo__/
 
 # Overnight orchestration runner (local only)
 orchestration/
+
+# Model artifacts: weights and the scaler are build outputs; metrics are a deliverable.
+artifacts/*
+!artifacts/metrics/
+
+# Raw captures and derived parquet.
+data/

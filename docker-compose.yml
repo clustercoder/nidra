@@ -1,0 +1,112 @@
+# NIDRA serving plane.
+#
+# `docker compose up -d` starts only the datastores — every application service sits
+# behind the `full` profile so the stack is usable long before those services exist
+# (`docker compose --profile full up -d` once they do).
+#
+# Module paths follow the canonical layout in CLAUDE.md / PROMPTBOOK Standing Rules,
+# not IMPLEMENTATION-Backend.md §10: `uvicorn api.main:app`, `python -m services.<name>`.
+#
+# Everything is offline. No service makes an external network call.
+#
+# Host ports are published on a NIDRA-specific block (see DECISIONS.md D14) because
+# 5432/6379 are commonly already taken on a developer machine; the container-internal
+# ports are the standard 5432/6379 and the in-compose URLs use those. Override any of
+# them with NIDRA_*_PORT.
+
+name: nidra
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: Dockerfile
+  profiles: ["full"]
+  restart: unless-stopped
+  environment: &app-env
+    NIDRA_REDIS_URL: redis://redis:6379/0
+    NIDRA_POSTGRES_URL: postgresql+asyncpg://nidra:nidra@postgres:5432/nidra
+    NIDRA_SECRET_KEY: ${NIDRA_SECRET_KEY:-dev-insecure-secret-change-me}
+    PYTHONUNBUFFERED: "1"
+  depends_on:
+    redis:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${NIDRA_REDIS_PORT:-6389}:6379"
+    command: ["redis-server", "--appendonly", "no", "--save", ""]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 2s
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "${NIDRA_POSTGRES_PORT:-5442}:5432"
+    environment:
+      POSTGRES_USER: nidra
+      POSTGRES_PASSWORD: nidra
+      POSTGRES_DB: nidra
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nidra -d nidra"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
+
+  api:
+    <<: *app
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "${NIDRA_API_PORT:-8000}:8000"
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+      - uploads:/var/lib/nidra/uploads
+
+  ingest:
+    <<: *app
+    command: ["python", "-m", "services.ingest"]
+    volumes:
+      - uploads:/var/lib/nidra/uploads
+
+  features:
+    <<: *app
+    command: ["python", "-m", "services.features"]
+
+  # Scale here: `docker compose --profile full up -d --scale inference=3`.
+  # Workers are stateless; sequence buffers live in Redis.
+  inference:
+    <<: *app
+    command: ["python", "-m", "services.inference"]
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+
+  persister:
+    <<: *app
+    command: ["python", "-m", "services.persister"]
+
+  web:
+    build:
+      context: ./web
+    profiles: ["full"]
+    restart: unless-stopped
+    command: ["node", "server.js"]
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "${NIDRA_WEB_PORT:-3000}:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  uploads:

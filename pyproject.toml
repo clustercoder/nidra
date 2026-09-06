@@ -15,7 +15,7 @@ dependencies = [
     "pydantic-settings",
     "redis>=5",
     "asyncpg",
-    "sqlalchemy>=2",
+    "sqlalchemy[asyncio]>=2",
     "alembic",
     "python-jose[cryptography]",
     "passlib[bcrypt]",

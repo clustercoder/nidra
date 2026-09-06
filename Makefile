@@ -17,8 +17,10 @@ lint:
 test:
 	$(BIN)/pytest -q -m "not e2e"
 
+# Datastores only; the application services sit behind the `full` compose profile.
 up:
-	docker compose up -d
+	docker compose up -d redis postgres
+	$(BIN)/alembic upgrade head
 
 down:
 	docker compose down

@@ -78,3 +78,33 @@ keys per step, with the delta and slope3 features derived from the trajectory it
 mock is internally consistent. Stage distributions follow the PRD §4.6 exploitation branch:
 port entropy narrowing while upstream byte ratio rises. `model_version` is
 `nidra-0.1.0-stub` — no trained model exists yet and the payload should not imply one.
+
+**D14 — Compose publishes redis/postgres on a NIDRA host-port block (6389, 5442).**
+Container-internal ports remain the standard 6379/5432 and the in-compose service URLs
+use those; only the *published host* ports move. 5432 and 6379 are routinely occupied by
+another local stack, and on this machine they are — the alternative was stopping an
+unrelated project's containers to satisfy a port number the docs never actually specify.
+Every published port is overridable (`NIDRA_REDIS_PORT`, `NIDRA_POSTGRES_PORT`,
+`NIDRA_API_PORT`, `NIDRA_WEB_PORT`). `config/default.yaml`'s host-side URLs moved with
+them so there is still exactly one source of truth. Overrides: PROMPTBOOK P0's literal
+`localhost:6379` / `localhost:5432` config values.
+Note for P11: the `api` service still publishes on 8000 by default, which is also
+contended locally; `NIDRA_API_PORT` exists for it, but the orchestrator's P11 health
+check curls `localhost:8000` unconditionally.
+
+**D15 — Alembic migrations are hand-written; `target_metadata = None`.**
+The §9 schema is defined once, in `migrations/versions/0001_initial_schema.py`. Adding
+declarative ORM models purely to drive autogenerate would create a second definition free
+to drift from the first, and drift there is silent. `migrations/env.py` takes the URL from
+`nidra_common.db.database_url()` so `alembic.ini` carries no `sqlalchemy.url`.
+
+**D16 — `sqlalchemy[asyncio]` rather than bare `sqlalchemy`.**
+The async engine needs `greenlet`, which the bare distribution does not pull in; without
+it every `AsyncSession` call fails at import-adjacent runtime with an opaque error.
+Extends: PROMPTBOOK P0's dependency list.
+
+**D17 — `artifacts/` is gitignored except `artifacts/metrics/`.**
+Compose bind-mounts `./artifacts` read-only into `api` and `inference`, so the directory
+must exist in a fresh checkout; `artifacts/metrics/.gitkeep` provides that. Weights and
+the scaler are build outputs; evaluation metrics are a deliverable. Restates CLAUDE.md's
+commit policy as an actual ignore rule.
