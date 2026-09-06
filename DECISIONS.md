@@ -209,3 +209,75 @@ A connection pool binds to the event loop it is first used on, and the API's ing
 endpoints are low-traffic enough that a connection per request is not a cost worth a
 cross-loop failure that surfaces as an unrelated timeout. The P9 WebSocket consumer,
 which is long-lived and loop-stable, will own its own client.
+
+**D31 — Windows close at tenant scope, not per host.**
+IMPLEMENTATION-Backend.md §6 keys the window state per `{tenant}:{host}` and describes
+close as "an event arrives with a later `window_ts`". Taken literally that is per host,
+and four of the eight graph scalars — `in_degree`, `reciprocity`,
+`local_clustering_coeff`, `neighbour_risk_fraction` — are properties of the window's
+*whole* host graph. Closing one host while another is still writing edges into the same
+window computes them against a half-built graph. The accumulators stay keyed per host
+exactly as the doc specifies; only the decision to close is shared, via
+`feat:open:{tenant}`. Extends: IMPLEMENTATION-Backend.md §6.
+
+**D32 — A host's window row is built from events where that host is the source.**
+`bytes_up_down_ratio`, the flag ratios and the IAT statistics are all directional
+(`fwd` = away from the source), so folding events where the host is the *destination*
+into the same counters would mix two frames of reference. What was done *to* a host
+reaches its vector through the window graph instead, which is where `in_degree` and
+`reciprocity` come from. A host that only received traffic in a window therefore has no
+row of its own that window — it appears as a silent `is_active=0` row once it next
+transmits. Extends: IMPLEMENTATION-ML.md §2.6.
+
+**D33 — A window is summarised as bounded counters, never a list of its events.**
+Sums, sums of squares, and small value-count distributions (`dp:80`, `ps:1460`) share one
+`feat:win:{tenant}:{host}:{ts}` hash, so accumulating an event is a single pipelined
+`HINCRBYFLOAT` batch and closing a window is a single `HGETALL`. Entropies and
+`payload_size_p95` are computed from the distributions at close. Buffering raw events per
+window would be simpler and would make a busy host's memory a function of its traffic.
+Extends: IMPLEMENTATION-Backend.md §6 ("accumulating counters for the open window").
+
+**D34 — "Elevated fan-out" is quantified as `features.elevated_fanout: 5`.**
+IMPLEMENTATION-ML.md §2.6 defines `neighbour_risk_fraction` as the fraction of a host's
+peers with "elevated fan-out in the previous window" without naming a threshold. It is
+now a config value, along with `max_gap_windows`, `clustering_degree_cap` and
+`watchdog_floor_s`, under a `features:` block — nothing hardcoded in a script. It remains
+a heuristic prior read from the *previous* window's graph; model output is never fed back
+into an input feature. Extends: IMPLEMENTATION-ML.md §2.6.
+
+**D35 — Silent windows are all-zero rows, and they enter the delta history.**
+A backfilled window is zero in every one of the 45 features, including its own `d_*` and
+`slope3_*`, and the zeros are appended to the host's rolling history. The alternative —
+carrying the last observed values across a gap — would make a delta measured over three
+minutes of silence indistinguishable from one measured over thirty seconds of traffic.
+Going quiet is a real drop in the series and the dynamics should say so. Extends:
+IMPLEMENTATION-ML.md §2.5.
+
+**D36 — A gap longer than `max_gap_windows` restarts the sequence instead of backfilling.**
+Past 40 silent windows (20 minutes) the gap is a stopped replay or a restarted capture,
+not a quiet host. Emitting 2880 zero rows for an overnight gap would bury the real windows
+and drag every slope through them, so the host's history is dropped and its next vector is
+zero-padded like a first window. Logged at INFO, never silent. Extends: PROMPTBOOK P6.2.
+
+**D37 — IAT features are computed from flow events only.**
+`iat_mean`, `iat_var` and `iat_max` aggregate the per-flow `Flow IAT` columns; a window
+carrying only packets reports them as 0. Packet inter-arrival gaps measure a different
+quantity, and averaging the two into one feature would be a unit mismatch that no
+assertion could catch. The ML pipeline joins packets onto flows (IMPLEMENTATION-ML.md
+§2.4), so a window with packet features generally has flow features too. Extends:
+IMPLEMENTATION-ML.md §2.6.
+
+**D38 — The watchdog is a periodic sweep with an injectable clock, not a timer per window.**
+`FeaturesWorker.watchdog_tick()` scans `feat:open:*` and closes any tenant whose last
+event is older than the grace (`2 × window_delta / replay speed`, floored at
+`features.watchdog_floor_s`). One sweep task covers every tenant, survives a restart
+because the deadline is in Redis rather than in a live `asyncio` handle, and — because
+`now` is injectable — lets the final-window test run in milliseconds instead of waiting
+out the grace. A per-tenant lock keeps the sweep and the event path from closing the same
+window twice. Extends: IMPLEMENTATION-Backend.md §6 ("watchdog timer").
+
+**D39 — An event older than the open window is dropped with a warning, not folded in.**
+Its window has already been published; amending the accumulator would produce a second,
+different vector for a `window_ts` downstream has already consumed. Ingest publishes in
+timestamp order and logs its own chunk-boundary regressions (D27), so this is the second
+line of defence rather than the first. Extends: PROMPTBOOK P6.2.
