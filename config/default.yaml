@@ -1,0 +1,42 @@
+# NIDRA — single source of truth for backend tunables.
+# Nothing here may be hardcoded in a script. Env overrides use the NIDRA_ prefix
+# (see nidra_common/config.py).
+
+# --- world-model geometry (must match the trained artifacts) ---
+window_delta: 30        # seconds per window
+context_L: 30           # windows of history fed to the encoder (15 min)
+horizon_K: 6            # windows forecast forward (3 min)
+n_features: 45          # len(FEATURE_ORDER)
+
+# --- risk / episode semantics ---
+risk_threshold: 0.75
+lead_time_m: 2          # consecutive windows above threshold before a crossing counts
+episode_close_after: 4  # windows below threshold before an episode closes
+
+predictor:
+  impl: stub            # stub | nidra
+
+redis:
+  url: redis://localhost:6379/0
+
+postgres:
+  url: postgresql+asyncpg://nidra:nidra@localhost:5432/nidra
+
+auth:
+  access_ttl_min: 30
+  refresh_ttl_days: 7
+  algorithm: HS256
+
+ingest:
+  max_upload_mb: 2048
+  allowed_ext: [.pcap, .pcapng, .csv]
+
+replay:
+  default_speed: 60.0
+
+streams:
+  raw_events: raw_events
+  state_vectors: state_vectors
+  forecasts: forecasts
+  ingest_jobs: ingest_jobs
+  maxlen: 100000
