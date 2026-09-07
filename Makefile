@@ -3,7 +3,7 @@ PYTHON ?= python3.11
 VENV   := .venv
 BIN    := $(VENV)/bin
 
-.PHONY: setup lint test up down fixtures demo e2e-fast
+.PHONY: setup lint test up down fixtures demo e2e-fast e2e
 
 setup:
 	$(PYTHON) -m venv $(VENV)
@@ -39,3 +39,9 @@ demo: fixtures
 # The CI variant of the same replay, at demo.fast_speed (600x).
 e2e-fast: fixtures
 	$(BIN)/python scripts/demo.py --fast
+
+# The full end-to-end assertion suite against the live stack (docs/PROMPTBOOK.md P12).
+e2e: fixtures
+	docker compose up -d --build
+	$(BIN)/alembic upgrade head
+	$(BIN)/pytest tests/test_e2e.py -q -m e2e
