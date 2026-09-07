@@ -1,0 +1,13 @@
+torch>=2.4,<2.5
+numpy
+pandas
+pyarrow
+scikit-learn
+shap
+captum
+pyyaml
+matplotlib
+tqdm
+joblib
+pytest
+pytest-cov

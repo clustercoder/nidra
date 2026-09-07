@@ -1,0 +1,17 @@
+# artifacts / large data — never commit weights, raw datasets, or processed parquet
+artifacts/weights/*.pt
+artifacts/scaler/*.joblib
+artifacts/scaler/*.npy
+artifacts/processed/
+artifacts_mvp_2017/weights/*.pt
+artifacts_mvp_2017/scaler/*.joblib
+artifacts_mvp_2017/scaler/*.npy
+artifacts_mvp_2017/processed/
+*.parquet
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+.DS_Store
