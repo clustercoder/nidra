@@ -156,6 +156,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+docs/
 
 # Spyder project settings
 .spyderproject
@@ -216,3 +217,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Overnight orchestration runner (local only)
+orchestration/
+
+# Model artifacts: weights and the scaler are build outputs; metrics are a deliverable.
+artifacts/*
+!artifacts/metrics/
+
+# Raw captures and derived parquet.
+data/

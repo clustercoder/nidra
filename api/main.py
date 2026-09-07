@@ -1,0 +1,163 @@
+"""FastAPI application factory.
+
+Run with `uvicorn api.main:app`. The factory exists so tests can build an isolated app
+(and mount their own probe routes) without importing a module-level singleton that has
+already been configured.
+
+`explain`/`counterfactual` are served by the same predictor implementation the
+inference workers run, chosen by `predictor.impl` in the config and built here so one
+process holds one copy of it.
+
+The lifespan owns two background tasks: the `forecasts` fan-out behind the WebSocket
+(`api/ws.py`), and the backlog sampler that watches every consumer group's XPENDING. The
+fan-out is built here rather than inside the socket route so a test can swap in a private
+stream before the app starts, and so a process with no sockets open still keeps its place
+in the `api` consumer group.
+
+`/health` answers with per-stream pending counts — liveness plus the one number that says
+whether a stage of the pipeline is falling behind — and stays 200 with a `degraded`
+status when Redis is unreachable, because a health endpoint that fails to answer is
+indistinguishable from a process that is gone. It also names any group whose backlog has
+been growing monotonically, which is the §7 backpressure signal rather than a raw number.
+
+Every request passes the rate limiter (`api/ratelimit.py`) before it reaches a route.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError, version
+
+from fastapi import FastAPI, Request, Response
+from pydantic import BaseModel
+from redis.exceptions import RedisError
+
+from api import auth, explain, forecasts, ingest, ws
+from api.metrics import (
+    CONTENT_TYPE,
+    BacklogMonitor,
+    BacklogWatch,
+    RequestCounter,
+    backlog_settings,
+    render,
+    stream_lag,
+)
+from api.ratelimit import RateLimiter, rate_limit_settings
+from nidra_common.bus import create_redis
+from nidra_common.db import dispose_engine
+from services.inference.predictor_loader import load_predictor
+
+logger = logging.getLogger(__name__)
+
+TITLE = "NIDRA"
+DESCRIPTION = "Predictive network world model — serving plane."
+
+HEALTH_OK = "ok"
+HEALTH_DEGRADED = "degraded"
+
+
+def _package_version() -> str:
+    try:
+        return version("nidra-backend")
+    except PackageNotFoundError:  # running from a source tree without an install
+        return "0.0.0+unknown"
+
+
+class HealthResponse(BaseModel):
+    """Liveness, plus the pending count of every consumer group in the pipeline."""
+
+    status: str
+    streams: dict[str, int] = {}
+    #: Groups whose pending count has grown at every sample for `api.backlog_warn_after_s`.
+    #: Empty is the normal answer, and the one to point at during a scale-out demo.
+    backpressure: list[str] = []
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    await app.state.fanout.start()
+    await app.state.backlog_watch.start()
+    try:
+        yield
+    finally:
+        await app.state.backlog_watch.stop()
+        await app.state.fanout.stop()
+        await dispose_engine()
+
+
+async def _lag(app: FastAPI) -> tuple[str, dict[str, int]]:
+    """Stream lag and the status it implies. One client per call; these are rare."""
+    redis = create_redis()
+    try:
+        return HEALTH_OK, await stream_lag(redis)
+    except RedisError as exc:
+        logger.warning("stream lag unavailable: %s", exc)
+        return HEALTH_DEGRADED, {}
+    finally:
+        await redis.aclose()
+
+
+def create_app() -> FastAPI:
+    """Build the API application."""
+    app = FastAPI(
+        title=TITLE,
+        description=DESCRIPTION,
+        version=_package_version(),
+        lifespan=lifespan,
+    )
+    app.state.requests = RequestCounter()
+    # Loaded once per process, never per request: the trained predictor builds an
+    # ensemble and a scaler, and the explain endpoints call it on a worker thread.
+    app.state.predictor = load_predictor()
+    poll_s, warn_after_s = backlog_settings()
+    app.state.backlog = BacklogMonitor(warn_after_s)
+    app.state.backlog_watch = BacklogWatch(app.state.backlog, interval_s=poll_s)
+    app.state.rate_limiter = RateLimiter(rate_limit_settings())
+    app.state.ws_settings = ws.ws_settings()
+    app.state.connections = ws.ConnectionManager(app.state.ws_settings.queue_size)
+    app.state.fanout = ws.ForecastFanout(app.state.connections)
+
+    app.include_router(auth.router)
+    app.include_router(ingest.router)
+    app.include_router(forecasts.router)
+    app.include_router(explain.router)
+    app.include_router(ws.router)
+
+    # Registered before the counter, so it runs *after* it: Starlette applies middleware
+    # in reverse. A throttled request is still a request the process served, and
+    # `/metrics` should say so.
+    app.middleware("http")(app.state.rate_limiter)
+
+    @app.middleware("http")
+    async def count_requests(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        """The only thing standing between `/metrics` and a request-count client library."""
+        response = await call_next(request)
+        app.state.requests.observe(request.method, response.status_code)
+        return response
+
+    @app.get("/health", response_model=HealthResponse, tags=["ops"])
+    async def health() -> HealthResponse:
+        status_value, lag = await _lag(app)
+        return HealthResponse(
+            status=status_value, streams=lag, backpressure=app.state.backlog.growing
+        )
+
+    @app.get("/metrics", response_class=Response, tags=["ops"])
+    async def metrics() -> Response:
+        _, lag = await _lag(app)
+        body = render(
+            requests=app.state.requests,
+            ws_connections=app.state.connections.connection_count,
+            ws_dropped=app.state.connections.dropped_total,
+            lag=lag,
+        )
+        return Response(content=body, media_type=CONTENT_TYPE)
+
+    return app
+
+
+app = create_app()

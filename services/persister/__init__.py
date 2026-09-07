@@ -1,0 +1,1 @@
+"""Persister service: forecasts -> PostgreSQL."""

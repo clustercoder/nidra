@@ -1,0 +1,134 @@
+# NIDRA serving plane.
+#
+# `docker compose up -d` starts the whole serving plane: datastores, api, and the four
+# workers. The `full` profile that used to gate the application services is gone — they
+# exist now, and a demo should be one command.
+#
+# The one service still behind a profile is `web`: its build context is the frontend
+# team's `web/` directory, which is not on this branch, and a missing context would make
+# `docker compose up -d` fail for everyone. Start it with `--profile web` once it lands.
+#
+# Module paths follow the canonical layout in CLAUDE.md / PROMPTBOOK Standing Rules,
+# not IMPLEMENTATION-Backend.md §10: `uvicorn api.main:app`, `python -m services.<name>`.
+#
+# Everything is offline. No service makes an external network call.
+#
+# Host ports are published on a NIDRA-specific block (see DECISIONS.md D14) because
+# 5432/6379 are commonly already taken on a developer machine; the container-internal
+# ports are the standard 5432/6379 and the in-compose URLs use those. Override any of
+# them with NIDRA_*_PORT.
+
+name: nidra
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  environment: &app-env
+    NIDRA_REDIS_URL: redis://redis:6379/0
+    NIDRA_POSTGRES_URL: postgresql+asyncpg://nidra:nidra@postgres:5432/nidra
+    NIDRA_SECRET_KEY: ${NIDRA_SECRET_KEY:-dev-insecure-secret-change-me}
+    NIDRA_UPLOAD_DIR: /var/lib/nidra/uploads
+    # The compose stack is the deployment, so the API rate limits apply here in full
+    # (100 req/min, 5 uploads/hour). Set NIDRA_ENV=dev to relax them while developing.
+    NIDRA_ENV: ${NIDRA_ENV:-prod}
+    PYTHONUNBUFFERED: "1"
+  depends_on:
+    redis:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${NIDRA_REDIS_PORT:-6389}:6379"
+    command: ["redis-server", "--appendonly", "no", "--save", ""]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 2s
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "${NIDRA_POSTGRES_PORT:-5442}:5432"
+    environment:
+      POSTGRES_USER: nidra
+      POSTGRES_PASSWORD: nidra
+      POSTGRES_DB: nidra
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nidra -d nidra"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
+
+  api:
+    <<: *app
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "${NIDRA_API_PORT:-8000}:8000"
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+      - uploads:/var/lib/nidra/uploads
+    # `/health` is exempt from the rate limiter precisely so this can poll it. urllib
+    # rather than curl: the image is python:3.11-slim and carries no HTTP client.
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()"
+      interval: 5s
+      timeout: 4s
+      retries: 12
+      start_period: 10s
+
+  ingest:
+    <<: *app
+    command: ["python", "-m", "services.ingest"]
+    volumes:
+      - uploads:/var/lib/nidra/uploads
+
+  features:
+    <<: *app
+    command: ["python", "-m", "services.features"]
+
+  # Scale here: `docker compose up -d --scale inference=3`.
+  # Workers are stateless; sequence buffers live in Redis.
+  inference:
+    <<: *app
+    command: ["python", "-m", "services.inference"]
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+
+  persister:
+    <<: *app
+    command: ["python", "-m", "services.persister"]
+
+  # Not started by `docker compose up -d`: `web/` belongs to the frontend build and is
+  # not present on this branch. `docker compose --profile web up -d` once it is.
+  web:
+    build:
+      context: ./web
+    profiles: ["web"]
+    restart: unless-stopped
+    command: ["node", "server.js"]
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "${NIDRA_WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  uploads:
