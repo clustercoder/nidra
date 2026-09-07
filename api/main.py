@@ -8,15 +8,19 @@ already been configured.
 inference workers run, chosen by `predictor.impl` in the config and built here so one
 process holds one copy of it.
 
-The lifespan owns one background consumer: the `forecasts` fan-out behind the WebSocket
-(`api/ws.py`). It is built here rather than inside the socket route so a test can swap in
-a private stream before the app starts, and so a process with no sockets open still keeps
-its place in the `api` consumer group.
+The lifespan owns two background tasks: the `forecasts` fan-out behind the WebSocket
+(`api/ws.py`), and the backlog sampler that watches every consumer group's XPENDING. The
+fan-out is built here rather than inside the socket route so a test can swap in a private
+stream before the app starts, and so a process with no sockets open still keeps its place
+in the `api` consumer group.
 
 `/health` answers with per-stream pending counts — liveness plus the one number that says
 whether a stage of the pipeline is falling behind — and stays 200 with a `degraded`
 status when Redis is unreachable, because a health endpoint that fails to answer is
-indistinguishable from a process that is gone.
+indistinguishable from a process that is gone. It also names any group whose backlog has
+been growing monotonically, which is the §7 backpressure signal rather than a raw number.
+
+Every request passes the rate limiter (`api/ratelimit.py`) before it reaches a route.
 """
 
 from __future__ import annotations
@@ -31,7 +35,16 @@ from pydantic import BaseModel
 from redis.exceptions import RedisError
 
 from api import auth, explain, forecasts, ingest, ws
-from api.metrics import CONTENT_TYPE, RequestCounter, render, stream_lag
+from api.metrics import (
+    CONTENT_TYPE,
+    BacklogMonitor,
+    BacklogWatch,
+    RequestCounter,
+    backlog_settings,
+    render,
+    stream_lag,
+)
+from api.ratelimit import RateLimiter, rate_limit_settings
 from nidra_common.bus import create_redis
 from nidra_common.db import dispose_engine
 from services.inference.predictor_loader import load_predictor
@@ -57,14 +70,19 @@ class HealthResponse(BaseModel):
 
     status: str
     streams: dict[str, int] = {}
+    #: Groups whose pending count has grown at every sample for `api.backlog_warn_after_s`.
+    #: Empty is the normal answer, and the one to point at during a scale-out demo.
+    backpressure: list[str] = []
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await app.state.fanout.start()
+    await app.state.backlog_watch.start()
     try:
         yield
     finally:
+        await app.state.backlog_watch.stop()
         await app.state.fanout.stop()
         await dispose_engine()
 
@@ -93,6 +111,10 @@ def create_app() -> FastAPI:
     # Loaded once per process, never per request: the trained predictor builds an
     # ensemble and a scaler, and the explain endpoints call it on a worker thread.
     app.state.predictor = load_predictor()
+    poll_s, warn_after_s = backlog_settings()
+    app.state.backlog = BacklogMonitor(warn_after_s)
+    app.state.backlog_watch = BacklogWatch(app.state.backlog, interval_s=poll_s)
+    app.state.rate_limiter = RateLimiter(rate_limit_settings())
     app.state.ws_settings = ws.ws_settings()
     app.state.connections = ws.ConnectionManager(app.state.ws_settings.queue_size)
     app.state.fanout = ws.ForecastFanout(app.state.connections)
@@ -102,6 +124,11 @@ def create_app() -> FastAPI:
     app.include_router(forecasts.router)
     app.include_router(explain.router)
     app.include_router(ws.router)
+
+    # Registered before the counter, so it runs *after* it: Starlette applies middleware
+    # in reverse. A throttled request is still a request the process served, and
+    # `/metrics` should say so.
+    app.middleware("http")(app.state.rate_limiter)
 
     @app.middleware("http")
     async def count_requests(
@@ -115,7 +142,9 @@ def create_app() -> FastAPI:
     @app.get("/health", response_model=HealthResponse, tags=["ops"])
     async def health() -> HealthResponse:
         status_value, lag = await _lag(app)
-        return HealthResponse(status=status_value, streams=lag)
+        return HealthResponse(
+            status=status_value, streams=lag, backpressure=app.state.backlog.growing
+        )
 
     @app.get("/metrics", response_class=Response, tags=["ops"])
     async def metrics() -> Response:

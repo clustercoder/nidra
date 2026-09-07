@@ -2,6 +2,10 @@
 # Nothing here may be hardcoded in a script. Env overrides use the NIDRA_ prefix
 # (see nidra_common/config.py).
 
+# Deployment environment. `dev` relaxes the API rate limits (see api.rate_limit) so a
+# development machine and the test suite are not throttled; compose sets NIDRA_ENV=prod.
+env: dev
+
 # --- world-model geometry (must match the trained artifacts) ---
 window_delta: 30        # seconds per window
 context_L: 30           # windows of history fed to the encoder (15 min)
@@ -26,6 +30,10 @@ predictor:
 # pointing at the standard ports on the compose network.
 redis:
   url: redis://localhost:6389/0
+  # The logical database the test suite runs against (tests/conftest.py). Since P11 the
+  # compose workers are always up on database 0, and a suite sharing that bus would have
+  # its jobs consumed by a container that cannot see the host paths they name.
+  test_db: 1
 
 postgres:
   url: postgresql+asyncpg://nidra:nidra@localhost:5442/nidra
@@ -77,6 +85,25 @@ api:
   # pings have gone unanswered. Idle proxies drop a quiet socket at about 60 s.
   ws_ping_interval_s: 30
   ws_max_missed_pongs: 2
+  # Rate limiting (IMPLEMENTATION-Backend.md §8): a Redis sliding window keyed on the
+  # caller's tenant, or on its address before a token exists. `/health` and `/metrics`
+  # are exempt — a compose healthcheck must never be throttled. Under NIDRA_ENV=dev both
+  # ceilings are multiplied by `dev_multiplier`, which keeps the code path exercised
+  # while putting the limit out of reach of development and the test suite.
+  rate_limit:
+    enabled: true
+    dev_multiplier: 1000
+    general:
+      limit: 100
+      window_s: 60
+    ingest:
+      limit: 5
+      window_s: 3600
+  # Backpressure (§7): the api samples every consumer group's XPENDING on this interval
+  # and warns once a count has risen at every sample for `backlog_warn_after_s`. One
+  # sample is noise; half a minute of monotone growth is a stage falling behind.
+  backlog_poll_s: 5
+  backlog_warn_after_s: 30
   # Where `/api/v1/benchmarks` reads evaluation results from. Every `*.json` under it is
   # served verbatim; an empty directory answers "pending" rather than a fabricated
   # number. Relative paths resolve against the repo root, as everywhere else here.
@@ -88,3 +115,14 @@ streams:
   forecasts: forecasts
   ingest_jobs: ingest_jobs
   maxlen: 100000
+
+# `make demo` / `make e2e-fast`: the seeded account and the prepared capture they replay.
+# The password is a local demo credential and the tenant holds nothing but fixture data.
+demo:
+  email: demo@nidra.local
+  password: nidra-demo-please-change
+  org_name: NIDRA Demo SOC
+  fixture: tests/fixtures/replay.csv
+  # 60x: the pace the console was designed to be watched at. 600x is the CI variant.
+  speed: 60
+  fast_speed: 600

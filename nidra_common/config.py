@@ -34,7 +34,12 @@ ENV_OVERRIDES: dict[str, tuple[str, ...]] = {
     f"{ENV_PREFIX}POSTGRES_URL": ("postgres", "url"),
     f"{ENV_PREFIX}SECRET_KEY": ("auth", "secret_key"),
     f"{ENV_PREFIX}UPLOAD_DIR": ("ingest", "upload_dir"),
+    f"{ENV_PREFIX}ENV": ("env",),
 }
+
+#: The environment name that relaxes the API rate limits. Everything else — including an
+#: unset `NIDRA_ENV` under a config that does not say `dev` — gets the real ceilings.
+DEV_ENV = "dev"
 
 
 def _set_in(tree: dict[str, Any], path: tuple[str, ...], value: Any) -> None:
@@ -91,3 +96,14 @@ def load_config(path: Path | str | None = None) -> dict[str, Any]:
 def get_config() -> dict[str, Any]:
     """Process-wide cached config. Use in service startup paths."""
     return load_config()
+
+
+def environment(cfg: dict[str, Any] | None = None) -> str:
+    """Deployment environment name (`NIDRA_ENV` overrides `env:` in the YAML)."""
+    config = cfg if cfg is not None else get_config()
+    return str(config.get("env") or "").strip().lower()
+
+
+def is_dev(cfg: dict[str, Any] | None = None) -> bool:
+    """True when this process is running as development, which relaxes rate limits."""
+    return environment(cfg) == DEV_ENV

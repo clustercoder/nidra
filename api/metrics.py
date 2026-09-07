@@ -8,18 +8,28 @@ that says nothing more.
 Stream lag is the pending count of the group that *reads* each stream — the messages
 delivered but not yet acked. It is the number that grows when a worker dies, and the one
 that stays flat while the pipeline keeps up.
+
+`BacklogMonitor` is the §7 backpressure signal made actionable. A single high pending
+count means nothing — a burst of thirty messages is a burst. A count that has risen at
+every sample for half a minute is a stage falling behind the arrival rate, and it is worth
+a log line before the demo notices. `BacklogWatch` polls it on a timer inside the api
+process, so the warning does not depend on anyone loading `/health`.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections import Counter
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
-from nidra_common.bus import Bus, stream_name
+from nidra_common.bus import Bus, create_redis, stream_name
+from nidra_common.config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -103,3 +113,119 @@ def render(
         f'nidra_stream_pending{{stream="{stream}"}} {count}' for stream, count in lag.items()
     )
     return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------- backpressure
+
+
+@dataclass(slots=True)
+class _Streak:
+    """One consumer group's current run of strictly increasing pending counts."""
+
+    started_at: float
+    last_value: int
+    warned_at: float | None = None
+
+
+class BacklogMonitor:
+    """Flags a consumer group whose pending count has only grown for `warn_after_s`.
+
+    Monotone growth is the discriminating signal, not the absolute number: a stage that
+    processes a burst has a high count that comes back down, while a stage that cannot
+    keep up has a count that never does. Any sample that fails to increase — including a
+    drop to zero — ends the streak, so a recovered pipeline stops warning by itself.
+    """
+
+    def __init__(self, warn_after_s: float) -> None:
+        self.warn_after_s = warn_after_s
+        self._streaks: dict[str, _Streak] = {}
+
+    @property
+    def growing(self) -> list[str]:
+        """Groups currently over the warning threshold — what `/health` reports."""
+        return sorted(
+            stream for stream, streak in self._streaks.items() if streak.warned_at is not None
+        )
+
+    def observe(self, lag: Mapping[str, int], now: float) -> list[str]:
+        """Fold one sample in; returns the groups that warned on *this* sample.
+
+        `now` is a parameter rather than a clock read so a test can drive thirty seconds
+        of backpressure without waiting thirty seconds.
+        """
+        warned: list[str] = []
+        for stream, value in lag.items():
+            streak = self._streaks.get(stream)
+            if streak is None or value <= streak.last_value:
+                # First sample, or the count held or fell: this is where growth restarts.
+                self._streaks[stream] = _Streak(started_at=now, last_value=int(value))
+                continue
+            streak.last_value = int(value)
+            if now - streak.started_at < self.warn_after_s:
+                continue
+            if streak.warned_at is not None and now - streak.warned_at < self.warn_after_s:
+                continue  # already warning; say so once per interval, not once per sample
+            streak.warned_at = now
+            warned.append(stream)
+            logger.warning(
+                "backpressure: %s pending has grown for %.0fs, now %d unacked — "
+                "the stage reading it is behind the arrival rate",
+                stream,
+                now - streak.started_at,
+                value,
+            )
+        return warned
+
+
+def backlog_settings(cfg: dict[str, Any] | None = None) -> tuple[float, float]:
+    """`(poll interval, warn-after)` in seconds, from `api.backlog_*`."""
+    api = dict((cfg if cfg is not None else get_config()).get("api", {}))
+    return float(api.get("backlog_poll_s", 5)), float(api.get("backlog_warn_after_s", 30))
+
+
+class BacklogWatch:
+    """Samples stream lag on a timer and feeds `BacklogMonitor`.
+
+    Owned by the api lifespan, like the socket fan-out. A warning that only fires when
+    someone loads `/health` is a warning nobody sees during a replay.
+    """
+
+    def __init__(
+        self,
+        monitor: BacklogMonitor,
+        *,
+        interval_s: float,
+        cfg: dict[str, Any] | None = None,
+    ) -> None:
+        self.monitor = monitor
+        self.interval_s = interval_s
+        self.cfg = cfg
+        self._task: asyncio.Task[None] | None = None
+        self._stop = asyncio.Event()
+
+    async def _run(self) -> None:
+        redis = create_redis(self.cfg)
+        loop = asyncio.get_running_loop()
+        try:
+            while not self._stop.is_set():
+                try:
+                    self.monitor.observe(await stream_lag(redis, self.cfg), loop.time())
+                except RedisError as exc:  # pragma: no cover — stream_lag swallows its own
+                    logger.warning("backlog sample failed: %s", exc)
+                try:
+                    await asyncio.wait_for(self._stop.wait(), timeout=self.interval_s)
+                except TimeoutError:
+                    continue
+        finally:
+            await redis.aclose()
+
+    async def start(self) -> None:
+        if self._task is not None:  # pragma: no cover — lifespan runs once
+            return
+        self._task = asyncio.create_task(self._run())
+
+    async def stop(self) -> None:
+        self._stop.set()
+        if self._task is not None:
+            await self._task
+            self._task = None

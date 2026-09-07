@@ -462,3 +462,55 @@ request because the trained one builds an ensemble and a scaler; it is called th
 `run_in_threadpool` because the api event loop also owns the WebSocket fan-out and a
 300 ms torch rollout on it would stall every open console. Extends: PROMPTBOOK P10.3–4,
 IMPLEMENTATION-ML.md §7.
+
+**D64 — Rate limiting is a Redis sliding window keyed on the tenant (its address before a
+token exists), relaxed in dev by a multiplier rather than switched off.** A fixed counter
+per minute lets 2×limit through across a boundary, and a limiter that is disabled in
+development is a limiter first exercised in front of judges: `NIDRA_ENV=dev` multiplies
+both ceilings by `api.rate_limit.dev_multiplier`, so the same code path runs everywhere
+while the suite and a console being clicked through never reach it. The key is the tenant
+from the verified token and from nowhere else, so no caller can choose its own bucket.
+`/health` and `/metrics` are exempt — compose polls the first every 5 s and a throttled
+health probe would read as a dead process. An unreachable Redis fails **open** with a
+warning: refusing every request when the limiter's datastore blinks is a worse outage than
+the one it prevents. Extends: IMPLEMENTATION-Backend.md §8, PROMPTBOOK P11.2.
+
+**D65 — The backpressure signal is monotone growth for 30 s, sampled on the api's own
+timer, not a threshold on the pending count.** A stage that absorbs a burst has a high
+count that comes back down; a stage that cannot keep up has one that never does, so the
+absolute number would have to be tuned per stream while the shape does not. Any sample
+that fails to increase ends the streak, so a recovered pipeline stops warning by itself.
+`BacklogWatch` polls inside the api lifespan (`api.backlog_poll_s`) because a warning that
+only fires when someone loads `/health` is a warning nobody sees during a replay; `/health`
+then reports the same groups under `backpressure`. Extends: IMPLEMENTATION-Backend.md §7,
+PROMPTBOOK P11.5.
+
+**D66 — `docker compose up -d` now starts the whole serving plane; only `web` stays behind
+a profile.** The `full` profile existed so the stack was usable before the services did,
+and they exist now. `web/` is the frontend build's directory and is not on this branch, so
+an unprofiled `web` service would make `docker compose up -d` fail for everyone on a
+missing build context; it moved to `--profile web` rather than out of the file. The api
+gained a healthcheck (urllib, because the image carries no curl) so `depends_on:
+service_healthy` orders the console behind a serving api rather than behind a started
+process. Extends: PROMPTBOOK P11.3.
+
+**D67 — The test suite runs against its own Redis logical database (`redis.test_db`),
+applied in `tests/conftest.py`.** With the workers now always up (D66), the suite is a
+second deployment of the same plane sharing one bus: the containerised ingest worker
+consumed a job the suite had just queued and failed it, because the upload it names is a
+host path no container can see, and `test_upload_queues_a_job_and_reports_its_status`
+watched its own job turn to `error`. Separating the two at the bus keeps both real —
+neither mocks the other away, and neither reads the other's streams. An explicit
+`NIDRA_REDIS_URL` still wins, which is how an end-to-end test will point at database 0.
+Extends: PROMPTBOOK P11.3.
+
+**D68 — `tests/fixtures/replay.csv` is generated from config and committed, and its
+window count is `context_L + horizon_K + 16`.** The first forecast is only possible once L
+windows have been observed, so a capture shorter than L + K replays in full and forecasts
+nothing; the extra windows are the room the escalation has to develop *in front of an
+audience* rather than inside the context that produced the first cone. The scan is added
+to the host's ordinary traffic instead of replacing it, so `syn_ratio` climbs instead of
+stepping to 1.0 in one window — a step is trivially forecastable and nothing like a real
+escalation. `make fixtures` regenerates it; `make demo` (60×) and `make e2e-fast` (600×)
+replay it through the running stack. The `Label` column is written for a human reading the
+file and is never an input (D24). Extends: PROMPTBOOK P11.4.

@@ -1,8 +1,12 @@
 # NIDRA serving plane.
 #
-# `docker compose up -d` starts only the datastores — every application service sits
-# behind the `full` profile so the stack is usable long before those services exist
-# (`docker compose --profile full up -d` once they do).
+# `docker compose up -d` starts the whole serving plane: datastores, api, and the four
+# workers. The `full` profile that used to gate the application services is gone — they
+# exist now, and a demo should be one command.
+#
+# The one service still behind a profile is `web`: its build context is the frontend
+# team's `web/` directory, which is not on this branch, and a missing context would make
+# `docker compose up -d` fail for everyone. Start it with `--profile web` once it lands.
 #
 # Module paths follow the canonical layout in CLAUDE.md / PROMPTBOOK Standing Rules,
 # not IMPLEMENTATION-Backend.md §10: `uvicorn api.main:app`, `python -m services.<name>`.
@@ -20,13 +24,15 @@ x-app: &app
   build:
     context: .
     dockerfile: Dockerfile
-  profiles: ["full"]
   restart: unless-stopped
   environment: &app-env
     NIDRA_REDIS_URL: redis://redis:6379/0
     NIDRA_POSTGRES_URL: postgresql+asyncpg://nidra:nidra@postgres:5432/nidra
     NIDRA_SECRET_KEY: ${NIDRA_SECRET_KEY:-dev-insecure-secret-change-me}
     NIDRA_UPLOAD_DIR: /var/lib/nidra/uploads
+    # The compose stack is the deployment, so the API rate limits apply here in full
+    # (100 req/min, 5 uploads/hour). Set NIDRA_ENV=dev to relax them while developing.
+    NIDRA_ENV: ${NIDRA_ENV:-prod}
     PYTHONUNBUFFERED: "1"
   depends_on:
     redis:
@@ -72,6 +78,18 @@ services:
     volumes:
       - ./artifacts:/app/artifacts:ro
       - uploads:/var/lib/nidra/uploads
+    # `/health` is exempt from the rate limiter precisely so this can poll it. urllib
+    # rather than curl: the image is python:3.11-slim and carries no HTTP client.
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()"
+      interval: 5s
+      timeout: 4s
+      retries: 12
+      start_period: 10s
 
   ingest:
     <<: *app
@@ -83,7 +101,7 @@ services:
     <<: *app
     command: ["python", "-m", "services.features"]
 
-  # Scale here: `docker compose --profile full up -d --scale inference=3`.
+  # Scale here: `docker compose up -d --scale inference=3`.
   # Workers are stateless; sequence buffers live in Redis.
   inference:
     <<: *app
@@ -95,10 +113,12 @@ services:
     <<: *app
     command: ["python", "-m", "services.persister"]
 
+  # Not started by `docker compose up -d`: `web/` belongs to the frontend build and is
+  # not present on this branch. `docker compose --profile web up -d` once it is.
   web:
     build:
       context: ./web
-    profiles: ["full"]
+    profiles: ["web"]
     restart: unless-stopped
     command: ["node", "server.js"]
     environment:
@@ -106,7 +126,8 @@ services:
     ports:
       - "${NIDRA_WEB_PORT:-3000}:3000"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 volumes:
   pgdata:
