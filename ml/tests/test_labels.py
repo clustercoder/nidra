@@ -24,8 +24,9 @@ def test_map_label_to_stage_unknown_falls_back_to_benign():
 
 def test_map_label_to_stage_cse_cic_ids2018_labels():
     """CSE-CIC-IDS2018 uses different raw label strings than CIC-IDS2017 for
-    the same tactics — cross-referenced against the CIC's published attack
-    table, not yet verified against the actual downloaded CSVs."""
+    the same tactics. This project doesn't use that dataset; these rules are
+    dormant, unused compatibility, cross-referenced only against the CIC's
+    published attack table."""
     assert map_label_to_stage("FTP-BruteForce") == "initial_access"
     assert map_label_to_stage("SSH-Bruteforce") == "initial_access"
     assert map_label_to_stage("Brute Force -Web") == "initial_access"

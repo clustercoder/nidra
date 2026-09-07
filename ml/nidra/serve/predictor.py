@@ -38,7 +38,7 @@ from nidra.utils.config import load_config
 
 logger = logging.getLogger(__name__)
 
-MODEL_VERSION = "horizon-v0.1.0"
+MODEL_VERSION = "nidra-v0.1.0"
 
 
 class NidraPredictor:

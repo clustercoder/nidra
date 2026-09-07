@@ -5,9 +5,9 @@ never leaks into the model INPUT — that boundary is enforced by keeping this
 module entirely separate from windowize.py's feature construction.
 
 The dataset-label -> tactic mapping is a curated PRESENTATION mapping, not
-ATT&CK technique-level ground truth. Neither CIC-IDS2017 nor CSE-CIC-IDS2018
-supports technique-level resolution. Two simplifications are called out
-explicitly:
+ATT&CK technique-level ground truth. CIC-IDS2017 (the actual dataset this
+project trains and evaluates on) does not support technique-level
+resolution. Two simplifications are called out explicitly:
 
   - "Infiltration" is mapped wholesale to `lateral` (the PRD's own table
     describes it as "Initial Access -> Lateral Movement"; the dataset gives
@@ -20,17 +20,18 @@ explicitly:
     as the closest available terminal/impact-like bucket. This is a
     deliberate scoping choice, documented rather than silently made.
 
-CSE-CIC-IDS2018 label support: `_LABEL_RULES` below also covers
+Dormant CSE-CIC-IDS2018 label support: `_LABEL_RULES` below also covers
 CSE-CIC-IDS2018's raw `Label` column strings (e.g. "FTP-BruteForce",
 "SSH-Bruteforce", "Infilteration" — note the dataset's own misspelling with
-an extra "e" — "Brute Force -Web", "Brute Force -XSS", "SQL Injection"),
-cross-referenced only against the dataset's own published documentation
-(the CIC website's attack/day table), NOT yet verified against the actual
-CSE-CIC-IDS2018 CSVs, which were still downloading (~250GB via `aws s3
-sync`) as of when this was written. Any label that fails to match a rule
-falls back to "benign" but is also surfaced in `label_stage_table`'s
-`unmapped_labels` report — check that report against the first real
-CSE-CIC-IDS2018 file before trusting these labels.
+an extra "e" — "Brute Force -Web", "Brute Force -XSS", "SQL Injection").
+This project does NOT use CSE-CIC-IDS2018 (an earlier plan to switch to it
+was abandoned; CIC-IDS2017 is the sole real dataset — see
+../../REAL_DATA_RESULTS.md) — these extra rules are simply harmless,
+unused compatibility left in place in case a CSE-CIC-IDS2018 slice is ever
+added later, cross-referenced only against the CIC website's published
+attack/day table, never against a real downloaded file. Any label that
+fails to match a rule falls back to "benign" but is also surfaced in
+`label_stage_table`'s `unmapped_labels` report.
 """
 
 from __future__ import annotations
@@ -51,7 +52,7 @@ _LABEL_RULES: list[tuple[re.Pattern, str]] = [
     (re.compile(r"ssh[\s\-]?patator", re.I), "initial_access"),
     (re.compile(r"web attack", re.I), "initial_access"),
     # CSE-CIC-IDS2018 phrasing (per the CIC's own published attack/day
-    # table — not yet verified against the actual downloaded CSVs):
+    # table — dormant, unused rules; this project does not use that dataset):
     (re.compile(r"ftp[\s\-]?bruteforce", re.I), "initial_access"),
     (re.compile(r"ssh[\s\-]?bruteforce", re.I), "initial_access"),
     (re.compile(r"brute\s*force\s*-?\s*(web|xss)", re.I), "initial_access"),
@@ -69,10 +70,11 @@ _LABEL_RULES: list[tuple[re.Pattern, str]] = [
 
 
 def map_label_to_stage(raw_label: str) -> str:
-    """Map one raw `Label` value (CIC-IDS2017 or CSE-CIC-IDS2018) to a
-    curated tactic bucket. Unrecognized labels fall back to 'benign' rather
-    than raising, but this is logged upstream via the unmapped-label report
-    in `label_stage_table`.
+    """Map one raw `Label` value (CIC-IDS2017, this project's actual
+    dataset; CSE-CIC-IDS2018 label strings are also matched but dormant —
+    see module docstring) to a curated tactic bucket. Unrecognized labels
+    fall back to 'benign' rather than raising, but this is logged upstream
+    via the unmapped-label report in `label_stage_table`.
     """
     label = str(raw_label).strip()
     for pattern, stage in _LABEL_RULES:

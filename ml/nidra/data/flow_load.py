@@ -1,4 +1,4 @@
-"""Loader for published CICFlowMeter CSVs (CIC-IDS2017 / CIC-IDS2018 flow-only).
+"""Loader for published CICFlowMeter CSVs (CIC-IDS2017 flow-only releases).
 
 Known issues with these releases, handled explicitly here:
 - Column names carry leading spaces (" Flow Duration").
@@ -101,11 +101,12 @@ def load_cicflowmeter_csv(path: str | Path, chunksize: int = 200_000, row_cap: i
 
     `row_cap`, if set, stops reading once at least that many INPUT rows have
     been consumed — the file's remaining chunks are never read. This is for
-    MVP-scale runs against a full dataset (e.g. CSE-CIC-IDS2018's ~250GB
-    distribution), where reading an entire multi-GB day file just to
-    subsample it afterward would be wasteful; `None` reads the whole file
-    (prior behavior, still what config/default.yaml and
-    config/real_smoke.yaml use).
+    MVP-scale runs against a day file too large to fully load, where reading
+    it entirely just to subsample it afterward would be wasteful; `None`
+    reads the whole file (what both config/default.yaml and
+    config/mvp_2017.yaml currently use — CIC-IDS2017 day files are small
+    enough that stratified sample capping at the tensor-construction stage,
+    not row_cap, is what bounds MVP compute cost).
     """
     path = Path(path)
 

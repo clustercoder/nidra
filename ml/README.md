@@ -51,8 +51,8 @@ classifier cannot do this; it never emits a state to feed back.
 
 ```
 nidra/
-  config/default.yaml       single source of truth for all hyperparameters/paths
-  config/real_smoke.yaml    reduced-scale config for the real-data smoke run (see below)
+  config/default.yaml       full-scale production config (5-seed ensemble, 60/30 epochs)
+  config/mvp_2017.yaml      MVP-scale config (single seed, fewer epochs) — same real dataset/paths
   nidra/
     data/                   pcap_extract, flow_load, join, windowize, graph_features,
                              labels, splits, normalize, dataset, schema (FEATURE_ORDER)
@@ -120,43 +120,35 @@ flag (1).
    `risk_label`, and per-horizon `future_stage_idx`/`future_is_attack` for
    horizon-curve metrics), kept separate from the numeric tensors.
 
-### Target dataset: CSE-CIC-IDS2018 (not CIC-IDS2017)
+### Target dataset: CIC-IDS2017 (complete dataset, not CSE-CIC-IDS2018)
 
-NIDRA's real training/evaluation dataset is **CSE-CIC-IDS2018**
-(`aws s3 sync --no-sign-request ... s3://cse-cic-ids2018/`, ~250GB), not
-CIC-IDS2017. `config/mvp_2018.yaml` is the config for a bounded MVP slice of
-it once downloaded; `config/default.yaml` is still CIC-IDS2017-shaped and
-needs the same dataset-section rework once 2018 lands and its column layout
-is confirmed (see the warning block at the top of `config/mvp_2018.yaml`
-about CSE-CIC-IDS2018 CSV releases that reportedly drop Source/Destination
-IP and Timestamp — which would break `host_id` derivation entirely if true
-of this specific download, and has not yet been verified locally).
-`nidra/data/labels.py` already has CSE-CIC-IDS2018's known raw label
-strings (`FTP-BruteForce`, `Infilteration`'s dataset-own misspelling, etc.)
-mapped to the same six-stage taxonomy, cross-referenced only against the
-CIC's own published documentation, not yet against real files.
+NIDRA's real training/evaluation dataset is the complete **CIC-IDS2017**
+dataset — all 8 published day-files from the "TrafficLabelling" release
+(the sibling "MachineLearningCVE" release strips Source IP/Destination
+IP/Timestamp columns entirely and cannot be windowed by host/time).
+Switching to CSE-CIC-IDS2018 was considered and explicitly abandoned (it
+is far larger than needed for this project's scope, at ~250GB); do not
+reintroduce it. `config/default.yaml` is the full-scale production config
+(5-seed ensemble, 60/30 epochs) against this dataset; `config/mvp_2017.yaml`
+is the same dataset and paths at MVP scale (single seed, fewer epochs,
+stratified sample capping) for a faster hackathon-timeline run.
 
-See `REAL_DATA_RESULTS.md` for a CIC-IDS2017 smoke run that predates this
-decision — it validates that the pipeline mechanics work end-to-end against
-real CICFlowMeter-format data, but its numbers are **not** a claim about
-NIDRA's performance on its actual target dataset and should not be cited
-as such.
+Real, tshark-extracted packet-level features exist for **Monday and
+Friday** (the two days whose raw PCAPs were downloaded); Tuesday,
+Wednesday, and Thursday run in **flow-only mode** (packet-aggregate
+features zero-filled, logged loudly via `windowize.build_state_rows`'s
+flow-only warning, never silently treated as full-feature data) until
+their PCAPs are downloaded and extracted with
+`python -m nidra.data.pcap_extract`. `nidra/data/labels.py` also carries
+dormant, unused label-matching rules for CSE-CIC-IDS2018's raw `Label`
+strings, kept only as harmless compatibility in case that dataset is ever
+added later — it is not part of this project's actual data path.
 
-### Known real-data constraint (from the CIC-IDS2017 pipeline-validation run)
-
-CIC-IDS2017's packet-level fields (TTL, TCP window, fragmentation,
-retransmissions) require the **raw PCAPs**. This machine has the real
-CICFlowMeter flow CSVs (`TrafficLabelling` release — the sibling
-`MachineLearningCVE` release strips IP/timestamp columns entirely and
-cannot be windowed by host/time) but not the raw CIC-IDS2017 captures.
-The pipeline runs correctly in **flow-only mode** against real flow data
-(packet-aggregate features zero-filled, `is_active` still derived from
-flow activity, and this is logged loudly, not silently absorbed) — see
-`windowize.build_state_rows`'s flow-only warning. The tshark extraction
-path itself is implemented and unit-tested against synthetic pcap-style
-input, and has also been smoke-tested against a real (non-CIC) local pcap
-capture; it has not been exercised against a real CIC-IDS2017 or
-CSE-CIC-IDS2018 PCAP because neither exists on this machine.
+See `REAL_DATA_RESULTS.md` for the actual end-to-end run against this
+dataset: dataset stats, PCAP extraction stats, training convergence,
+baseline comparisons, ablations, calibration, and lead time — reported
+honestly, including where the world model does not yet beat the
+baselines.
 
 ## World model (`nidra/models/`)
 
@@ -273,18 +265,27 @@ over target, cut samples toward 100 before cutting ensemble size.
 ## Reproducing this
 
 ```bash
-cd horizon
+cd ml
 pip install -e .
-pytest tests/ -q                                    # 100+ tests, synthetic fixtures, seconds
+pytest tests/ -q                                    # 120+ tests, synthetic fixtures, seconds
 
-python -m nidra.train.train_dynamics --config config/default.yaml       # Stage 1, full ensemble
-python -m nidra.train.train_heads    --config config/default.yaml       # Stage 2
+# MVP scale (single seed, fewer epochs) — what REAL_DATA_RESULTS.md reports:
+python -m nidra.train.train_dynamics --config config/mvp_2017.yaml --max-train-samples 8000 --max-val-samples 2000
+python -m nidra.train.train_heads    --config config/mvp_2017.yaml --max-train-samples 8000 --max-val-samples 2000
+python -m nidra.eval.run_eval        --config config/mvp_2017.yaml --seed 0 --split test
+python -m nidra.eval.run_eval        --config config/mvp_2017.yaml --seed 0 --split holdout   # Infiltration
+python -m nidra.serve.benchmark --weights-dir artifacts_mvp_2017/weights --scaler-path artifacts_mvp_2017/scaler/robust_scaler.joblib
+
+# Full-scale (5-seed ensemble, 60/30 epochs, same real dataset/paths):
+python -m nidra.train.train_dynamics --config config/default.yaml
+python -m nidra.train.train_heads    --config config/default.yaml
 python -m nidra.eval.run_eval        --config config/default.yaml --seed 0 --split test
-python -m nidra.eval.run_eval        --config config/default.yaml --seed 0 --split holdout   # Infiltration
-python -m nidra.serve.benchmark --weights-dir artifacts/weights --scaler-path artifacts/scaler/robust_scaler.joblib
 ```
 
-Full training (5 seeds × 60 epochs over the complete Monday–Wednesday
-corpus) was not run to completion inside this session — see
-`REAL_DATA_RESULTS.md` for what was actually measured, at what scale, and
-why.
+The MVP run above has actually been executed end-to-end against the real,
+complete CIC-IDS2017 dataset — see `REAL_DATA_RESULTS.md` for what was
+measured, at what scale, the two real bugs found and fixed along the way,
+and the honest, unresolved open items. The full-scale 5-seed run has not
+been run to completion (compute cost, not a blocker) — Tuesday, Wednesday,
+and Thursday PCAPs also still need downloading and extracting to give it
+packet-level features on every day rather than just Monday/Friday.

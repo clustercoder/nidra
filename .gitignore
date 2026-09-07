@@ -1,3 +1,6 @@
+# Private, local-only reference doc — never commit
+NIDRA_MASTER_GUIDE.md
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

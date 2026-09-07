@@ -28,10 +28,9 @@ def load_and_label_day(flow_csv_path: str | Path, window_seconds: int, min_windo
     """Full per-day pipeline: load CSV -> join/window -> windowize -> label.
     `packets_parquet_path` is optional; when absent, the day runs in
     flow-only mode (packet features zero-filled, logged). `row_cap` bounds
-    how many input rows are read from this day's CSV — used for MVP-scale
-    runs against a full dataset (e.g. CSE-CIC-IDS2018) where reading every
-    row of every day is not the goal; `None` reads the whole file, matching
-    prior behavior."""
+    how many input rows are read from this day's CSV — for a day file too
+    large to fully load; `None` reads the whole file (what both
+    config/default.yaml and config/mvp_2017.yaml currently use)."""
     raw, report = load_cicflowmeter_csv(flow_csv_path, row_cap=row_cap)
     packets_raw = pd.read_parquet(packets_parquet_path) if packets_parquet_path else pd.DataFrame()
 
@@ -47,13 +46,9 @@ def load_and_label_day(flow_csv_path: str | Path, window_seconds: int, min_windo
 def build_all_splits(cfg: dict) -> SplitResult:
     dataset_cfg = cfg["dataset"]
     windowing_cfg = cfg["windowing"]
-    # `flow_dir` is the dataset-agnostic key (used by config/mvp_2018.yaml);
-    # `cic2017_flow_dir` is kept for backward compatibility with
-    # config/default.yaml and config/real_smoke.yaml, which predate the
-    # CSE-CIC-IDS2018 switch.
-    raw_dir = dataset_cfg.get("flow_dir") or dataset_cfg.get("cic2017_flow_dir")
+    raw_dir = dataset_cfg.get("cic2017_flow_dir")
     if raw_dir is None:
-        raise KeyError("cfg['dataset'] must set either 'flow_dir' or 'cic2017_flow_dir'")
+        raise KeyError("cfg['dataset'] must set 'cic2017_flow_dir'")
     flow_dir = Path(raw_dir).expanduser()
     row_cap = dataset_cfg.get("mvp_row_cap_per_day")
 
