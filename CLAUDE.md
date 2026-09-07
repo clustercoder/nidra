@@ -12,6 +12,8 @@ NIDRA is a **predictive network world model**. It compresses network traffic int
 
 Built for Smart India Hackathon, Problem Statement 26153 (NTRO). Judged on whether the model demonstrably learns dynamics rather than classifying.
 
+**Current status:** the ML pipeline has been run genuinely end-to-end against the complete, real CIC-IDS2017 dataset (all 8 day-files, real tshark-extracted packet features for Monday+Friday) — see `REAL_DATA_RESULTS.md` at the repo root for exact numbers. Read it before citing any metric: the world model does not yet beat the mandatory baselines on either the test or holdout split, and a couple of ablation results are still open, unexplained items. None of this is hidden — report it the same way if asked.
+
 Reference docs live in `docs/` — read the relevant one before substantial work in that area:
 - `docs/PRD.pdf` — product definition, architecture diagrams, evaluation strategy
 - `docs/IMPLEMENTATION-ML.md` — feature pipeline, model, training, evaluation
@@ -83,10 +85,18 @@ nidra_common/           Pydantic schemas shared by all services
 services/                 ingest, features, inference, persister
 api/                      FastAPI app
 web/                      Next.js — marketing site + console
-config/default.yaml       single source of truth for hyperparameters
+config/default.yaml       backend tunables (window_delta, horizon_K, predictor.impl, ...)
+config/ml_default.yaml    full-scale ML training config (5-seed ensemble, 60/30 epochs)
+config/ml_mvp_2017.yaml   MVP-scale ML config — same real dataset, fewer epochs/seeds;
+                          this is predictor.config_path's target when predictor.impl=nidra
 docs/                     PRD, implementation specs, architecture diagrams
 artifacts/                weights/ scaler/ metrics/   (gitignored, except metrics)
 data/                     raw captures, parquet         (gitignored)
+cicids2017/               raw CIC-IDS2017 dataset (CSVs + PCAPs)   (gitignored)
+tests/                    backend test suite
+tests/ml/                 ML test suite (own conftest.py + fixtures, nested under tests/)
+REAL_DATA_RESULTS.md      the real end-to-end ML run: numbers, bugs found, honest caveats
+ML_README.md              ML subsystem README (data pipeline, model, training, eval detail)
 ```
 
 `nidra/serve/predictor.py` is the entire ML surface exposed to the backend: one class, one `forecast()` method, plus `counterfactual()` and `explain()`. Keep it that way. If the backend starts importing from `nidra.models`, the boundary has broken.
@@ -207,7 +217,7 @@ CIC-IDS2017. Splits are fixed:
 
 **Never train on Thursday.** The attack-type holdout is how we answer the "generalise to unseen attack patterns" requirement. Contaminating it destroys the claim and is not recoverable without retraining everything.
 
-Do not switch to CSE-CIC-IDS2018 raw PCAPs. Hundreds of gigabytes; it will consume the build window. 2018 CSVs are supported as a flow-only input path.
+Do not switch to CSE-CIC-IDS2018 — hundreds of gigabytes, it will consume the build window, and it was already tried and abandoned once. `nidra/data/labels.py` carries dormant, unused label-matching rules for CSE-CIC-IDS2018's raw label strings (harmless compatibility kept in case that dataset is ever added later), but there is no active CSE-CIC-IDS2018 input path — CIC-IDS2017 is the only dataset this project actually loads and trains on.
 
 ---
 

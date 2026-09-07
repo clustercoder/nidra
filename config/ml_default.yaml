@@ -1,0 +1,185 @@
+# NIDRA ML — single source of truth for hyperparameters and paths.
+# Every training/eval/serving script reads this file via nidra.utils.config.
+# Nothing important should be hardcoded in a script.
+#
+# This is the full-scale production config: the complete real CIC-IDS2017
+# dataset (all 8 day-files), 5-seed ensemble, full epoch budget. For a
+# faster MVP-scale run against the same data (single seed, fewer epochs,
+# stratified sample capping), see config/mvp_2017.yaml — same dataset,
+# same paths, different training/ensemble knobs only.
+#
+# Packet-level (PCAP-derived) features are only as complete as the PCAPs
+# actually present under `dataset.packets_dir` — see the `packets:` key per
+# day below. A day without one runs in flow-only mode (packet-aggregate
+# features zero-filled, logged loudly, never silently treated as
+# full-feature data) rather than being skipped.
+
+version: "0.1.0"
+schema_version: "1.0"
+random_seed: 1337
+
+# ---------------------------------------------------------------------------
+# Dataset paths — machine-specific locations only, never hardcoded in code.
+# ---------------------------------------------------------------------------
+dataset:
+  # Directory containing the published CICFlowMeter CSVs for CIC-IDS2017,
+  # the "GeneratedLabelledFlows / TrafficLabelling" release that carries
+  # Source IP / Destination IP / Timestamp columns. NOTE: the sibling
+  # "MachineLearningCVE" distribution strips those columns entirely (kept
+  # only for reference/baselines that don't need host or time identity) and
+  # cannot be windowed by host/time — do not point this at that directory.
+  cic2017_flow_dir: "~/nidra/cicids2017/csv/extracted/TrafficLabelling "
+  # Directory holding this project's own tshark-extracted packet parquet
+  # files (see nidra/data/pcap_extract.py / python -m nidra.data.pcap_extract),
+  # one per raw CIC-IDS2017 PCAP that has actually been extracted. NOT the
+  # raw .pcap directory itself.
+  packets_dir: "~/nidra/cicids2017/pcap/parquet"
+
+  days:
+    # Monday and Friday have real packet-level features (their PCAPs were
+    # downloaded and extracted; see REAL_DATA_RESULTS.md for exactly when
+    # and how). Tuesday/Wednesday/Thursday run flow-only until their PCAPs
+    # are downloaded — dropping a `packets:` file in packets_dir and
+    # re-running is the entire upgrade path, no code changes needed.
+    monday: {file: "Monday-WorkingHours.pcap_ISCX.csv", role: benign_baseline, packets: "Monday-WorkingHours_packets.parquet"}
+    tuesday: {file: "Tuesday-WorkingHours.pcap_ISCX.csv", role: train}
+    wednesday: {file: "Wednesday-workingHours.pcap_ISCX.csv", role: train}
+    thursday_web: {file: "Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv", role: holdout}
+    thursday_infiltration: {file: "Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv", role: holdout}
+    # All three Friday day-files share one underlying PCAP (a single
+    # continuous Friday capture) — pointing all three at the same parquet
+    # is correct: windowize's flow/packet join is keyed on (host_id,
+    # window_ts), so each day-file only ever picks up the packets that fall
+    # inside its own flows' time range.
+    friday_morning: {file: "Friday-WorkingHours-Morning.pcap_ISCX.csv", role: test, packets: "Friday-WorkingHours_packets.parquet"}
+    friday_portscan: {file: "Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv", role: test, packets: "Friday-WorkingHours_packets.parquet"}
+    friday_ddos: {file: "Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv", role: test, packets: "Friday-WorkingHours_packets.parquet"}
+
+# ---------------------------------------------------------------------------
+# Windowing / state geometry
+# ---------------------------------------------------------------------------
+windowing:
+  window_seconds: 30      # Delta
+  context_length: 30      # L (15 min of history)
+  horizon_length: 6       # K (3 min forecast)
+  min_windows_per_host: 36  # L + K; hosts with fewer windows are dropped
+  clustering_degree_cap: 200  # sample cap for local_clustering_coeff on dense nodes
+
+# ---------------------------------------------------------------------------
+# Normalization
+# ---------------------------------------------------------------------------
+normalization:
+  method: robust_scaler
+  clip_min: -10.0
+  clip_max: 10.0
+  fit_split: train   # scaler is fit ONLY on this split, never re-fit at serving time
+
+# ---------------------------------------------------------------------------
+# Labels
+# ---------------------------------------------------------------------------
+labels:
+  risk_threshold_windows: 6   # K — risk_label[t] = 1 if attack stage occurs in (t, t+K]
+
+# ---------------------------------------------------------------------------
+# Splits
+# ---------------------------------------------------------------------------
+splits:
+  train_days: [monday, tuesday, wednesday]
+  test_days: [friday_morning, friday_portscan, friday_ddos]
+  holdout_days: [thursday_web, thursday_infiltration]
+  val_fraction_of_train_time: 0.15   # contiguous trailing time-block of train, not random
+
+# ---------------------------------------------------------------------------
+# Model architecture
+# ---------------------------------------------------------------------------
+model:
+  n_features: 45
+  encoder:
+    hidden_size: 128
+    num_layers: 2
+    dropout: 0.1
+  transition:
+    mlp_hidden: 256
+    logvar_min: -6.0
+    logvar_max: 3.0
+    state_clamp: 10.0
+  risk_head:
+    hidden: 64
+  stage_head:
+    hidden: 64
+    n_stages: 6
+
+# ---------------------------------------------------------------------------
+# Stage-1 dynamics training
+# ---------------------------------------------------------------------------
+train_dynamics:
+  optimizer: adamw
+  lr: 3.0e-4
+  weight_decay: 1.0e-4
+  batch_size: 256
+  epochs: 60
+  grad_clip: 1.0
+  scheduler: cosine
+  early_stopping_metric: val_multistep_nll
+  patience: 8
+  horizon_discount: 0.85   # (0.85 ** k) per-horizon loss weighting
+  teacher_forcing:
+    start_p: 1.0
+    end_p: 0.3
+    anneal_fraction_of_epochs: 0.6
+
+# ---------------------------------------------------------------------------
+# Stage-2 head training
+# ---------------------------------------------------------------------------
+train_heads:
+  optimizer: adamw
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  batch_size: 256
+  epochs: 30
+  grad_clip: 1.0
+  patience: 6
+
+# ---------------------------------------------------------------------------
+# Ensemble
+# ---------------------------------------------------------------------------
+ensemble:
+  seeds: [0, 1, 2, 3, 4]
+
+# ---------------------------------------------------------------------------
+# Rollout / serving
+# ---------------------------------------------------------------------------
+rollout:
+  n_samples_per_member: 200   # ~1000 total trajectories across 5-member ensemble
+  stochastic: true
+  ci_low_quantile: 0.05
+  ci_high_quantile: 0.95
+
+serving:
+  torch_num_threads: 2
+  latency_target_ms: 300
+
+# ---------------------------------------------------------------------------
+# Evaluation
+# ---------------------------------------------------------------------------
+eval:
+  risk_threshold: 0.75
+  lead_time_persistence_windows: 2   # m consecutive windows above threshold
+  window_seconds: 30
+
+# ---------------------------------------------------------------------------
+# Explainability
+# ---------------------------------------------------------------------------
+explain:
+  shap_background_centroids: 100
+  shap_background_source: benign_train
+
+# ---------------------------------------------------------------------------
+# Artifact paths (relative to ml/ project root)
+# ---------------------------------------------------------------------------
+artifacts:
+  root: "artifacts"
+  weights_dir: "artifacts/weights"
+  scaler_dir: "artifacts/scaler"
+  metrics_dir: "artifacts/metrics"
+  processed_dir: "artifacts/processed"   # windowed parquet, not committed to git

@@ -22,8 +22,12 @@ predictor:
   # Only read when impl == nidra; the stub needs no artifacts. Relative paths resolve
   # against the repo root, as everywhere else in this file.
   weights_dir: artifacts/weights
-  scaler_path: artifacts/scaler
-  config_path: config/default.yaml
+  scaler_path: artifacts/scaler/robust_scaler.joblib
+  # A DIFFERENT file from this one, deliberately: NidraPredictor needs the nested
+  # training/model/rollout config nidra.utils.config.load_config() reads (cfg["model"],
+  # cfg["ensemble"], cfg["rollout"], ...), not this file's flat backend tunables. The two
+  # configs serve two different consumers and are not meant to be merged into one schema.
+  config_path: config/ml_mvp_2017.yaml
 
 # Host-side URLs: docker compose publishes redis and postgres on the NIDRA port block
 # (DECISIONS.md D14). In-container services get NIDRA_REDIS_URL / NIDRA_POSTGRES_URL
