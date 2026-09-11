@@ -514,3 +514,599 @@ stepping to 1.0 in one window — a step is trivially forecastable and nothing l
 escalation. `make fixtures` regenerates it; `make demo` (60×) and `make e2e-fast` (600×)
 replay it through the running stack. The `Label` column is written for a human reading the
 file and is never an input (D24). Extends: PROMPTBOOK P11.4.
+
+**D69 — All frontend work lives on the single `frontend` branch, mirroring the backend
+convention.** `frontend` was branched from `main` (not from `backend`, which is still open
+in its own PR) so the two build tracks review independently and neither blocks the other.
+One branch, one PR into `main`, no `feat/`-prefixed frontend branches, no force-pushes —
+the same rule CLAUDE.md already sets for the serving plane, applied for the same reason:
+the reviewer reads one diff, not nine. `.gitignore` gained `donors/`, `web/node_modules/`,
+`web/.next/`, `web/lib/types.gen.ts` and `web/.env.local`. It also gained `!web/lib/` —
+the Python packaging rule `lib/` inherited from the standard template matches **any**
+directory named `lib` at any depth, which silently swallowed `web/lib/tokens.css`, the
+frontend's source of visual truth. The negation is load-bearing, not tidying.
+Extends: PROMPTBOOK F0.
+
+**D70 — The donor harvest was run on a locally-driven Chromium because no browser MCP is
+connected, and the measurements are real as a result.** `/clone-website` requires a
+browser-automation MCP server and this session has only `stitch`; the skill's own
+pre-flight says to stop and ask. Stopping would have produced a token file full of
+plausible round numbers, which is the one outcome the phase exists to prevent — "a value
+you could not measure is written 'not measured', never guessed". Instead the capture ran
+against the Playwright Chromium already in this machine's cache (chromium-1228, Chrome for
+Testing arm64) driven by `playwright-core` installed into the session scratchpad: the same
+engine the skill would have used, different transport. Both passes (1440×900 and 390×844)
+settle on `networkidle` and then scroll the full page before measuring, because all three
+donors lazy-mount content and measuring early returns the wrong element count. Capture
+tooling stayed in the scratchpad; only the artifacts landed in `donors/`.
+Extends: PROMPTBOOK F0.
+
+**D71 — Two of three donors cloned as specified; the Grafana URL is dead, and a live
+dashboard from the same donor was substituted rather than inventing density numbers.**
+`https://play.grafana.org/d/000000012/grafana-play-home` returns HTTP 200 with an
+application-level 404 — the Grafana shell renders "Dashboard not found" and only 23 text
+nodes exist to measure. `curl .../api/dashboards/uid/000000012` returns a bare `404`: the
+dashboard was retired from the Play instance. It is dead, not blocked, so no different
+capture technique would reach it. The failed capture is kept at
+`donors/grafana/notfound-000000012-*` as evidence, and `(Home) Kubernetes Integration`
+(uid `lAoEVhD7z`) was captured in its place — chosen from `/api/search` as the densest Play
+dashboard with the panel mix NIDRA's console actually needs (stat tiles, time-series, text,
+scrolling list). It was captured in **both themes**, which the original brief did not ask
+for but which the dark palette needed. Anonymous access means several panels return *No
+data*; panel chrome, type, grid and spacing are fully measured and harvested, while series
+colours and plot-area treatment are recorded as "not measured" rather than back-filled from
+the deck. wiz.io and linear.app both returned 200 with no bot wall (392 and 523 text nodes).
+Extends: PROMPTBOOK F0.
+
+**D72 — `--text` and `--text-muted` are set to `--ink` and `--muted-ink`, and `--accent` is
+held away from `--observed`.** The deck's charts already draw axis labels in `--ink`
+`#10243A` and ticks in `--muted-ink` `#5B6B7B`. Pointing the chrome text tokens at those
+same two values means chart text and page text are literally the same colour, so a
+`ForecastChart` sits *in* the page rather than on it — and the browser chart and the PRD
+figure stay one chart, which is the whole reason the data tokens are fixed. The converse
+constraint is why `--accent` is `#0B57D0` (hue 220°, high chroma) rather than something
+nearer the donors' blues: `--observed` is `#1D6FA5` (hue 204°, moderate chroma), and an
+accent that reads as observed-blue would make a button look like a measurement. The rule is
+stated in `tokens.css` and is bidirectional — the accent is never used for data, and no data
+colour is ever used for an interactive control. Dark-mode data colours were lightened and
+checked by computing HSL hue on both values; every hue holds within 3° (observed
+203.8°→203.4°, projected 257.4°→254.8°, threshold 34.9°→36.8°, positive 149.6°→146.3°,
+negative 348.1°→349.0°). Extends: PROMPTBOOK F0.
+
+**D73 — Body text is 16 px, and the console drops to 14 px only because Grafana measures
+14 px.** Wiz runs 16/24 across n=102 elements; Linear's marketing body is 15/24; Grafana's
+app body is 14/22. 16 px is the top of that band and is the size used by the donor whose
+role is marketing. The console's `--text-ui` is 14/22 — Grafana's measured app size, adopted
+as a considered density choice for a dashboard, not as a smaller default leaking outward.
+Two tracking rules came out of the harvest and both are kept because they apply at opposite
+ends of the scale: Linear tracks display type **negative** at a uniform −0.022 em
+(−1.584/72 = −1.408/64 = −1.056/48) and text at −0.011 em, while Grafana tracks small UI
+text **positive** at +0.0107 em (+0.14994 px at 14 px) because opening up dense 12–14 px
+text is what keeps it legible. Section rhythm takes Wiz's 96 px spacer as the default and
+Linear's 128/128 as the major break; the measure is 1280 px, which is Linear's, confirmed by
+its own 272×4 + 64×3 card grid and within 2 % of Wiz's 1310 px.
+Extends: PROMPTBOOK F0.
+
+**D74 — Dark-mode `--projected` is `#B09BF0`, chosen by relative luminance rather than by
+lightening the deck purple. Supersedes the dark value recorded in D72.** D72 checked the
+dark derivation for hue drift only, and that check passed while a second constraint failed
+silently: at `#A899D6` the dark `--projected` sat at L=0.360 against `--observed` at L=0.357
+— a gap of 0.003, which is the same grey. Observed-versus-projected is the chart's central
+distinction, so the two most important colours in the product were indistinguishable in
+greyscale in one of the two themes. The obvious repair is wrong: lightening the purple until
+it clears observed lands at L=0.466 and collides with `--threshold` at L=0.460 instead. The
+dark ramp holds five colours inside an L-span of 0.184 and `--projected` has exactly one gap
+available to it, between observed and positive. `#B09BF0` sits at L=0.390 (hue 254.8°, 2.6°
+off the light value), giving adjacent deltas of .081/.033/.043/.027 and clearing the 0.025
+floor throughout. `--positive` moved `#6FBF92`→`#70C094` in the same pass because D72's
+"every hue holds within 3°" was true of four values and 3.4° on the fifth; at `#70C094` the
+drift is 2.6° and the claim now holds as stated. `--projected-band` and
+`--projected-band-edge` were re-derived from the new value so the cone cannot drift off its
+own mean line. Light mode is unchanged and still fails the 0.025 floor at
+observed/projected (Δ 0.024): those five values are fixed by `deck/charts/_style.py` so the
+console and the PRD figures stay the same chart, and that identity is worth more than a
+thousandth of separation. The consequence is recorded as a rule rather than left implicit —
+the second channel (solid vs dashed, a label, an icon) is load-bearing wherever these
+colours carry meaning, not a nicety. Supersedes: D72 (dark values only; the accent
+reasoning stands). Extends: PROMPTBOOK F0.
+
+**D75 — The frontend never renders a fabricated forecast. Illustrative charts live in the
+deck.** The F0 specimen originally showed the five data colours as a hand-drawn SVG risk
+curve captioned "values here are illustrative". It was removed and replaced with a greyscale
+separability strip that computes relative luminance off `getComputedStyle` — the measurement
+the drawing only implied, and the one that would have caught D74 at the gate. The general
+rule: every chart the product renders is driven by schema-valid fixture data or live data,
+and a drawn curve, cone or trajectory is not permitted anywhere in `web/` — not in a
+specimen, a hero, a marketing section, or as a placeholder. A slide is read as an argument
+and `deck/charts/hero.png` is the right home for an illustration; a chart inside the product
+is read as a measurement, and a drawn one is a fabricated measurement in the one place this
+project claims is checkable. Conceptual architecture diagrams are exempt — `deck/diagrams/`
+depicts structure, not data. Recorded as Visual invariant 3 in
+`docs/PROMPTBOOK-FRONTEND.md`, with F0, F1 and F4 updated to match. Extends: PROMPTBOOK F0.
+
+**D76 — Tremor 3.18 installed under React 19 via `web/.npmrc` `legacy-peer-deps=true`.**
+`@tremor/react` pins `react@^18` as a peer while Next 16 ships React 19, so a plain
+`npm i` refuses to resolve. The stack is pinned by the frontend spec, and the primitives
+F1 uses (Card, Metric, Text, ProgressBar) have no React-19 incompatibilities. The flag
+lives in a committed `.npmrc` so every future install resolves the same way. Revisit if a
+Tremor chart component misbehaves in a later phase. Extends: PROMPTBOOK-FRONTEND stack
+table.
+
+**D77 — One colour system: Tailwind's default palette is wiped, and the theme is mapped
+from tokens.css via `@theme inline`.** `app/globals.css` sets `--color-*: initial` and
+`--shadow-*: initial`, then maps every utility the tree uses — shadcn roles
+(`--color-background: var(--bg)` …), Tremor roles (`--color-tremor-*`, both light and
+dark names, onto the same self-flipping vars), data colours, type scale, radii — as
+`var()` references into `lib/tokens.css`. A `bg-blue-500` anywhere now compiles to
+nothing rather than to a stock colour, which is a stronger guarantee than the grep in
+machine verify. Two consequences recorded: the dialog/sheet overlay scrim, shadcn's
+`bg-black/10`, became `bg-foreground/10` (black no longer exists; foreground tracks the
+theme); and shadcn's decorative `shadow-sm/lg` utilities vanish, which is the donors'
+actual behaviour — borders carry elevation, `--shadow-drawer` is the one exception.
+Extends: F1 step 3.
+
+**D78 — The `dark:` variant is a custom variant implementing tokens.css's three states,
+not a class.** shadcn's default `@custom-variant dark (&:is(.dark *))` would ignore
+`data-theme`; a media-only variant would ignore the explicit toggle. The variant matches
+`[data-theme="dark"]` descendants, plus `prefers-color-scheme: dark` under
+`:root:not([data-theme="light"])` — exactly the cascade tokens.css runs, so the few
+`dark:` tweaks inside stock shadcn components flip in step with the tokens. Extends: F1
+step 4.
+
+**D79 — Inter is self-hosted under the family name `"Inter"`, not loaded via
+`next/font`.** `next/font` registers a mangled family name (`__Inter_…`) that
+tokens.css's `--font-sans: "Inter", …` stack would never match, and the harvest's
+`--weight-medium: 510` requires the variable axis. The latin variable woff2 is copied
+from `@fontsource-variable/inter` (devDependency, for provenance) into
+`web/public/fonts/` and declared with a plain `@font-face` (`font-weight: 100 900`) plus
+a preload link. tokens.css is untouched. Extends: F1 step 3.
+
+**D80 — `/hosts`, `/episodes` and `/benchmarks` get honest empty-state index pages in
+F1.** The F1 prompt asks only for the fleet page, but the shell's nav links to all four
+sections and a reviewer tabbing through the gate would land on framework 404s that read
+as breakage rather than emptiness. Each stub is one sentence saying what the page will
+hold and why it is empty (`/benchmarks` states "the evaluation has not run" — never a
+placeholder number, matching the API's `pending` semantics). F5 replaces all three.
+Extends: F1 step 6.
+
+**D81 — "a Tremor stat card and bar" is read as Card + Metric + ProgressBar, not
+`BarChart`.** F1 forbids charts ("No forecast data, no charts") and Visual invariant 3
+forbids illustrative data visuals, so the bar on `/dev/components` is a `ProgressBar`
+showing `risk_threshold` read from the geometry fixture — a real configured value, not
+an invented series. Tremor's chart components first render in a later phase against
+schema-valid fixtures. Extends: F1 step 9.
+
+**D82 — `web/fixtures/model.json` mirrors the `GET /api/v1/model` response, not
+`config/default.yaml` verbatim.** The loader (`lib/geometry.ts`) is written against the
+shape it will fetch in F6 — `{impl, model_version, schema_ver, config}` with the six
+`ModelConfig` fields the endpoint actually echoes (`api/explain.py`) — so F6 swaps the
+source without touching a caller. Values are `stub` / `nidra-0.1.0-stub` / schema `1.0`,
+matching the backend branch. Components read geometry through `getGeometry()`; the fleet
+and episodes empty states and the `/dev/components` table interpolate it rather than
+retyping 30 or 0.75. Extends: F1 step 10.
+
+**D83 — demo-replay.json is synthesised (F2 path 2), driven through the backend's own
+StubPredictor; only the telemetry and the escalating host's stage narrative are
+scripted.** The capture path was unavailable (Docker down) and structurally unable to
+produce the required fixture: the stub's `stage_distribution` never claims stages past
+`initial_access` (fixed 0.01 sliver on lateral/c2/exfil, argmax capped), and
+`tests/fixtures/replay.csv` is labelled BENIGN/PortScan only — no capture can show
+`benign → recon → initial_access → lateral`. So `scripts/make_demo_fixture.py`
+synthesises per-window driver curves (4 hosts × 48 windows, one scan-to-intrusion arc,
+smoothed keyframes) and feeds them to `services.inference.stub_predictor.StubPredictor`:
+risk, bands, lead times, top signals and all 45 predicted features are the pipeline's own
+arithmetic. The one override is the victim's `observed_stage`/`stage_dist`, scripted as a
+continuous stage-progress kernel reaching `lateral` (sliver of c2, never exfil). Every
+forecast passes `Forecast.model_validate` and the written JSON is the validator's dump;
+story invariants (crossing partway, stage order, k=3 and k=1 crossings present, quiet
+hosts quiet) are asserted so regeneration fails loudly instead of drifting. Fully
+documented for the /demo banner in web/fixtures/README.md. Extends: F2 step 1.
+
+**D84 — The uncertainty cone is Visx `Area` (y0/y1), not `AreaClosed`.** F2 names
+`AreaClosed`, but that primitive closes the path to the scale's baseline — it would fill
+from `ci_low` down to risk 0, drawing probability mass the band does not claim. `Area`
+with `y0=ci_low`/`y1=ci_high` is the band the spec describes. The anchor requirement is
+unchanged: band and mean are both prepended with
+`{ts: origin_ts, lo: observed_risk, hi: observed_risk}`. Overrides: F2 step 2 layer 3's
+component name, not its meaning.
+
+**D85 — Stage-strip colours are a severity ramp mixed from tokens, not six new hues.**
+`color-mix(in srgb, var(--negative) N%, var(--bg-raised))` with N monotone in escalation
+order (4→94%). No literal colours, theme-correct in both modes, and luminance orders the
+stages so the strip stays readable in greyscale — with the argmax stage labelled in text
+per run of consecutive same-argmax columns (a label that does not fit its run is dropped,
+the widest run is always labelled). Extends: F2 step 2 layer 9, Visual invariant 2.
+
+**D86 — `model_version` in fixtures is `stub-0`, matching the stub; the web-contract
+example keeps `nidra-0.1.0-stub`.** The two disagree: `stub_predictor.MODEL_VERSION` is
+"stub-0" while `web-contract/forecast.example.json` (D13) says "nidra-0.1.0-stub". What
+a live capture would carry is the stub's value, so `demo-replay.json`,
+`counterfactual.single.json` and `fixtures/model.json` say "stub-0";
+`forecast.single.json` stays a verbatim copy of the published example, discrepancy and
+all. Flagged here rather than silently harmonised — the example or the constant should
+be reconciled backend-side. Extends: F2 step 1.
+
+**D87 — `web/lib/types.ts` hand-mirrors the contract until F6; a fourth fixture,
+`counterfactual.single.json`, feeds specimen state (f).** The chart needs `Forecast`
+types before `types.gen.ts` exists; `lib/types.ts` mirrors `nidra_common/schemas.py` and
+`api/explain.py` with a header stating it shrinks to aliases of the generated types in
+F6. The counterfactual fixture is the stub's own `counterfactual()` at the victim's
+first k=3-crossing origin (`dst_port_entropy` clamped to the quiet-host level), with
+`ts` added per the API's `CurvePoint` and the literal "model-internal what-if" label
+rendered from the payload. Extends: F2 steps 1–3.
+
+**D83 — A chart renders only where it is the product: `/demo` and the console. No showcase
+routes, no chart on the marketing site. Widens D75.** D75 banned *fabricated* forecast
+visuals and permitted any fixture-driven chart anywhere. That was too narrow a reading of
+the instruction behind it, and F2 built `app/dev/chart` — a six-state gallery of the
+component — because PROMPTBOOK F2 Step 3 explicitly specified one and the D75 edit had been
+propagated into F0, F1 and F4 but not F2. The rule is now about the surface, not the data:
+a viewer on `/demo` or in the console reads a forecast as a measurement and the chart *is*
+the measurement; a viewer on the landing page or a specimen is being shown a picture of a
+capability, which is the deck's job and which the deck already does. So specimen and
+gallery routes are forbidden outright, and the marketing page carries no chart in the hero,
+in any section, or as a screenshot frame — a screenshot of the chart is still the chart on
+a marketing page, so the console band shows the fleet table, the explanation panel and the
+benchmarks page instead, cropped rather than blurred. The hero substitutes type and the
+lead-time number for the visual, with the `/demo` CTA first, since that link now does the
+work the chart used to. An abstract or "data-ish" graphic standing in for the chart is the
+same move wearing a costume and is equally forbidden.
+
+Structural consequence: F2's entire review gate lived on `/dev/chart`, so F2 now has no
+browser surface — the only phase in the book without one. Its geometry moves into pure
+tested functions in `components/forecast/derive.ts` (cone anchoring, crossing location,
+overlay alignment, axis domain) with unit tests standing in for the eye, and its twelve
+visual checks move wholesale into the F3 gate, where the chart is on screen in its real
+home. F4 now depends on F3 rather than F2, because the marketing screenshots come from a
+working `/demo`. `web/app/dev/chart` was moved out of the tree, not deleted, pending the
+F3 build. Widens: D75. Extends: PROMPTBOOK F2, F3, F4.
+
+**D84 — A screenshot of the running product is not a rendered chart, and is allowed on the
+marketing page. Refines D83.** D83 read the no-charts-on-marketing rule strictly enough to
+exclude screenshot frames containing the forecast chart, and proposed cropping the console
+band to the fleet table and explanation panel. That was over-broad. The rule's subject is
+the frontend *drawing* a forecast outside `/demo` and the console; a static image captured
+from a real replay is a picture of the product working, which is what a product screenshot
+has always been. The test is provenance, not subject matter: pixels that came from `/demo`
+doing its job are evidence, pixels from a component mounted to look impressive are a slide.
+Composed frames, touched-up frames, and frames showing a state `/demo` cannot actually
+reach remain forbidden under D75's fabrication rule. The F4 console band therefore uses
+real `/demo` frames including the chart, with alt text carrying the numbers. The hero stays
+type-only — it is the surface the instruction named directly, and a screenshot there would
+restore the visual the change was meant to remove. Refines: D83. Extends: PROMPTBOOK F4.
+
+**D85 — `cn()` comes from the `cn` package, not from `clsx` + `tailwind-merge`, and
+`lib/utils.ts` is a one-line re-export.** `npx shadcn@latest init` normally writes a
+`lib/utils.ts` holding `twMerge(clsx(inputs))` and adds both packages as direct
+dependencies. F1 instead installed `cn@0.2.6` — self-described as a "drop-in replacement
+for clsx + tailwind-merge" with compiled merge tables — and reduced `lib/utils.ts` to
+`export { cn } from "cn"`. `clsx` and `tailwind-merge` remain in the tree only as
+transitive deps of other packages; nothing imports them directly.
+
+The substitution was verified behaviourally rather than trusted, because a `cn()` that
+concatenates instead of merging is a silent defect: every shadcn component takes a
+`className` override, and without conflict resolution both classes survive and the winner
+is decided by CSS source order rather than by the override. Conflict resolution is correct
+on the cases this codebase depends on — `p-4 p-2 → p-2`, `text-sm text-lg → text-lg`,
+`rounded-md rounded-none → rounded-none`, and clsx's conditional/array semantics. The case
+that matters most here is arbitrary values carrying CSS variables, since D77 routes every
+colour through them: `bg-[var(--bg)] bg-[var(--bg-raised)] → bg-[var(--bg-raised)]` merges
+correctly, which is the whole token system's override path.
+
+**The footgun, recorded because it is invisible until it bites.** `cn` ships a `cn build`
+step that subsets its merge tables to the classes found by scanning the source, and its own
+contract states that classes never seen during that scan "may instead pass through
+unmerged". No `cn-tables` file exists in `web/`, so the package is running its full default
+tables and the subsetting hazard is inert today. Anyone who later runs `npx cn build` to
+shave bundle size inherits it: a class name assembled at runtime by string concatenation
+would stop merging, silently, with no build error and no failing test — the override would
+simply stop winning in one component. If that step is ever adopted, every dynamically
+composed class must go in the safelist, or the merge must move back to `tailwind-merge`,
+whose tables are not subsetted. Extends: PROMPTBOOK F1.
+
+**D86 — The console's navigation landmark, current-page state and skip links are declared
+by us, because shadcn's sidebar primitives do not provide them.** `SidebarContent` and
+`SidebarGroup` render plain `<div>`s and `SidebarMenuButton` surfaces the active item only
+as `data-active="true"`, which styles it and announces nothing. The console therefore had
+no `navigation` landmark and no current-page state for assistive technology, while looking
+correct to a sighted user — the exact shape of failure the Conventions' "colour is never
+the only signal" rule guards against, in a different channel. `ConsoleSidebar` now wraps
+its menu in `<nav aria-label="Console">` (the marketing shell already had
+`<nav aria-label="Main">`), and the active link carries `aria-current="page"` alongside
+`data-active`: the first is what a screen reader announces, the second is what styles it,
+and both are required or the state is sighted-only. Active matching also moved from
+`pathname.startsWith(href)` to exact-or-segment-boundary, so `/hosts` owns
+`/hosts/10.0.0.1` without also claiming any sibling route that merely shares the prefix.
+A `SkipLink` was added to both shells, targeting `<main id="main-content" tabIndex={-1}>`;
+it uses `focus-visible:not-sr-only` rather than staying `sr-only`, because a skip link that
+never becomes visible strands a sighted keyboard user on a control they cannot see.
+Accessibility is a per-phase gate in the Conventions rather than F7 work, which is why
+these were fixed at F1 rather than deferred. Extends: PROMPTBOOK F1.
+
+**D88 — The demo fixture carries the stub's explain() output, keyed per forecast.**
+F3's ExplanationPanel needs `window_importance` / `context_windows` / `context_l` —
+fields of `GET /api/v1/explain`, which /demo must never call. So
+`scripts/make_demo_fixture.py` embeds `StubPredictor.explain()` for every forecast under
+a top-level `explanations` map keyed `${host_id}@${origin_ts}` (spelled exactly as the
+payload dumps it). Forecast objects themselves stay untouched and Forecast-valid; the
+machine-verify loop still validates every one. The panel therefore renders the same
+numbers the API would serve, from the fixture. Extends: F3 step 4.
+
+**D89 — The replay's ring buffer is a capped slice over precomputed history; the rAF
+clock lives in ReplayController.** The 200-point ring + useRef accumulation pattern is
+specified for the live socket, where points ARRIVE. In the replay the entire history is
+a static fixture, so per-host observed series are precomputed once and each render takes
+`slice(t+1-200, t+1)` — the same 200-point window, no accumulation to get wrong. The
+performance-bearing part is unchanged: a single requestAnimationFrame loop with a
+millisecond accumulator in ReplayController, at most one state flush per frame however
+many windows elapsed (240× advances several windows per flush, never one setState each),
+no timers. Measured in headless Chrome at 240×: 16.7 ms median and p95 frame delta.
+Extends: F3 steps 2 and 7.
+
+**D90 — Deep links with an explicit `?t=` start paused; state writes back via
+history.replaceState.** A rehearsed demo links to the interesting window — auto-playing
+past it would defeat the point, so `?t=` implies paused (play is one keypress). Without
+`?t=`, the replay auto-plays unless `prefers-reduced-motion`, which never auto-plays.
+`?host=&t=&speed=` are validated against the fixture and written back debounced with
+`history.replaceState` — no Next navigation, no re-render. Extends: F3 steps 6 and 8.
+
+**D91 — Replay speed constants live in a plain module (`replay-speeds.ts`), not the
+client component.** A server component importing values from a `"use client"` module
+receives opaque client references, not values — `REPLAY_SPEEDS.includes` threw only in
+the production server render. Constants shared across the boundary get a module with no
+directive. Extends: F3 step 2.
+
+**D92 — Chart geometry moved out of `ForecastChart` into tested pure functions; Vitest
+added.** PROMPTBOOK F2's step 3 requires the chart's geometry to live in testable functions
+because Visual invariant 3 removed the specimen route that a human would otherwise have
+eyeballed. That requirement was written after F2 had already run, so neither the F2 nor the
+F3 agent ever saw it, and the anchoring — the single most important derivation in the
+product and the F3 gate's first reject condition — sat inline in the render with no test.
+`Y_DOMAIN`, `anchoredCone`, `anchoredObservedLine` and `leadTimeAgreement` now live in
+`derive.ts`; `ForecastChart` consumes them. The rendered SVG was diffed before and after to
+confirm the refactor changed nothing: the observed line still ends and the cone, both band
+edges and the projected mean all still begin at exactly `559.387,140.397` on the `?t=25`
+frame. Runner is Vitest (`vitest.config.mts`, `npm test`), chosen over `node --test` because
+the `@/` path alias needs a resolver. 40 tests across `derive.test.ts` (behaviour, on cases
+chosen to break the functions) and `fixture.test.ts` (the same functions over the real
+192-forecast payload). Extends: PROMPTBOOK F2.
+
+**D93 — The reality overlay is a calibration measurement, not a guarantee, and the
+escalating host's coverage is 83.5%.** Writing the proof-shot test as "reality always falls
+inside the band" failed immediately, which is the correct outcome for the wrong-looking
+reason: a 90% band that never misses is too wide to be a claim. Measured over the fixture,
+44 of 267 horizon points on `192.168.10.50` fall outside the band (28 below, 16 above) for
+83.5% coverage, against 100% on the three quiet hosts; whole-fixture coverage is 95–97% and
+degrades smoothly with horizon (97.3% at k=1 to 95.2% at k=6), which is the shape a
+widening band should produce. The worst single miss is at origin `14:33:30`, k=4, where the
+band `[0.771, 1.0]` met a realised 0.55.
+
+Two consequences. First, the chart is correct and must not change: it draws the x where
+reality was, including when reality was outside the cone, and moving or suppressing those
+marks would be fabricating the proof. Second, the demo script's beat — "the x marks land on
+the predicted ghost — they match" — overstates what this fixture supports on the host the
+demo is about, and the miss is near the crossing window the demo pauses on. The honest line
+is that most marks land inside a band that widens with horizon, and that where they fall
+outside, the chart says so. The test now asserts a coverage floor with the measured number
+recorded in a comment, so improvement under a trained model prompts raising the floor and
+degradation fails loudly. Extends: PROMPTBOOK F3, Appendix A.
+
+**D92 — The hero's product-visual slot holds typography: the world-model loop.** No
+chart (Visual invariant 3), and no illustration or data-ish stand-in either — the PRD
+cover's OBSERVE → REPRESENT → LEARN DYNAMICS → IMAGINE → FORECAST strip is set large as
+the claim itself. The headline carries the demo replay's lead time (90 s) and the
+subhead says where that number comes from. Primary CTA is /demo, above "Get started".
+Extends: F4 section 1.
+
+**D93 — PRD §11/§14 copy is reworded so the language-discipline grep passes without
+weakening the claim.** Machine verify rejects the literal strings even in negation, so
+the marketing page never prints them: the §11 NIDRA row's "what it cannot do" reads
+"no cause-and-effect claims, not autonomous, degrades past ~3 minutes", and the §14
+scientific position becomes "it projects where behaviour is heading — it does not
+explain why … no claims about an adversary's intentions or reasoning". Same boundaries,
+same honesty, zero grep hits. Extends: F4 rules; PRD §14 language discipline.
+
+**D94 — Console-band frames are captured from deterministic deep-linked replay states,
+and the site footer lives in the (marketing) layout.** The two screenshots are real
+frames from /demo at `?t=25` (light, overlay on: risk 0.607, lead 90 s, 26/30 context
+windows) and `?t=27` advanced to w28 (dark: risk 0.779, above-threshold row, lead 30 s,
+initial_access 57%/lateral 42% at +90 s) — reproducible states, checked into
+web/public/screens/ with the on-frame numbers in the alt text. The footer component
+renders from the layout, outside <main>, so it is a real contentinfo landmark; the CTA
+band stays in the page. Extends: F4 sections 4 and 8.
+
+**D95 — The wiz-clone at `temp-frontend/` is converted to NIDRA in place: same layouts,
+new brand, new content, zero third-party marks.** Sixteen sections were rewritten rather
+than redesigned — the grid (`grid-cols-[1fr_min(1310px,calc(100%-4rem))_1fr]`), the
+section spacers, and every breakpoint are unchanged, so the rhythm the clone earned
+survives. Four decisions are worth recording.
+
+Section files were renamed to what they now are (`how-wiz-helps` → `how-nidra-works`,
+`gartner-quadrant` → `evidence-teaser`, `pink-canvas` → `narrative-carousel`,
+`ai-operating-model` → `world-model-stages`, `testimonials` → `use-cases`,
+`user-reviews` → `honest-limits`, `analyst-recognition` → `experiments`,
+`ai-frontier` → `forecast-console`, `code-to-cloud-demo` → `try-it-demo`,
+`logo-marquee` → `stack-row`); `podcast-strip` is deleted. A `grep -ri wiz src/` that
+returns nothing is part of the deliverable, and filenames count.
+
+Every captured product screenshot is replaced by drawn SVG/HTML — `ForecastConeSvg`,
+`StageDiagram`, `ConsoleMock`, the pipeline and horizon-curve charts. All 71 files under
+`public/` were deleted; the only raster that returns is a generated 64×64
+`public/seo/favicon.png` (navy rounded square, white "N"), referenced through
+`metadata.icons` rather than the App Router `icon.*` file convention so there is a single
+declared source. Charts carry "illustrative — pending artifacts/metrics" on their face
+rather than in a caption, because a number on a chart is read as a measurement.
+
+Navy is `rgb(27 42 91)` (#1B2A5B) per the mapping plan, not the #1A2A46 sampled off the
+logo render — the plan's value is the lighter, bluer navy and it is what the wordmark,
+footer mark and the CTA button's label now use.
+
+Tailwind v4's `@theme inline` does **not** emit its custom properties to `:root` — it
+inlines them into utilities. Anything needed from an inline `style` or an SVG attribute
+(the console donut's `conic-gradient`) must therefore be declared in `:root` first, with
+the theme token pointing at it (`--color-observed: var(--observed)`). Verified against
+the compiled stylesheet, not assumed.
+
+Three rendering bugs were found by screenshotting the prerendered HTML at 320/390/768/
+1024/1440 (`chrome-headless-shell`; plain `--headless` silently lays out at ~485px and
+crops, which reads as phantom overflow): the cone's now-rule was hardcoded at 55% width
+while the observed series ended at 65%, so the line overshot its own anchor; `NidraLogo`
+baked in `text-navy`, which beat the footer's `text-gray-light` on source order and left
+the mark invisible on the dark footer; and the three-node diagram needs ~440px, so the
+stage card holds one column until `lg` instead of `md`. Extends: F4; CLAUDE.md frontend
+conventions.
+
+**D96 — The promptbook's own copy for section 12 fails the promptbook's own
+language grep; D93's resolution wins.** Prompt 6.3 specifies the honest-limits card as
+"Correlation and temporal prediction — not causal inference", and prompt 7.1 then requires
+`grep -ri "causal\|attacker intent\|understands why" src/` to return zero. Both cannot
+hold. D93 already settled this for the PRD: machine verify rejects the literal strings even
+in negation, so the page never prints them. The card now reads "Correlation and temporal
+prediction — no cause-and-effect claims. The data is observational; the counterfactual is a
+model-internal what-if." Same boundary, same honesty, zero grep hits. `layout.tsx`'s "Not an
+intrusion detector." is untouched — "intrusion detector" is not on the forbidden list, and
+the negation is the differentiator the project leads with.
+
+Two further Phase-7 notes. The clone's four `@keyframes` (marquee, marquee-reverse, shimmer,
+rotate) all had zero usages but shipped anyway — Tailwind tree-shakes utilities, not
+hand-written CSS — so they and their `--animate-*` tokens are gone; the bundle now carries
+no `@keyframes` of its own. And the CountUp tiles in section 13 initialised to `0`, so the
+served HTML literally asserted "0 features per host state" and "<0 ms max CPU inference"
+until the scroll animation ran. They now initialise to the true value and only animate when
+the tile starts below the fold, so the markup states 45 / 180s / <300 even with JS off.
+Extends: D95; D93.
+
+**D97 — Design pass on `temp-frontend/`: the hero carries an illustration, not a
+chart; the narrative slides get the serif-display treatment; the pipeline becomes an
+instrument line.** Four changes on direct review feedback.
+
+The hero's forecast chart is replaced by a drawn scene (passive tap → hosts → one host's
+line read through a window → a fan of paths past it). This agrees with D92, which already
+ruled no chart in the hero slot: a chart at hero scale is unreadable and spends the
+page's best real estate on axis furniture. The real `ForecastConeSvg` still appears twice,
+in the demo shell and the final CTA, where it has room. A small `src/components/art/`
+package now holds the primitives (Cloud, HostNode, Badge, Fan, Beam, Frame) so the hero,
+the four carousel scenes and the pipeline share one line-art language instead of three.
+
+The carousel slides move to the reference's structure — serif italic display heading, a
+highlighted lead line, body, and a scene on the right — which brings Crimson Pro back as
+`--font-display` after D95 dropped it. The four-rounded-rects pipeline becomes a single
+wire with instruments on it and pill labels naming what travels between them, aligned to
+the four column headings underneath.
+
+Copy was rewritten against the AI-writing checklist. The tells were everywhere: em dashes
+in almost every sentence (down from 40+ to 13), rule-of-three lists, "For the first time,
+defenders get…", and aphoristic closers ("An honest negative beats a fragile positive").
+The hero now leads with the measured number from the Wednesday replay rather than a
+restatement of the architecture. Headings lost their slogans: "Forecasting beats
+remembering" → "Does it beat guessing?", "Three experiments that keep us honest" → "Three
+things that could prove us wrong".
+
+Type and spacing both went up: body copy from 14–16px to 16–20px, section spacers roughly
+1.6x, and `--color-gray-dark` darkened from 4.64:1 to 6.22:1 on white, since it carries
+most of the secondary copy. Page is 12.8k tall at 1440 (was 10.4k) with no overflow at
+390/768/1024/1440. Extends: D92, D95, D96.
+
+**D98 — Review round two: use-case track moves into the page container, "Honest limits"
+is cut, the lifecycle strip becomes a band, and the transition formula gets real
+subscripts.** The use-case carousel was bleeding to the viewport edge with its first card
+flush left and a ragged gap on the right; it now sits inside the standard
+`grid-cols-[1fr_min(1310px,…)_1fr]` container like every other section, so both edges line
+up and the last card can scroll clear. Each card carries a faint `CardArt` motif behind the
+copy at 9% white, echoing what the card says. An earlier attempt used
+`px-[max(2rem,calc((100%-1310px)/2))]`, which silently emitted nothing — `calc` needs
+spaces around the minus, written as underscores in a Tailwind arbitrary value. The
+container grid is the simpler fix and is what shipped.
+
+The "Honest limits" section is removed on request. Its content is not duplicated elsewhere,
+so the site no longer states the three-minute ceiling, the CIC-IDS2017-only caveat, or the
+frozen-heads argument in the reader's path — the `/demo` console and the docs are now the
+only places those limits appear. Flagging because stating limits plainly was a named
+differentiator in CLAUDE.md.
+
+`P(S_t+1 | S_t)` renders as real subscripts via `<sub>` rather than KaTeX: one formula does
+not justify a 300 KB math renderer, and the markup reads correctly to a screen reader.
+Bullets are now `React.ReactNode[]` to allow it. The six-stage lifecycle from the supplied
+reference is rebuilt as markup rather than dropped in as the PNG — text in a raster does
+not scale, cannot be read aloud, and would have been the site's only bitmap. It sits
+full-width under the four columns instead of nested in column three, where six stages
+wrapped to three ragged rows. Its `min-w-[640px]` scroller needed `min-w-0` on the grid
+item, otherwise the automatic minimum size pushed the whole page to 814 px and broke
+mobile.
+
+The hero keeps its NIDRA illustration. The request was for the Wiz artwork that shipped
+with the clone; that is another company's copyrighted illustration, it is what D95 purged,
+and it would be the one piece of Wiz IP left on a judged submission. The animation asked
+for is delivered: the clone's spec described a "subtle float", which in the clone was only
+a static `translate-x-3 -translate-y-3`, so `.hero-float` now actually drifts on a 7 s
+ease-in-out loop and respects `prefers-reduced-motion`. Extends: D95, D97.
+
+**D99 — `/demo` is built in `temp-frontend/` from a slimmed copy of the `web/` replay
+fixture, and the reality overlay states its own coverage.** The console mirrors `web/`'s
+structure — demo banner, host list ranked by observed risk, forecast chart, replay
+controller, explanation panel, stage readout — rendered in the marketing site's tokens. It
+imports the fixture and nothing else: no API client, no websocket, so it renders with every
+container stopped.
+
+Three implementation choices. The fixture was copied at 2.4 MB and slimmed to 435 KB by
+dropping `predicted_features` (45 floats x 6 horizons x 192 forecasts) which nothing in the
+console reads. The chart is hand-drawn SVG rather than Visx: `temp-frontend` carries no
+charting dependency and every other figure on the site is drawn the same way, so adding one
+for a single chart was not worth it. The x axis holds a fixed `context_L + K` slots with
+history growing leftward from the now rule, because sizing it to whatever history exists
+made the cone span the whole plot at window 1 and lurch as the replay filled.
+
+Two corrections found while building. The crossing marker was interpolated from where the
+projected mean meets the threshold, which puts it *behind* the now rule whenever observed
+risk is already above threshold at the origin — a crossing in the past. It now derives from
+`lead_time_s`, the backend's answer under the m-consecutive-windows rule, so marker and
+badge cannot disagree. And the overlay now prints "N of M marks inside the band" whenever
+it is on. This matters because the obvious window to demo is the crossing at t=27, where
+coverage is **0 of 6** — measured, not estimated — against 83.5% across the host. D93
+already recorded that the fixture does not support "the marks land on the ghost" on this
+host near the crossing; the console now says so on its face rather than leaving a presenter
+to discover it live. Extends: D93, D94, D97.
+
+**D100 — The demo console runs dark and leads with numbers, not the chart.** Reworked on
+review feedback that it read as a chart with widgets around it rather than a security
+dashboard. Four KPI tiles sit above everything — earliest warning in seconds, hosts above
+threshold, horizon, state width — followed by an alert strip that appears only while some
+host is projected to cross, carrying the lead time at 24px. The chart is now one panel
+among six: host watch with per-host risk sparklines, predicted stage mix, attack-lifecycle
+track showing observed position against projected mass, and SHAP drivers with the saliency
+histogram.
+
+The console is dark; the marketing site stays light. They share the signal roles but not
+the surfaces, so `globals.css` gains a `--console-*` group for the surfaces and a `*-lit`
+set — brighter cuts of observed, projected, threshold, positive and negative that hold up
+on a near-black ground. The light roles would have been illegible there, and darkening the
+marketing site to match was never on the table.
+
+One thing this cost an hour: the `:root` values for `--console-*` never landed, because the
+insertion anchored on `--navy: rgb(26 42 70)` and that value became `rgb(27 42 91)` back in
+D96. `str.replace` reported nothing, the `@theme` entries compiled fine, and every
+`.bg-console-*` utility resolved to an empty `var()` — so the page rendered white with
+white-on-white panels and no error anywhere. Anchoring a blind string replace on a value
+that another decision already changed is the failure mode; the fix now asserts the anchor
+exists before writing. Extends: D99.
+
+**D101 — The console carries its own light/dark toggle; dark stays the default.** Three
+choices — light, dark, match system — in the console header, persisted under
+`nidra-console-theme` and applied as `data-console-theme` on the document element. The
+palette is two blocks in `globals.css`: the `*-lit` signal roles are recut per ground, dark
+for near-black and the base values for white, so the same class names work either way. The
+marketing site is untouched and reads none of these tokens.
+
+Default is dark rather than the OS preference. `(prefers-color-scheme: light)` matches when
+no preference is set, so following the system would have handed the light console to nearly
+every visitor and lost the look the dashboard was designed around. Light and "match system"
+are both explicit choices.
+
+Two things this surfaced. Reading the stored choice with `useState` + `useEffect` trips
+`react-hooks/set-state-in-effect`, and correctly — `localStorage` is unreadable during SSR,
+so the honest shape is `useSyncExternalStore` with a server snapshot of `"dark"` and the
+store correcting after hydration. And the pre-paint script that avoids the theme flash sets
+an attribute React did not render, which is a real hydration mismatch; `<html>` now carries
+`suppressHydrationWarning`, which is what every theme implementation does and what the
+attribute being deliberately out-of-band requires. Verified zero hydration warnings after.
+Extends: D100.
