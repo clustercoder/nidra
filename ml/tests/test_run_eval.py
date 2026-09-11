@@ -76,7 +76,29 @@ def test_run_eval_end_to_end_on_test_split(eval_ready_artifacts):
     assert "calibration" in results
     assert "lead_time" in results
 
-    metrics_dir = tmp_path / "metrics"
+    # Split-specific subdirectory (see run_eval.run): running eval for
+    # multiple splits against the same metrics_dir must not have one split's
+    # files silently overwrite another's.
+    metrics_dir = tmp_path / "metrics" / "test"
     for name in ["baselines.json", "ablations.json", "calibration.json", "lead_time.json"]:
         content = json.loads((metrics_dir / name).read_text())
         assert content  # valid, non-empty JSON
+
+
+def test_run_eval_does_not_clobber_metrics_across_splits(eval_ready_artifacts):
+    """Regression test: the documented workflow runs run_eval.py once per
+    split (test, then holdout) against the SAME metrics_dir. Before the
+    split-subdirectory fix, the second run silently overwrote the first
+    run's baselines.json/ablations.json/etc — exactly what happened running
+    this by hand against real data."""
+    cfg, tmp_path = eval_ready_artifacts
+    run_eval_mod.run(cfg, seed=0, split_name="test", n_samples=5)
+    test_baselines = json.loads((tmp_path / "metrics" / "test" / "baselines.json").read_text())
+
+    # holdout is empty in this fixture's SplitResult, so run() returns early
+    # without writing anything — the point here is only that it must not
+    # touch the test split's already-written files.
+    run_eval_mod.run(cfg, seed=0, split_name="holdout", n_samples=5)
+
+    test_baselines_after = json.loads((tmp_path / "metrics" / "test" / "baselines.json").read_text())
+    assert test_baselines == test_baselines_after

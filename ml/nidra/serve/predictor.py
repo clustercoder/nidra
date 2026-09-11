@@ -178,7 +178,14 @@ class NidraPredictor:
         for k in range(self.K):
             ts = origin_ts + timedelta(seconds=window_seconds * (k + 1))
             stage_dist = {name: float(p) for name, p in zip(STAGE_LABELS, rollout["stage_mean_k"][k])}
-            predicted_features = {name: float(v) for name, v in zip(FEATURE_ORDER, rollout["predicted_states_mean"][k])}
+            # predicted_states_mean is in the model's internal scaled
+            # (RobustScaler + log1p) space — inverse-transform back to raw
+            # units before handing it to a consumer, which never operates in
+            # scaled space (see nidra.data.normalize.FeatureScaler docstring
+            # and the web-contract example, e.g. bytes_total in the
+            # thousands, not a small RobustScaler-normalized float).
+            raw_predicted = self.scaler.inverse_transform(rollout["predicted_states_mean"][k])
+            predicted_features = {name: float(v) for name, v in zip(FEATURE_ORDER, raw_predicted)}
             horizons.append({
                 "k": k + 1,
                 "ts": ts.isoformat(),

@@ -67,6 +67,37 @@ def test_state_nrmse_by_horizon_shape():
     assert (grid >= 0).all()
 
 
+def test_state_nrmse_does_not_blow_up_on_degenerate_eval_batch():
+    """Regression test for the real, observed failure mode: a small eval
+    batch where one feature is exactly constant (e.g. a packet aggregate
+    zero-filled on a flow-only day) has std=0 for that feature. The old
+    behavior (divide by std(y_true), floored at 1e-8) inflated nRMSE for
+    that single feature into the 10^5-10^9 range from a small prediction
+    error alone — orders of magnitude beyond every other feature, and
+    dominating the mean nRMSE reported in REAL_DATA_RESULTS.md. The floor
+    must keep any single feature's contribution bounded to a legible range."""
+    n = 200
+    y_true = np.random.randn(n, 45) * 0.5
+    y_pred = y_true.copy()
+    y_true[:, 3] = 0.0
+    y_pred[:, 3] = 0.02  # small, plausible model noise on an exactly-constant feature
+    nrmse = state_nrmse(y_true, y_pred)
+    assert nrmse[3] < 10.0, f"degenerate feature should not dominate the metric, got {nrmse[3]}"
+
+
+def test_state_nrmse_prefers_supplied_reference_scale_over_batch_std():
+    n = 50
+    y_true = np.zeros((n, 45))
+    y_pred = np.full((n, 45), 0.1)
+    # Batch std is exactly 0 everywhere; without a reference scale this
+    # would divide by the floor directly. With a realistic reference scale
+    # (as if computed from millions of training rows) the ratio should be
+    # governed by that reference, not the degenerate batch.
+    reference_scale = np.full(45, 2.0)
+    nrmse = state_nrmse(y_true, y_pred, feature_scale=reference_scale)
+    np.testing.assert_allclose(nrmse, 0.1 / 2.0)
+
+
 def test_brier_score_perfect_is_zero():
     y_true = np.array([1, 0, 1, 0])
     y_prob = np.array([1.0, 0.0, 1.0, 0.0])

@@ -50,6 +50,72 @@ def test_save_load_roundtrip(tmp_path):
     np.testing.assert_allclose(scaler.transform(X_test), loaded.transform(X_test))
 
 
+def test_reference_std_computed_on_fit_and_roundtrips(tmp_path):
+    rng = np.random.default_rng(4)
+    X_train = rng.standard_normal((300, 45))
+    scaler = FeatureScaler().fit(X_train)
+
+    assert scaler.reference_std_ is not None
+    assert scaler.reference_std_.shape == (45,)
+    assert (scaler.reference_std_ >= 0).all()
+
+    scaler_path, meta_path = tmp_path / "scaler.joblib", tmp_path / "meta.json"
+    scaler.save(scaler_path, meta_path)
+    loaded = FeatureScaler.load(scaler_path, meta_path)
+    np.testing.assert_allclose(loaded.reference_std_, scaler.reference_std_)
+
+
+def test_inverse_transform_roundtrips():
+    """A consumer of predicted_features (e.g. serve/predictor.py) must get
+    raw units back, not the model's internal scaled+log1p representation —
+    this is the round trip that guarantees that."""
+    rng = np.random.default_rng(6)
+    X = np.abs(rng.standard_normal((100, 45))) * 50  # positive, raw-magnitude-like
+    scaler = FeatureScaler(clip_min=-1e9, clip_max=1e9).fit(X)  # disable clipping for a clean roundtrip
+    X_scaled = scaler.transform(X)
+    X_back = scaler.inverse_transform(X_scaled)
+    np.testing.assert_allclose(X_back, X, rtol=1e-4, atol=1e-4)
+
+
+def test_inverse_transform_bounds_log1p_feature_blowup():
+    """Regression test: a rollout prediction that is merely off by a modest
+    amount in scaled space (state_nrmse ~5-7 is normal per REAL_DATA_RESULTS.md)
+    must not invert to a physically nonsensical raw value for the 5 log1p
+    features — observed directly as RMSE in the 10^11-10^14 range against the
+    real trained ensemble before this fix."""
+    rng = np.random.default_rng(7)
+    X_train = np.abs(rng.standard_normal((500, 45))) * 100
+    scaler = FeatureScaler().fit(X_train)
+
+    # A scaled value far outside the observed training range (e.g. an
+    # under-trained rollout diverging) for bytes_total (LOG1P_FEATURES[0]).
+    from nidra.data.schema import FEATURE_INDEX
+    bad_scaled = np.zeros((1, 45))
+    bad_scaled[0, FEATURE_INDEX["bytes_total"]] = 10.0  # at the clip_max boundary
+
+    raw = scaler.inverse_transform(bad_scaled)
+    assert np.isfinite(raw).all()
+    assert raw[0, FEATURE_INDEX["bytes_total"]] < 1e12, "log1p inversion must not blow up exponentially"
+
+
+def test_inverse_transform_before_fit_raises():
+    scaler = FeatureScaler()
+    with pytest.raises(RuntimeError):
+        scaler.inverse_transform(np.random.randn(1, 45))
+
+
+def test_reference_std_near_zero_for_constant_feature(tmp_path):
+    """A feature that is exactly 0 for every training row (e.g. a packet
+    aggregate on a flow-only day) must report a near-zero reference std, not
+    NaN or an inflated value — this is what eval/metrics.state_nrmse floors
+    against instead of a fragile per-eval-batch std."""
+    rng = np.random.default_rng(5)
+    X_train = rng.standard_normal((500, 45))
+    X_train[:, 0] = 0.0  # syn_ratio held constant across the whole population
+    scaler = FeatureScaler().fit(X_train)
+    assert scaler.reference_std_[0] < 1e-6
+
+
 def test_load_rejects_schema_drift(tmp_path):
     rng = np.random.default_rng(3)
     X_train = rng.standard_normal((100, 45))

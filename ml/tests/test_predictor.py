@@ -33,6 +33,24 @@ def test_forecast_output_contract(trained_predictor):
     assert len(result["top_signals"]) <= 5
 
 
+def test_predicted_features_are_in_raw_units_not_scaled_space(trained_predictor):
+    """predicted_features must be inverse-transformed back to raw units —
+    a forecast consumer (dashboard, backend) never sees the model's internal
+    RobustScaler+log1p space. Verified by round-tripping through the SAME
+    scaler the predictor holds: re-scaling the returned raw features must
+    land back in the model's valid scaled/clipped operating range."""
+    predictor, windowed = trained_predictor
+    states = windowed["train"].X[0]
+    origin_ts = datetime(2017, 7, 4, 9, 0, 0, tzinfo=timezone.utc)
+    result = predictor.forecast(states, host_id="10.0.0.1", origin_ts=origin_ts)
+
+    raw = np.array([result["horizons"][0]["predicted_features"][name] for name in FEATURE_ORDER])
+    rescaled = predictor.scaler.transform(raw[None, :])[0]
+    assert np.isfinite(rescaled).all()
+    assert (rescaled >= predictor.scaler.clip_min - 1e-6).all()
+    assert (rescaled <= predictor.scaler.clip_max + 1e-6).all()
+
+
 def test_forecast_rejects_wrong_feature_width(trained_predictor):
     predictor, windowed = trained_predictor
     bad_states = windowed["train"].X[0][:, :-1]  # 44 features instead of 45

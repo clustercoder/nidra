@@ -57,7 +57,12 @@ def _build_model(cfg: dict) -> WorldModel:
 def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples: int | None = 5000) -> dict:
     weights_dir = resolve_path(cfg, cfg["artifacts"]["weights_dir"])
     scaler_dir = resolve_path(cfg, cfg["artifacts"]["scaler_dir"])
-    metrics_dir = resolve_path(cfg, cfg["artifacts"]["metrics_dir"])
+    # Split-specific subdirectory: the documented reproduction commands run
+    # this script once per split (test, then holdout) against the SAME
+    # metrics_dir — flat filenames would let the holdout run silently
+    # overwrite the test run's baselines.json/ablations.json/etc, which is
+    # exactly what happened running this by hand before this fix.
+    metrics_dir = resolve_path(cfg, cfg["artifacts"]["metrics_dir"]) / split_name
     metrics_dir.mkdir(parents=True, exist_ok=True)
 
     scaler = FeatureScaler.load(scaler_dir / "robust_scaler.joblib", scaler_dir / "scaler_metadata.json")
@@ -106,6 +111,14 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
     X_train, _ = scale_arrays(train_arrays, scaler)
     X_eval_last, X_train_last = X_eval[:, -1, :], X_train[:, -1, :]
 
+    # State nRMSE must be normalized by a stable, population-level per-feature
+    # scale (see eval/metrics.state_nrmse) rather than the std of whatever
+    # small eval batch happens to be sampled — many of the 45 features are
+    # structurally near-constant on large slices of this dataset, and a
+    # batch-recomputed std collapses toward zero for them, inflating nRMSE by
+    # orders of magnitude for reasons unrelated to forecast quality.
+    feature_scale = scaler.reference_std_
+
     results: dict = {"split": split_name, "seed": seed, "n_samples": int(len(eval_arrays.X))}
 
     # --- Baselines ---
@@ -132,11 +145,23 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
     # --- Ablations ---
     logger.info("running ablations")
     ablations = {
-        "persistence": persistence_ablation(X_eval, Y_eval, y_true, model),
+        "persistence": persistence_ablation(X_eval, Y_eval, y_true, model, feature_scale=feature_scale),
         "time_shuffle": time_shuffle_ablation(X_eval, y_true, model, K=Y_eval.shape[1]),
-        "horizon_curve": horizon_curve(eval_arrays.future_is_attack, Y_eval, model, X_eval, n_samples=n_samples),
+        "horizon_curve": horizon_curve(
+            eval_arrays.future_is_attack, Y_eval, model, X_eval, n_samples=n_samples, feature_scale=feature_scale
+        ),
         "surprise_signal": surprise_signal(X_eval, Y_eval, eval_arrays.future_is_attack, model),
     }
+    if feature_scale is not None:
+        from nidra.data.schema import FEATURE_ORDER
+        low_variance = [
+            FEATURE_ORDER[i] for i in range(len(FEATURE_ORDER)) if feature_scale[i] <= 0.05
+        ]
+        ablations["nrmse_normalization"] = {
+            "method": "train_population_reference_std",
+            "scale_floor": 0.05,
+            "low_variance_features_floored": low_variance,
+        }
     with open(metrics_dir / "ablations.json", "w") as f:
         json.dump({"split": split_name, "seed": seed, "ablations": ablations}, f, indent=2)
     results["ablations"] = ablations
