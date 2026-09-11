@@ -1,0 +1,68 @@
+{
+  "split": "test",
+  "seed": 0,
+  "ablations": {
+    "persistence": {
+      "auc_pr_persistence": 0.6938115138281136,
+      "auc_pr_world_model": 0.7972727251109631,
+      "auc_collapse": 0.10346121128284957,
+      "nrmse_persistence_mean": 5.714239267625871,
+      "nrmse_world_model_mean": 6.520197439565032,
+      "interpretation": "world model beats persistence"
+    },
+    "time_shuffle": {
+      "auc_pr_normal_order": 0.8056878854366362,
+      "auc_pr_shuffled_order": 0.7984885379944431,
+      "collapse": 0.0071993474421930825,
+      "interpretation": "NO COLLAPSE under shuffling \u2014 the model may be using per-window features only, not real temporal structure; this is a reportable negative result, not a bug to hide"
+    },
+    "horizon_curve": {
+      "auc_pr_by_k": [
+        0.5175048840990087,
+        0.17421648573535892,
+        0.5595739454942039,
+        0.1593007750925551,
+        0.49727959757180773,
+        0.16199841859103425
+      ],
+      "nrmse_by_k": [
+        7.37831257728346,
+        4.598617219652503,
+        7.4611927617048766,
+        5.548465806566155,
+        7.772624132858859,
+        6.390038246170583
+      ],
+      "flat_curve_leakage_warning": false
+    },
+    "surprise_signal": {
+      "mean_error_benign": 0.3096652306593531,
+      "mean_error_pre_attack": 5.259131745835626,
+      "n_benign": 2150,
+      "n_pre_attack": 1850,
+      "error_rises_before_onset": true
+    },
+    "nrmse_normalization": {
+      "method": "train_population_reference_std",
+      "scale_floor": 0.05,
+      "low_variance_features_floored": [
+        "syn_ratio",
+        "ack_ratio",
+        "rst_ratio",
+        "fin_ratio",
+        "psh_ratio",
+        "urg_ratio",
+        "tcp_window_entropy",
+        "frag_flag_rate",
+        "payload_size_entropy",
+        "retrans_count",
+        "retrans_rate",
+        "local_clustering_coeff",
+        "d_syn_ratio",
+        "d_retrans_rate",
+        "slope3_syn_ratio",
+        "slope3_dst_port_entropy"
+      ]
+    }
+  }
+}

@@ -6,7 +6,11 @@ This is the ML half of NIDRA: data pipeline, world model, training,
 evaluation, explainability, and the `NidraPredictor` serving interface. See
 `../docs/IMPLEMENTATION-ML.md` for the full build spec this implements, and
 `../docs/HORIZON_PRD.pdf` (original problem-statement PRD, kept under its
-original filename) for product framing.
+original filename) for product framing. This file is the top-level entry
+point; `MODEL_CARD.md` / `TRAINING.md` / `EVALUATION.md` cover architecture-
+vs-spec deviations, the training procedure, and the eval harness in more
+depth, and `REAL_DATA_RESULTS.md` is the single source of truth for actual
+measured numbers.
 
 ## Claims discipline (read this before reading any metric below)
 
@@ -115,6 +119,11 @@ flag (1).
    log1p on heavy-tailed count features, clipped to `[-10, 10]`, serialized
    to `artifacts/scaler/`. `FeatureScaler.transform()` refuses to run
    before `fit()`/`load()` — the scaler is never refit at serving time.
+   Also computes `reference_std_` at fit time (per-feature std of the
+   training population in scaled units) — the stable normalizer
+   `eval/metrics.state_nrmse` uses instead of a small eval batch's own std
+   (see "Known bugs, fixed" below) — and provides `inverse_transform()` for
+   turning a rolled-out/predicted state back into raw units for serving.
 9. **`dataset.py`** — builds `[N, L, F]` / `[N, K, F]` windowed arrays with
    traceable metadata (`host_id`, `origin_ts`, `episode_id`, `stage_label`,
    `risk_label`, and per-horizon `future_stage_idx`/`future_is_attack` for
@@ -133,16 +142,15 @@ reintroduce it. `config/default.yaml` is the full-scale production config
 is the same dataset and paths at MVP scale (single seed, fewer epochs,
 stratified sample capping) for a faster hackathon-timeline run.
 
-Real, tshark-extracted packet-level features exist for **Monday and
-Friday** (the two days whose raw PCAPs were downloaded); Tuesday,
-Wednesday, and Thursday run in **flow-only mode** (packet-aggregate
-features zero-filled, logged loudly via `windowize.build_state_rows`'s
-flow-only warning, never silently treated as full-feature data) until
-their PCAPs are downloaded and extracted with
-`python -m nidra.data.pcap_extract`. `nidra/data/labels.py` also carries
-dormant, unused label-matching rules for CSE-CIC-IDS2018's raw `Label`
-strings, kept only as harmless compatibility in case that dataset is ever
-added later — it is not part of this project's actual data path.
+Real, tshark-extracted packet-level features exist for **all 5 raw PCAPs**
+(Monday, Tuesday, Wednesday, Thursday, Friday — all downloaded and
+extracted), so all 8 day-files carry real packet-level features; none run
+in flow-only mode. `windowize.build_state_rows`'s flow-only warning still
+exists and still fires loudly (never silently) if a day's `packets:` config
+entry is ever unset or its parquet file goes missing. `nidra/data/labels.py`
+also carries dormant, unused label-matching rules for CSE-CIC-IDS2018's raw
+`Label` strings, kept only as harmless compatibility in case that dataset is
+ever added later — it is not part of this project's actual data path.
 
 See `REAL_DATA_RESULTS.md` for the actual end-to-end run against this
 dataset: dataset stats, PCAP extraction stats, training convergence,
@@ -223,8 +231,11 @@ outcomes:
   windows.
 
 `run_eval.py` is the CLI entry point that runs all of the above against a
-trained seed and writes `artifacts/metrics/{baselines,ablations,
-calibration,lead_time}.json`.
+trained seed and writes `artifacts/metrics/<split>/{baselines,ablations,
+calibration,lead_time}.json` — split-specific subdirectory, so running
+`--split test` then `--split holdout` against the same config never lets one
+overwrite the other's results (a real bug hit and fixed; see
+`REAL_DATA_RESULTS.md`).
 
 ## Explainability (`nidra/explain/`)
 
@@ -267,25 +278,31 @@ over target, cut samples toward 100 before cutting ensemble size.
 ```bash
 cd ml
 pip install -e .
-pytest tests/ -q                                    # 120+ tests, synthetic fixtures, seconds
+pytest tests/ -q                                    # 136 tests, synthetic fixtures, seconds
 
-# MVP scale (single seed, fewer epochs) — what REAL_DATA_RESULTS.md reports:
-python -m nidra.train.train_dynamics --config config/mvp_2017.yaml --max-train-samples 8000 --max-val-samples 2000
-python -m nidra.train.train_heads    --config config/mvp_2017.yaml --max-train-samples 8000 --max-val-samples 2000
-python -m nidra.eval.run_eval        --config config/mvp_2017.yaml --seed 0 --split test
-python -m nidra.eval.run_eval        --config config/mvp_2017.yaml --seed 0 --split holdout   # Infiltration
-python -m nidra.serve.benchmark --weights-dir artifacts_mvp_2017/weights --scaler-path artifacts_mvp_2017/scaler/robust_scaler.joblib
+# MVP scale, full 5-seed ensemble (what REAL_DATA_RESULTS.md §Run 2 reports):
+for seed in 0 1 2 3 4; do
+  python -m nidra.train.train_dynamics --config config/mvp_2017.yaml --max-train-samples 40000 --max-val-samples 8000 --epochs 30 --seed $seed
+  python -m nidra.train.train_heads    --config config/mvp_2017.yaml --max-train-samples 40000 --max-val-samples 8000 --seed $seed
+done
+python -m nidra.eval.run_eval        --config config/mvp_2017.yaml --seed 0 --split test    --n-samples 50 --max-eval-samples 4000
+python -m nidra.eval.run_eval        --config config/mvp_2017.yaml --seed 0 --split holdout --n-samples 50 --max-eval-samples 4000   # Infiltration
+python -m nidra.serve.benchmark --weights-dir artifacts_mvp_2017/weights --scaler-path artifacts_mvp_2017/scaler/robust_scaler.joblib --config config/mvp_2017.yaml
 
-# Full-scale (5-seed ensemble, 60/30 epochs, same real dataset/paths):
+# Full-scale (60/30 epochs, uncapped ~6.9M-candidate train set, same real dataset/paths):
 python -m nidra.train.train_dynamics --config config/default.yaml
 python -m nidra.train.train_heads    --config config/default.yaml
 python -m nidra.eval.run_eval        --config config/default.yaml --seed 0 --split test
 ```
 
-The MVP run above has actually been executed end-to-end against the real,
-complete CIC-IDS2017 dataset — see `REAL_DATA_RESULTS.md` for what was
-measured, at what scale, the two real bugs found and fixed along the way,
-and the honest, unresolved open items. The full-scale 5-seed run has not
-been run to completion (compute cost, not a blocker) — Tuesday, Wednesday,
-and Thursday PCAPs also still need downloading and extracting to give it
-packet-level features on every day rather than just Monday/Friday.
+The MVP-scale run above has been executed end-to-end against the real,
+complete CIC-IDS2017 dataset, all 5 PCAPs extracted (real packet-level
+features on all 8 day-files) and a real 5-seed ensemble trained — see
+`REAL_DATA_RESULTS.md` §Run 2 for what was measured, the bugs found and
+fixed along the way (including two in this pass: a metric-normalization bug
+that had inflated nRMSE by 4-5 orders of magnitude, and a units bug in
+`NidraPredictor.forecast()`'s output), and the honest, still-unresolved open
+items (chiefly: probability calibration at the mandated threshold). The
+`config/default.yaml` full-scale run (60/30 epochs, uncapped) has not been
+executed to completion (compute/time, not a blocker) — nothing about the
+data layer needs to change to run it.

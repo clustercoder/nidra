@@ -1,0 +1,40 @@
+{
+  "model_name": "NIDRAWorldModel",
+  "architecture": "2-layer GRU + Gaussian transition + frozen heads",
+  "input_features": 45,
+  "context_windows": 30,
+  "window_seconds": 30,
+  "forecast_horizon": 6,
+  "hidden_size": 128,
+  "latent_size": 128,
+  "ensemble_seeds_configured": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "ensemble_seeds_trained": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "dataset": "CIC-IDS2017",
+  "train_days": [
+    "monday",
+    "tuesday",
+    "wednesday"
+  ],
+  "test_days": [
+    "friday_morning",
+    "friday_portscan",
+    "friday_ddos"
+  ],
+  "holdout": [
+    "thursday_infiltration"
+  ],
+  "risk_threshold": 0.75,
+  "lead_rule_windows": 2
+}
