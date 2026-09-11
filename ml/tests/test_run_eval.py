@@ -6,6 +6,7 @@ not real-data numbers."""
 from __future__ import annotations
 
 import json
+import logging
 
 import numpy as np
 import pandas as pd
@@ -85,6 +86,70 @@ def test_run_eval_end_to_end_on_test_split(eval_ready_artifacts):
     for name in ["baselines.json", "ablations.json", "calibration.json", "lead_time.json"]:
         content = json.loads((metrics_dir / name).read_text())
         assert content  # valid, non-empty JSON
+
+
+@pytest.fixture
+def eval_ready_artifacts_two_seeds(tmp_path, monkeypatch):
+    cfg = full_cfg_dict(tmp_path)
+    scaler_dir = tmp_path / "scaler"
+    scaler_dir.mkdir(parents=True, exist_ok=True)
+
+    splits = _synthetic_split_with_test()
+    windowed = build_windowed_splits(splits)
+    scaler = fit_scaler(windowed["train"])
+    scaler.save(scaler_dir / "robust_scaler.joblib", scaler_dir / "scaler_metadata.json")
+
+    benign_mask = windowed["train"].stage_label == "benign"
+    background = build_shap_background(scaler.transform(windowed["train"].X[benign_mask, -1, :]), n_centroids=10)
+    save_background(background, scaler_dir / "shap_background.npy")
+
+    for seed in (0, 1):
+        train_one_seed(cfg, seed=seed, epochs_override=1, windowed=windowed, scaler=scaler, device="cpu")
+        train_heads_for_seed(cfg, seed=seed, windowed=windowed, scaler=scaler, device="cpu")
+
+    monkeypatch.setattr(run_eval_mod, "build_all_splits", lambda cfg: splits)
+    return cfg, tmp_path
+
+
+def test_run_eval_with_ensemble_seeds_adds_ensemble_prefixed_baselines(eval_ready_artifacts_two_seeds):
+    cfg, tmp_path = eval_ready_artifacts_two_seeds
+    results = run_eval_mod.run(cfg, seed=0, split_name="test", n_samples=10, ensemble_seeds=[0, 1])
+
+    for name in ["ensemble_persistence", "ensemble_oracle", "ensemble_world_model"]:
+        assert name in results["baselines"]
+        assert "f1" in results["baselines"][name]
+
+    lead_time_json = json.loads((tmp_path / "metrics" / "test" / "lead_time.json").read_text())
+    assert "ensemble" in lead_time_json
+    assert "n_episodes" in lead_time_json["ensemble"]
+
+
+def test_run_eval_without_ensemble_seeds_omits_ensemble_sections(eval_ready_artifacts):
+    """Backward compatibility: ensemble_seeds=None (the default) must not
+    add any ensemble_*-prefixed keys — a single-seed eval run looks exactly
+    as it did before this feature existed."""
+    cfg, tmp_path = eval_ready_artifacts
+    results = run_eval_mod.run(cfg, seed=0, split_name="test", n_samples=10)
+
+    assert not any(k.startswith("ensemble_") for k in results["baselines"])
+    lead_time_json = json.loads((tmp_path / "metrics" / "test" / "lead_time.json").read_text())
+    assert "ensemble" not in lead_time_json
+
+
+def test_warn_if_single_class_logs_when_only_positives_present(caplog):
+    """subsample_stratified_by_risk keeps ALL positives, filling the rest
+    with negatives — if max_eval_samples is smaller than the positive pool,
+    the eval set silently becomes 100% positive (every auc_pr NaN). This
+    must be logged loudly, not left to look like an unexplained bug."""
+    with caplog.at_level(logging.WARNING):
+        run_eval_mod._warn_if_single_class(np.array([1, 1, 1, 1]), "test", max_eval_samples=4)
+    assert any("only one risk_label class present" in r.message for r in caplog.records)
+
+
+def test_warn_if_single_class_silent_with_both_classes_present(caplog):
+    with caplog.at_level(logging.WARNING):
+        run_eval_mod._warn_if_single_class(np.array([1, 0, 1, 0]), "test", max_eval_samples=4)
+    assert not any("only one risk_label class present" in r.message for r in caplog.records)
 
 
 def test_run_eval_without_calibration_file_omits_calibrated_sections(eval_ready_artifacts):

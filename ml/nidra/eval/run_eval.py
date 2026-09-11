@@ -25,6 +25,9 @@ from nidra.eval.baselines import (
     baseline_lr_flattened_history,
     baseline_oracle,
     baseline_persistence,
+    ensemble_baseline_oracle,
+    ensemble_baseline_persistence,
+    ensemble_world_model_forecast,
     world_model_forecast,
 )
 from nidra.eval.calibrate import apply_platt_by_horizon, load_calibration
@@ -55,7 +58,39 @@ def _build_model(cfg: dict) -> WorldModel:
     )
 
 
-def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples: int | None = 5000) -> dict:
+def _warn_if_single_class(y_true: np.ndarray, split_name: str, max_eval_samples: int | None) -> None:
+    """subsample_stratified_by_risk keeps ALL positive-risk samples, only
+    filling the remainder with negatives — if max_eval_samples is smaller
+    than the split's actual positive-candidate pool, the eval set silently
+    becomes 100% positive with zero negatives. standard_metrics() correctly
+    reports auc_pr as NaN in that case (undefined, not fabricated) rather
+    than a real bug, but a NaN AUC-PR across every baseline is easy to
+    mistake for something broken — this warns loudly at the actual root
+    cause instead."""
+    if len(np.unique(y_true)) < 2:
+        logger.warning(
+            "run_eval: eval set for split=%s has only one risk_label class present (n=%d) — "
+            "max_eval_samples=%s is smaller than this split's positive-candidate pool, so every "
+            "auc_pr below will be NaN (undefined for a single-class set, not a bug). Pass a larger "
+            "--max-eval-samples to get a real negative/positive mix.",
+            split_name, len(y_true), max_eval_samples,
+        )
+
+
+def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples: int | None = 5000,
+        ensemble_seeds: list[int] | None = None) -> dict:
+    """`ensemble_seeds`, if given, additionally loads every listed seed's
+    checkpoint and computes an `ensemble_*`-prefixed set of baselines and a
+    `"ensemble"`/`"ensemble_calibrated"` lead-time section using the real
+    pooled-ensemble statistic (`ensemble_world_model_forecast`) — the exact
+    statistic `NidraPredictor` serves, not the single-seed approximation
+    the rest of this function uses. This is opt-in (default None = skip)
+    both because it multiplies rollout cost by len(ensemble_seeds) and
+    because the single-seed baselines above remain independently useful
+    (e.g. for a quick per-seed sanity check). See REAL_DATA_RESULTS.md's
+    Run 3 calibration section for why this was added: the single-seed
+    approximation can overstate a calibrated-recall/lead-time improvement
+    at production scale, not just differ from it in magnitude."""
     weights_dir = resolve_path(cfg, cfg["artifacts"]["weights_dir"])
     scaler_dir = resolve_path(cfg, cfg["artifacts"]["scaler_dir"])
     # Split-specific subdirectory: the documented reproduction commands run
@@ -70,6 +105,17 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
     model = _build_model(cfg)
     model.load_state_dict(torch.load(weights_dir / f"model_seed_{seed}.pt", map_location="cpu"))
     model.eval()
+
+    ensemble_models = None
+    if ensemble_seeds:
+        ensemble_models = []
+        for eseed in ensemble_seeds:
+            m = _build_model(cfg)
+            m.load_state_dict(torch.load(weights_dir / f"model_seed_{eseed}.pt", map_location="cpu"))
+            m.eval()
+            ensemble_models.append(m)
+        logger.info("run_eval: loaded %d ensemble member(s) for pooled-ensemble baselines: seeds=%s",
+                    len(ensemble_models), ensemble_seeds)
 
     # Optional post-hoc calibration (nidra.scripts.fit_calibration), fit on
     # the validation split, applied here to a "world_model_calibrated"
@@ -145,6 +191,7 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
     probs_world_model = world["risk_over_horizon"]
 
     y_true = eval_arrays.risk_label
+    _warn_if_single_class(y_true, split_name, max_eval_samples)
     baselines = {
         "lr_current_state": standard_metrics(y_true, probs_lr1, threshold=cfg["eval"]["risk_threshold"]),
         "lr_flattened_history": standard_metrics(y_true, probs_lr2, threshold=cfg["eval"]["risk_threshold"]),
@@ -171,6 +218,34 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
             "applied_to_single_seed_approximation": True,
             "applied_to_seed": seed,
         }
+
+    ensemble_world = None
+    if ensemble_models is not None:
+        logger.info("running pooled-ensemble baselines on split=%s (n=%d, %d members)",
+                    split_name, len(eval_arrays.X), len(ensemble_models))
+        probs_ensemble_persistence = ensemble_baseline_persistence(X_eval_last, ensemble_models)
+        probs_ensemble_oracle, _, _ = ensemble_baseline_oracle(Y_eval, ensemble_models)
+        ensemble_world = ensemble_world_model_forecast(X_eval, ensemble_models, K=Y_eval.shape[1],
+                                                        n_samples_per_member=n_samples)
+        probs_ensemble_world_model = ensemble_world["risk_mean_k"].max(axis=1)
+        baselines["ensemble_persistence"] = standard_metrics(
+            y_true, probs_ensemble_persistence, threshold=cfg["eval"]["risk_threshold"]
+        )
+        baselines["ensemble_oracle"] = standard_metrics(
+            y_true, probs_ensemble_oracle, threshold=cfg["eval"]["risk_threshold"]
+        )
+        baselines["ensemble_world_model"] = standard_metrics(
+            y_true, probs_ensemble_world_model, threshold=cfg["eval"]["risk_threshold"]
+        )
+        if calibration_params is not None:
+            # This is the REAL calibrated statistic — pooled across the
+            # ensemble exactly as fit, not the single-seed approximation
+            # above. See the run() docstring for why both are kept.
+            ensemble_calibrated_risk_mean_k = apply_platt_by_horizon(ensemble_world["risk_mean_k"], calibration_params)
+            probs_ensemble_world_model_calibrated = ensemble_calibrated_risk_mean_k.max(axis=1)
+            baselines["ensemble_world_model_calibrated"] = standard_metrics(
+                y_true, probs_ensemble_world_model_calibrated, threshold=cfg["eval"]["risk_threshold"]
+            )
     with open(metrics_dir / "baselines.json", "w") as f:
         json.dump({"split": split_name, "seed": seed, "baselines": baselines}, f, indent=2)
     results["baselines"] = baselines
@@ -238,6 +313,21 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
             n_samples=n_samples, calibration=calibration_params,
         )
         lead_time_out["calibrated"] = lead_time_report_calibrated.to_dict()
+    if ensemble_models is not None:
+        logger.info("computing pooled-ensemble lead-time report (%d members)", len(ensemble_models))
+        ensemble_lead_time_report = compute_lead_time_report(
+            full_eval_arrays, eval_split_df, ensemble_models, scaler,
+            threshold=cfg["eval"]["risk_threshold"], m=cfg["eval"]["lead_time_persistence_windows"],
+            n_samples=n_samples,
+        )
+        lead_time_out["ensemble"] = ensemble_lead_time_report.to_dict()
+        if calibration_params is not None:
+            ensemble_lead_time_report_calibrated = compute_lead_time_report(
+                full_eval_arrays, eval_split_df, ensemble_models, scaler,
+                threshold=cfg["eval"]["risk_threshold"], m=cfg["eval"]["lead_time_persistence_windows"],
+                n_samples=n_samples, calibration=calibration_params,
+            )
+            lead_time_out["ensemble_calibrated"] = ensemble_lead_time_report_calibrated.to_dict()
     with open(metrics_dir / "lead_time.json", "w") as f:
         json.dump(lead_time_out, f, indent=2)
     results["lead_time"] = lead_time_out
@@ -254,6 +344,12 @@ def main():
     parser.add_argument("--max-eval-samples", type=int, default=5000,
                          help="cap on baseline/ablation/calibration sample count (rollout cost scales with this); "
                               "lead time always uses the full split. Pass 0 to disable capping.")
+    parser.add_argument("--use-ensemble", action="store_true",
+                         help="also compute ensemble_*-prefixed baselines and an 'ensemble'/'ensemble_calibrated' "
+                              "lead-time section using the real pooled-ensemble statistic (loads every seed in "
+                              "cfg['ensemble']['seeds'], multiplying rollout cost by the ensemble size) — this is "
+                              "the statistic NidraPredictor actually serves, not the single-seed approximation "
+                              "the rest of this script's baselines use.")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -261,7 +357,9 @@ def main():
 
     cfg = load_config(args.config)
     max_eval_samples = None if args.max_eval_samples == 0 else args.max_eval_samples
-    results = run(cfg, args.seed, args.split, args.n_samples, max_eval_samples=max_eval_samples)
+    ensemble_seeds = cfg["ensemble"]["seeds"] if args.use_ensemble else None
+    results = run(cfg, args.seed, args.split, args.n_samples, max_eval_samples=max_eval_samples,
+                  ensemble_seeds=ensemble_seeds)
     print(json.dumps({k: v for k, v in results.items() if k not in ("baselines", "ablations", "calibration", "lead_time")}, indent=2))
     if "baselines" in results:
         # Not every entry is a per-model metrics dict — "calibration_fit_metadata"

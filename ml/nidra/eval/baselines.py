@@ -77,6 +77,41 @@ def baseline_oracle(Y_true: np.ndarray, model: WorldModel) -> tuple[np.ndarray, 
 
 
 @torch.no_grad()
+def ensemble_baseline_persistence(X_last: np.ndarray, models: list[WorldModel]) -> np.ndarray:
+    """Ensemble-pooled version of `baseline_persistence`: averages each
+    member's own frozen-head score on the same S_t, mirroring how
+    `ensemble_world_model_forecast` averages head outputs across members —
+    so an "ensemble world model vs. ensemble persistence" comparison isolates
+    the transition model's contribution the same way the single-seed
+    comparison does, just at the statistic `NidraPredictor` actually serves."""
+    x = torch.from_numpy(X_last).float()
+    risks = []
+    for model in models:
+        model.eval()
+        r, _ = model.score_states(x)
+        risks.append(r)
+    return torch.stack(risks, dim=0).mean(dim=0).numpy()
+
+
+@torch.no_grad()
+def ensemble_baseline_oracle(Y_true: np.ndarray, models: list[WorldModel]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Ensemble-pooled version of `baseline_oracle`: averages each member's
+    own frozen-head score on the true future state. Same contract as
+    `baseline_oracle` otherwise."""
+    y = torch.from_numpy(Y_true).float()
+    risks, stages = [], []
+    for model in models:
+        model.eval()
+        r, s = model.score_states(y)
+        risks.append(r)
+        stages.append(s)
+    risk_k = torch.stack(risks, dim=0).mean(dim=0)
+    stage_k = torch.stack(stages, dim=0).mean(dim=0)
+    risk_over_horizon = risk_k.max(dim=1).values.numpy()
+    return risk_over_horizon, risk_k.numpy(), stage_k.numpy()
+
+
+@torch.no_grad()
 def world_model_forecast(X: np.ndarray, model: WorldModel, K: int, n_samples: int = 200,
                           stochastic: bool = True, calibration: list[dict] | None = None) -> dict:
     """The system under test: recursive rollout -> frozen heads -> quantiles

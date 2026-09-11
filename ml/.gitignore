@@ -7,6 +7,7 @@ artifacts_mvp_2017/weights/*.pt
 artifacts_mvp_2017/scaler/*.joblib
 artifacts_mvp_2017/scaler/*.npy
 artifacts_mvp_2017/processed/
+artifacts_logvar15/weights/*.pt
 *.parquet
 __pycache__/
 *.pyc
