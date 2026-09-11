@@ -72,16 +72,46 @@ If you already ran the MVP config successfully, this is all in place — the
 full config uses the *exact same* `dataset:` section, so nothing about the
 raw data needs to change.
 
-### 1.3 Disk space and memory
+### 1.3 Disk space and memory — read this one carefully, it changes the command you'll actually run
 
 - The cached, pre-processed data tables (`artifacts/processed/`) are
   already built if you've run anything before — expect a few hundred MB
   there.
 - Each trained model checkpoint is small (a few MB) — 5 seeds is nothing to
   worry about, disk-wise.
-- Memory: building the full uncapped training tensors briefly uses several
-  GB of RAM. If your machine has 8GB or less, close other memory-heavy
-  applications before starting.
+- **Memory — corrected from an earlier version of this guide, which badly
+  underestimated this.** The full training split has ~6.9 million candidate
+  samples. Each one is a `[30 context windows, 45 features]` block of
+  32-bit numbers — about 5.4 KB — plus a smaller future-window block.
+  Multiply that out: **holding all 6.9M of them in memory at once takes on
+  the order of 35+ GB**, before your operating system, Python, or PyTorch
+  have used a single byte for anything else. A 16GB (or even 32GB) laptop
+  will have its training process killed by the operating system if you try
+  to build that many samples at once — this is exactly what "the process
+  got killed with no error message" looks like, and it's not a crash in the
+  usual sense, it's the OS protecting itself from running out of memory.
+  (An earlier version of this document said "several GB" for this step —
+  that was measured wrong; the real number is an order of magnitude
+  higher, and the fix below exists because of that.)
+- **The fix**: `--max-train-samples` / `--max-val-samples` cap how many of
+  those 6.9M candidates are actually turned into training data, and the
+  code was changed (this session) to apply that cap *before* building the
+  expensive `[30,45]` blocks, not after — so a capped run's peak memory is
+  proportional to the cap you choose, not to the full 6.9M. **A cap does
+  not mean "all your real data is thrown away"**: the selection keeps every
+  single positive (attack-adjacent) sample and only subsamples the
+  overwhelmingly larger benign majority — see `nidra/data/dataset.py`'s
+  `build_windowed_arrays` docstring.
+- **Recommended, measured-safe command for a 16GB machine**:
+  `--max-train-samples 500000 --max-val-samples 50000`. This was actually
+  run (not just estimated) against the real dataset on a 16GB Apple M1: it
+  used about **8.7GB of RAM** and took about **166 seconds per Stage-1
+  epoch** on that machine. That's roughly 12x more training data than the
+  MVP config's default cap, while staying safely inside a 16GB budget. If
+  your machine has more RAM, you can raise these numbers proportionally
+  (memory scales roughly linearly with the cap); if you have 64GB+ of RAM
+  available, you can omit both flags entirely for the literal, fully
+  uncapped run the config was originally designed for.
 
 ---
 
@@ -134,19 +164,39 @@ against a broken pipeline.
 
 Open `config/default.yaml` and compare it to `config/mvp_2017.yaml`. The
 `dataset:`, `windowing:`, `splits:`, and `model:` sections are identical —
-only `train_dynamics.epochs` (60 vs 20), `train_heads.epochs` (30 vs 20),
-and the fact that no `--max-train-samples`/`--max-val-samples` flags are
-passed (meaning "use everything") actually differ in practice.
+only `train_dynamics.epochs` (60 vs 20) and `train_heads.epochs` (30 vs 20)
+differ in the file itself. The sample-count cap (see §1.3 above) is passed
+as a command-line flag, not written into either config file, so you choose
+it per-run based on your machine's RAM.
 
 ### Step 3 — A one-epoch timing probe (do this first, always)
 
-**Do not skip this.** This runs exactly one epoch of Stage 1 training
-against the real, full-scale data, so you can measure how long one epoch
-actually takes on your specific machine before committing to all 60:
+**Do not skip this, and do not omit `--max-train-samples`/`--max-val-samples`
+unless you have confirmed (§1.3) your machine has enough RAM to hold the
+full uncapped ~6.9M-sample tensor (~35+ GB).** This runs exactly one epoch
+of Stage 1 training against the real, full-scale data, so you can measure
+how long one epoch actually takes — and confirm your machine doesn't run
+out of memory — before committing to all 60:
 
 ```bash
-python -m nidra.train.train_dynamics --config config/default.yaml --epochs 1 --seed 0
+python -m nidra.train.train_dynamics --config config/default.yaml --epochs 1 --seed 0 \
+    --max-train-samples 500000 --max-val-samples 50000
 ```
+
+(Drop both flags only if you have 64GB+ of RAM and want the literal
+uncapped run — see §1.3.)
+
+**Bonus**: this probe's scaler fit is not wasted — Step 4 below reuses it
+automatically (the scaler is cached to `artifacts/scaler/robust_scaler.joblib`
+and loaded rather than refit on every subsequent run) **as long as you pass
+the exact same `--max-train-samples`/`--max-val-samples` values in both
+steps**, which is what the commands below do. **If you change the cap
+between the probe and the real run** (or between the probe and a different
+config), delete `artifacts/scaler/robust_scaler.joblib` and
+`artifacts/scaler/scaler_metadata.json` first — the code checks only
+whether those files exist, not what data they were fit on, so a mismatched
+cap would silently reuse a scaler fit on differently-sized data instead of
+refitting.
 
 Watch the terminal output. You'll see log lines like:
 
@@ -163,6 +213,12 @@ time for all of Stage 1. Stage 2 (the heads) is much cheaper — it trains a
 tiny classifier on top of an already-fixed representation, typically a
 small fraction of Stage 1's time per epoch — so you can budget roughly an
 extra 10-20% of the Stage 1 estimate for Stage 2 across all 5 seeds.
+
+For reference, one real measurement at the recommended
+`--max-train-samples 500000 --max-val-samples 50000` cap on a 16GB Apple
+M1 (CPU only, no GPU): **~166 seconds per Stage-1 epoch**, which projects
+to `166s × 60 × 5 ≈ 13.8 hours` for Stage 1 alone. Your machine will give a
+different number — this is why the probe exists, not a promise.
 
 If that total is longer than you're willing to wait (say, more than a
 comfortable overnight run), you have three honest options, in order of
@@ -183,13 +239,24 @@ take a long time — start it, then leave your computer alone (don't let it
 sleep — check your OS's power settings) until it's done:
 
 ```bash
-for seed in 0 1 2 3 4; do
-  python -m nidra.train.train_dynamics --config config/default.yaml --seed $seed
-  python -m nidra.train.train_heads    --config config/default.yaml --seed $seed
-done
+python -m nidra.train.train_dynamics --config config/default.yaml \
+    --max-train-samples 500000 --max-val-samples 50000
+python -m nidra.train.train_heads    --config config/default.yaml \
+    --max-train-samples 500000 --max-val-samples 50000
 ```
 
-Note there's no `--epochs` flag here — omitting it means "use whatever
+Note there's no `--seed` flag here — **omitting `--seed` trains all 5
+ensemble seeds in one process run**, reusing the same windowed data and
+scaler across every seed (it fits/loads the scaler once, then loops over
+`config/default.yaml`'s `ensemble.seeds` internally). This is not just more
+convenient than looping over `--seed 0..4` yourself in a shell `for` loop —
+it's meaningfully faster, since building the capped ~500K-sample tensor
+from raw data is itself a non-trivial cost you'd otherwise pay 5 times
+instead of once. Only pass `--seed N` explicitly if you want to (re-)run
+one specific seed on its own (e.g. after Step 4's "if a seed crashes"
+note below).
+
+There's also no `--epochs` flag — omitting it means "use whatever
 `config/default.yaml` says" (60 for dynamics, 30 for heads), which is what
 you want for the real run (the `--epochs 1` from Step 3 was only for the
 timing probe).
@@ -201,9 +268,13 @@ timing probe).
   automatically stop early for that seed (this is normal, expected
   behavior — it's called "early stopping" and it's there to prevent
   wasting time once a model has stopped genuinely improving).
-- If a seed crashes partway through, you can just re-run that one seed's
-  two commands again — earlier completed seeds are unaffected, since each
-  seed saves its own separate checkpoint file.
+- If a seed crashes partway through, re-run just that seed with `--seed N
+  --max-train-samples 500000 --max-val-samples 50000` (same caps as the
+  original run) for both `train_dynamics` and `train_heads` — earlier
+  completed seeds are unaffected, since each seed saves its own separate
+  checkpoint file, and the scaler (already fit and saved to disk from the
+  first run) is loaded rather than refit, so re-running one seed doesn't
+  change the scaler the other seeds are already using.
 
 ### Step 5 — Fit calibration on the newly-trained ensemble
 
@@ -293,14 +364,19 @@ Run 1 was kept when Run 2 superseded it.
 cd ml
 pytest tests/ -q
 
-# Timing probe — ALWAYS do this first
-python -m nidra.train.train_dynamics --config config/default.yaml --epochs 1 --seed 0
+# Timing probe — ALWAYS do this first. --max-train-samples/--max-val-samples
+# keep peak RAM around ~8.7GB (measured); the full uncapped split needs
+# ~35+ GB and will get your process killed on anything under that. Drop
+# both flags only if your machine actually has that much RAM (see §1.3).
+python -m nidra.train.train_dynamics --config config/default.yaml --epochs 1 --seed 0 \
+    --max-train-samples 500000 --max-val-samples 50000
 
-# Full training — will take hours
-for seed in 0 1 2 3 4; do
-  python -m nidra.train.train_dynamics --config config/default.yaml --seed $seed
-  python -m nidra.train.train_heads    --config config/default.yaml --seed $seed
-done
+# Full training — will take hours. No --seed: trains all 5 ensemble seeds
+# in one process, reusing one windowed-data build and one fitted scaler.
+python -m nidra.train.train_dynamics --config config/default.yaml \
+    --max-train-samples 500000 --max-val-samples 50000
+python -m nidra.train.train_heads    --config config/default.yaml \
+    --max-train-samples 500000 --max-val-samples 50000
 
 # Calibration + evaluation
 python -m nidra.scripts.fit_calibration --config config/default.yaml

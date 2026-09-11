@@ -18,12 +18,13 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from nidra.data.dataset import WorldModelDataset, subsample_stratified_by_risk
+from nidra.data.dataset import WorldModelDataset, build_windowed_arrays
 from nidra.data.normalize import FeatureScaler
+from nidra.data.schema import CONTEXT_LENGTH, HORIZON_LENGTH
 from nidra.explain.shap_runner import build_shap_background, save_background
 from nidra.models.world_model import WorldModel
 from nidra.train.losses import dynamics_loss, teacher_forcing_schedule
-from nidra.train.pipeline import build_all_splits, build_windowed_splits, fit_scaler, scale_arrays
+from nidra.train.pipeline import build_all_splits, fit_scaler, scale_arrays
 from nidra.utils.config import load_config, resolve_path
 from nidra.utils.seed import set_seed
 
@@ -39,10 +40,18 @@ def prepare_training_data(cfg: dict, max_train_samples: int | None, max_val_samp
 
     logger.info("building splits from raw data")
     splits = build_all_splits(cfg)
-    windowed = build_windowed_splits(splits)
-
-    windowed["train"] = subsample_stratified_by_risk(windowed["train"], max_train_samples, subsample_seed)
-    windowed["val"] = subsample_stratified_by_risk(windowed["val"], max_val_samples, subsample_seed)
+    # Windowize train/val only (test/holdout are never used by this
+    # function) and cap DURING construction, not after — building the full
+    # uncapped [N,L,F] float32 tensor first (N ~ 6.9M at full production
+    # scale) needs ~35GB before any cap is applied, which reliably OOM-kills
+    # a machine with well under that much RAM. See build_windowed_arrays's
+    # docstring for the two-pass design that avoids this.
+    windowed = {
+        "train": build_windowed_arrays(splits.train, L=CONTEXT_LENGTH, K=HORIZON_LENGTH,
+                                        max_samples=max_train_samples, seed=subsample_seed),
+        "val": build_windowed_arrays(splits.val, L=CONTEXT_LENGTH, K=HORIZON_LENGTH,
+                                      max_samples=max_val_samples, seed=subsample_seed),
+    }
 
     scaler_path = scaler_dir / "robust_scaler.joblib"
     meta_path = scaler_dir / "scaler_metadata.json"

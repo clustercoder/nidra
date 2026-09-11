@@ -57,11 +57,25 @@ def build_windowed_arrays(
     labelled_state_table: pd.DataFrame,
     L: int = CONTEXT_LENGTH,
     K: int = HORIZON_LENGTH,
+    max_samples: int | None = None,
+    seed: int = 0,
 ) -> WindowedArrays:
     """labelled_state_table: output of labels.attach_risk_label, sorted or
     not — this function sorts by (host_id, window_ts) itself. Each host's
     sequence is contiguous (gap-filled upstream in windowize.py), so any
-    index i with i >= L-1 and i <= n-1-K is a valid sample origin."""
+    index i with i >= L-1 and i <= n-1-K is a valid sample origin.
+
+    `max_samples`: if given and the candidate count exceeds it, applies the
+    same stratified-by-risk selection as `subsample_stratified_by_risk`
+    (keep every positive-risk origin, fill the remainder from negatives) —
+    but BEFORE building any [L,F]/[K,F] slice, not after. This matters at
+    full production scale: a real training split can have ~7M candidate
+    origins, and materializing all of them as float32 [L=30,F=45] arrays
+    first (~35GB) before discarding most of them is what OOM-kills a
+    16GB-RAM machine, even when the caller only wanted a bounded sample of
+    them. Cheap per-row scalars (host, t, risk_label) are enumerated for
+    every candidate first; only the selected subset's history/future
+    windows are ever sliced out of the per-host feature arrays."""
     feature_cols = FEATURE_ORDER
     if labelled_state_table.empty:
         return WindowedArrays(
@@ -77,9 +91,12 @@ def build_windowed_arrays(
     df = labelled_state_table.sort_values(["host_id", "window_ts"]).reset_index(drop=True)
     episode_lookup = _episode_lookup(df)
 
-    X_list, Y_list, future_stage_list, future_attack_list = [], [], [], []
-    host_list, origin_ts_list, episode_id_list, stage_list, risk_list = [], [], [], [], []
-
+    # Pass 1: enumerate every valid sample origin as cheap scalars only — no
+    # [L,F] slicing yet. Per-host columnar arrays are kept (O(total rows x
+    # F), not O(candidates x L x F)) so pass 2 can slice only what survives
+    # selection.
+    per_host_arrays: dict = {}
+    candidates: list[tuple] = []  # (host, t, risk_label)
     for host, g in df.groupby("host_id", sort=False):
         g = g.reset_index(drop=True)
         # Extract every per-row field as a numpy array ONCE per host, outside
@@ -93,18 +110,40 @@ def build_windowed_arrays(
         window_ts_arr = g["window_ts"].to_numpy(dtype="int64")
         stage_label_arr = g["stage_label"].to_numpy()
         risk_label_arr = g["risk_label"].to_numpy(dtype="int64")
+        per_host_arrays[host] = (feats, stage_idx, is_attack, window_ts_arr, stage_label_arr, risk_label_arr)
         n = len(g)
         for t in range(L - 1, n - K):
-            X_list.append(feats[t - L + 1 : t + 1])
-            Y_list.append(feats[t + 1 : t + 1 + K])
-            future_stage_list.append(stage_idx[t + 1 : t + 1 + K])
-            future_attack_list.append(is_attack[t + 1 : t + 1 + K])
-            host_list.append(host)
-            origin_ts = int(window_ts_arr[t])
-            origin_ts_list.append(origin_ts)
-            episode_id_list.append(_episode_id_at(episode_lookup, host, origin_ts))
-            stage_list.append(stage_label_arr[t])
-            risk_list.append(int(risk_label_arr[t]))
+            candidates.append((host, t, int(risk_label_arr[t])))
+
+    if max_samples is not None and len(candidates) > max_samples:
+        risk_arr = np.array([c[2] for c in candidates])
+        rng = np.random.default_rng(seed)
+        pos_idx = np.where(risk_arr == 1)[0]
+        neg_idx = np.where(risk_arr == 0)[0]
+        if len(pos_idx) >= max_samples:
+            keep = rng.choice(pos_idx, size=max_samples, replace=False)
+        else:
+            n_neg = max_samples - len(pos_idx)
+            neg_sample = rng.choice(neg_idx, size=min(n_neg, len(neg_idx)), replace=False)
+            keep = np.concatenate([pos_idx, neg_sample])
+        rng.shuffle(keep)
+        candidates = [candidates[i] for i in keep]
+
+    # Pass 2: materialize only the selected candidates' [L,F]/[K,F] slices.
+    X_list, Y_list, future_stage_list, future_attack_list = [], [], [], []
+    host_list, origin_ts_list, episode_id_list, stage_list, risk_list = [], [], [], [], []
+    for host, t, _ in candidates:
+        feats, stage_idx, is_attack, window_ts_arr, stage_label_arr, risk_label_arr = per_host_arrays[host]
+        X_list.append(feats[t - L + 1 : t + 1])
+        Y_list.append(feats[t + 1 : t + 1 + K])
+        future_stage_list.append(stage_idx[t + 1 : t + 1 + K])
+        future_attack_list.append(is_attack[t + 1 : t + 1 + K])
+        host_list.append(host)
+        origin_ts = int(window_ts_arr[t])
+        origin_ts_list.append(origin_ts)
+        episode_id_list.append(_episode_id_at(episode_lookup, host, origin_ts))
+        stage_list.append(stage_label_arr[t])
+        risk_list.append(int(risk_label_arr[t]))
 
     if not X_list:
         return WindowedArrays(
