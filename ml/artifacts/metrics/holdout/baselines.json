@@ -36,15 +36,15 @@
       "fn": 135
     },
     "world_model": {
-      "f1": 0.1782178217821782,
-      "precision": 0.9310344827586207,
-      "recall": 0.09854014598540146,
-      "auc_pr": 0.6788573661932003,
+      "f1": 0.19607843137254902,
+      "precision": 0.9375,
+      "recall": 0.10948905109489052,
+      "auc_pr": 0.6996084079609162,
       "fpr": 0.0005367686527106817,
-      "tp": 27,
+      "tp": 30,
       "fp": 2,
       "tn": 3724,
-      "fn": 247
+      "fn": 244
     },
     "oracle": {
       "f1": 0.7754318618042226,
@@ -58,15 +58,15 @@
       "fn": 72
     },
     "world_model_calibrated": {
-      "f1": 0.43380281690140843,
-      "precision": 0.9506172839506173,
-      "recall": 0.28102189781021897,
-      "auc_pr": 0.6831519870666238,
-      "fpr": 0.0010735373054213634,
-      "tp": 77,
-      "fp": 4,
-      "tn": 3722,
-      "fn": 197
+      "f1": 0.4045584045584046,
+      "precision": 0.922077922077922,
+      "recall": 0.2591240875912409,
+      "auc_pr": 0.6968014000243622,
+      "fpr": 0.001610305958132045,
+      "tp": 71,
+      "fp": 6,
+      "tn": 3720,
+      "fn": 203
     },
     "calibration_fit_metadata": {
       "fit_split": "val",
@@ -85,6 +85,50 @@
       "note": "Fit on the validation split only, using the same pooled-ensemble rollout statistic (`ensemble_world_model_forecast`) that NidraPredictor serves at inference time. Does not retrain or modify the frozen risk head in any way \u2014 see eval/calibrate.py.",
       "applied_to_single_seed_approximation": true,
       "applied_to_seed": 0
+    },
+    "ensemble_persistence": {
+      "f1": 0.6095238095238096,
+      "precision": 0.8767123287671232,
+      "recall": 0.46715328467153283,
+      "auc_pr": 0.5936396438378433,
+      "fpr": 0.004830917874396135,
+      "tp": 128,
+      "fp": 18,
+      "tn": 3708,
+      "fn": 146
+    },
+    "ensemble_oracle": {
+      "f1": 0.6124763705103969,
+      "precision": 0.6352941176470588,
+      "recall": 0.5912408759124088,
+      "auc_pr": 0.7625403753782246,
+      "fpr": 0.0249597423510467,
+      "tp": 162,
+      "fp": 93,
+      "tn": 3633,
+      "fn": 112
+    },
+    "ensemble_world_model": {
+      "f1": 0.014492753623188406,
+      "precision": 1.0,
+      "recall": 0.0072992700729927005,
+      "auc_pr": 0.7286430386046717,
+      "fpr": 0.0,
+      "tp": 2,
+      "fp": 0,
+      "tn": 3726,
+      "fn": 272
+    },
+    "ensemble_world_model_calibrated": {
+      "f1": 0.1414141414141414,
+      "precision": 0.9130434782608695,
+      "recall": 0.07664233576642336,
+      "auc_pr": 0.7236438529383092,
+      "fpr": 0.0005367686527106817,
+      "tp": 21,
+      "fp": 2,
+      "tn": 3724,
+      "fn": 253
     }
   }
 }

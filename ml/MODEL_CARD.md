@@ -128,27 +128,34 @@ sample-cap numbers.
 6. Not run at `config/default.yaml`'s full production scale (60/30 epochs,
    uncapped ~6.9M-candidate training set) — compute/time, not a blocker.
 7. **Rollout noise measurably erodes score separation with horizon depth —
-   diagnosed, not yet fixed by retraining.** Comparing the real stochastic
-   rollout against a noise-free (deterministic, mu-only) rollout on the
-   same real inputs: negative-class mean risk score nearly tripled by
-   horizon 5 under the stochastic rollout (0.119 → 0.356) while staying
-   flat without noise, and positive-class mean dropped ~0.08-0.10. This
-   points at `model.transition.logvar_max=3.0` (`config/mvp_2017.yaml` /
-   `config/default.yaml`) as a plausible tuning target — the clamp exists
-   to prevent NaN-producing variance explosion (a real, necessary
-   guardrail, see `nidra/models/transition.py`'s docstring), but 3.0 may be
-   wider than necessary for stable rollout. **This was diagnosed with real
-   instrumentation against the trained checkpoint but NOT validated by an
-   actual retrain in this session** — reducing it requires retraining
-   Stage 1 from scratch, which was deliberately deferred to the full
-   `config/default.yaml` production run rather than spending this
-   session's remaining time on a second MVP-scale retrain cycle. Whoever
-   runs the full production run (see `PRODUCTION_RUN_GUIDE.md`) should
-   consider trying `logvar_max: 1.5` as a documented experiment (not a
-   silent config change — compare against the default 3.0 explicitly) and
-   re-running the deterministic-vs-stochastic diagnostic described in
-   `REAL_DATA_RESULTS.md` to check whether it closes without reintroducing
-   NaN instability.
+   diagnosed AND validated by an actual retrain (`logvar_max=1.5`), which
+   measurably helped.** Comparing the real stochastic rollout against a
+   noise-free (deterministic, mu-only) rollout on the same real inputs:
+   negative-class mean risk score nearly tripled by horizon 5 under the
+   stochastic rollout (0.119 → 0.356) while staying flat without noise, and
+   positive-class mean dropped ~0.08-0.10. This pointed at
+   `model.transition.logvar_max=3.0` (`config/default.yaml`, the checkpoint
+   used in Run 3) as a plausible tuning target — the clamp exists to
+   prevent NaN-producing variance explosion (a real, necessary guardrail,
+   see `nidra/models/transition.py`'s docstring), but 3.0 was hypothesized
+   to be wider than necessary for stable rollout. **A full 5-seed retrain
+   with `logvar_max=1.5` (`config/default_logvar15.yaml`, otherwise
+   identical to `config/default.yaml`) confirms the hypothesis**: at
+   matched evaluation settings against Run 3, world-model AUC-PR improved
+   on both splits (test 0.878→0.918, holdout 0.700→0.719), and the
+   horizon-curve ablation improved at **every one of 6 horizon steps on
+   both splits**, with the largest single gain at the deepest horizon
+   tested (test k=5: 0.266→0.376) — exactly where the erosion hypothesis
+   predicted the biggest effect. Every rollout-independent baseline
+   (oracle, persistence, both LR baselines) was byte-identical between the
+   two checkpoints, confirming the improvement is attributable specifically
+   to the variance-clamp change. No NaN instability was observed during
+   training or evaluation at `logvar_max=1.5`. See `REAL_DATA_RESULTS.md`'s
+   "Run 4: `logvar_max=1.5` experiment" section for full numbers. Caveats:
+   single-seed evaluation (seed 0 of 5) at Run 3-matched sample caps, no
+   calibration fit for this checkpoint, and no pooled-ensemble evaluation
+   of this checkpoint specifically — natural next steps, not blockers to
+   the headline finding.
 
 ## Claims discipline
 

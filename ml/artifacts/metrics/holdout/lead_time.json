@@ -9,12 +9,26 @@
     "fraction_no_warning": 1.0
   },
   "calibrated": {
-    "median_lead_time_s": 18600.0,
+    "median_lead_time_s": 18660.0,
     "lead_time_distribution_s": [
-      18600.0
+      18660.0
     ],
     "n_episodes": 2,
     "n_no_warning": 1,
     "fraction_no_warning": 0.5
+  },
+  "ensemble": {
+    "median_lead_time_s": null,
+    "lead_time_distribution_s": [],
+    "n_episodes": 2,
+    "n_no_warning": 2,
+    "fraction_no_warning": 1.0
+  },
+  "ensemble_calibrated": {
+    "median_lead_time_s": null,
+    "lead_time_distribution_s": [],
+    "n_episodes": 2,
+    "n_no_warning": 2,
+    "fraction_no_warning": 1.0
   }
 }

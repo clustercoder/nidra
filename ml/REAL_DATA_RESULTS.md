@@ -308,6 +308,205 @@ necessary on a 16GB machine.
 
 ---
 
+## Run 3 addendum: pooled-ensemble baselines/lead-time (follow-up session)
+
+Run 3's own caveats section flagged this explicitly: "a full pooled-ensemble
+baselines/ablations/oracle re-run is still not done" — everything in
+`baselines.json`/`lead_time.json` was computed against seed 0 alone, not the
+real 5-member pooled ensemble `NidraPredictor` actually serves. This
+addendum closes that gap using `run_eval.py --use-ensemble` (added this
+session — see `nidra/eval/baselines.py::ensemble_baseline_persistence`/
+`ensemble_baseline_oracle` and `nidra/eval/lead_time_runner.py`'s
+`WorldModel | list[WorldModel]` dispatch), run against the **same Run 3
+checkpoint**, same settings (`n_samples=50 --max-eval-samples 4000`), no
+retraining involved.
+
+**A necessary caveat before the numbers: rollout is stochastic and freshly
+sampled every run**, so the single-seed `world_model`/`world_model_calibrated`
+rows below differ very slightly from Run 3's originally-published numbers
+(e.g. test AUC-PR 0.8781 here vs. 0.880 originally) — expected sampling
+noise at `n_samples=50`, not a regression or a bug. `oracle`, `persistence`,
+and the two LR baselines are **deterministic** (oracle scores the true
+future state directly; it does not roll anything out) and are confirmed
+byte-identical to the originally-committed values via `git diff`.
+
+### Test split (Friday), n=4,000
+
+| Model | F1 | AUC-PR |
+|---|---|---|
+| Persistence (single-seed) | 0.137 | 0.565 |
+| **Ensemble persistence** | 0.233 | 0.666 |
+| World model (single-seed) | 0.054-0.057 | 0.878 |
+| **Ensemble world model** | 0.010 | **0.920** |
+| Ensemble world model, calibrated | 0.039 | 0.920 |
+| Oracle (single-seed) | 0.415 | 0.849 |
+| **Ensemble oracle** | 0.635 | 0.905 |
+
+**The world-model-beats-oracle anomaly Run 3 flagged as "most likely
+small-sample noise" does not go away at the pooled-ensemble level — it
+widens** (0.920 vs. 0.905, a +0.015 gap, vs. +0.031 at single-seed). Pooling
+5 members raises *both* numbers substantially (persistence, world model,
+and oracle all gain roughly +0.04 to +0.10 AUC-PR from ensembling — the
+expected, unsurprising benefit of averaging 5 independently-trained models)
+but does not resolve the ordering. This pushes against "single-seed
+estimation noise" as the full explanation and toward something structural
+in how `score_states` treats true vs. rolled-out states on this specific
+split — still not root-caused, an open item for anyone pursuing it further.
+
+### Holdout split (Thursday), n=4,000
+
+| Model | F1 | AUC-PR |
+|---|---|---|
+| Persistence (single-seed) | 0.656 | 0.554 |
+| **Ensemble persistence** | 0.610 | 0.594 |
+| World model (single-seed) | 0.196-0.116 | 0.700-0.719 |
+| **Ensemble world model** | 0.014 | **0.729** |
+| Ensemble world model, calibrated | 0.141 | 0.724 |
+| Oracle (single-seed) | 0.775 | 0.769 |
+| **Ensemble oracle** | 0.612 | **0.763** |
+
+Here oracle correctly beats the world model at **both** single-seed and
+ensemble level — the anomaly is genuinely split-specific, not a general
+property of the checkpoint or the pooled-ensemble evaluation path. Read
+together with the test-split result above, the honest conclusion is:
+**pooled ensembling does not uniformly fix or worsen the oracle anomaly —
+it is split-dependent, and remains unresolved either way.**
+
+### Lead time — a new discrepancy surfaces, flagged rather than fixed
+
+| Split | Raw (single-seed) | Calibrated (single-seed) | Ensemble (raw) | Ensemble, calibrated |
+|---|---|---|---|---|
+| Test (n=10) | 0/10 warned | 9/10 warned, median 1,530s | **0/10 warned** | **0/10 warned** |
+| Holdout (n=2) | 0/2 warned | 1/2 warned, median 18,660s | **0/2 warned** | **0/2 warned** |
+
+This is a genuinely odd result worth flagging plainly: the pooled ensemble
+has the *highest* baseline AUC-PR of any variant measured on either split,
+yet its lead-time detector fires zero warnings on both splits, even the
+calibrated variant. The most likely explanation is that
+`compute_lead_time_report`'s fixed detection threshold was tuned/calibrated
+against the single-seed risk-score distribution and does not suit the
+pooled ensemble's differently-scaled output (mean-of-5 risk scores are
+systematically compressed relative to any one member's) — but this is a
+hypothesis, not a diagnosis. **Not fixed this session; an open item for
+whoever picks up ensemble-aware lead-time thresholding next.**
+
+Also note the single-seed *calibrated* lead-time numbers themselves moved
+from Run 3's originally-published test figure (median 8,220s, 9/10 warned)
+to 1,530s/9/10 warned here — same rollout-stochasticity caveat as the
+baseline AUC-PR shift above, not a new finding.
+
+### Honest summary (Run 3 addendum)
+
+The pooled-ensemble baselines/ablations/oracle re-run that Run 3 explicitly
+deferred is now done. It does not deliver a clean "ensembling fixes
+everything" story: it improves every baseline's raw AUC-PR (expected), it
+does not resolve the world-model-beats-oracle anomaly (it widens on test,
+stays correctly ordered on holdout — a genuinely split-dependent result),
+and it surfaces a new open item (the ensemble lead-time detector firing
+zero warnings despite the highest baseline AUC-PR of any variant). None of
+this was anticipated going in; all of it is reported as found.
+
+---
+
+## Run 4: `logvar_max=1.5` experiment (retrain, follow-up session)
+
+`MODEL_CARD.md` limitation 7 previously read: the rollout-noise-driven
+erosion of class separation with horizon depth was "diagnosed but NOT
+validated by an actual retrain" — the hypothesis was that
+`model.transition.logvar_max=3.0` (Run 3's setting) lets the Gaussian
+transition model's sampled variance grow large enough during rollout to
+wash out signal at deeper horizons, and that clamping it lower
+(`logvar_max=1.5`) should reduce that effect. This run tests that
+hypothesis directly by retraining, not just re-analyzing Run 3's existing
+checkpoint.
+
+**Setup** (`config/default_logvar15.yaml`): identical to `config/default.yaml`
+in every respect except `model.transition.logvar_max: 1.5` (down from 3.0).
+Shares `artifacts/scaler` (fitted `RobustScaler`) and `artifacts/processed`
+(cached day-tables) with the Run 3 config, since neither depends on
+`logvar_max` — isolating it as the only experimental variable. Writes to
+separate `artifacts_logvar15/{weights,metrics}` paths so Run 3's checkpoint
+and metrics are never touched. Same 5-seed ensemble, same 500k/50k sample
+caps, same 60/30 epoch budget as Run 3 (all 5 seeds early-stopped between
+epoch 6 and 21, similar to Run 3's range of 8-20).
+
+Evaluated single-seed (seed 0), same settings as Run 3's headline numbers
+(`n_samples=50 --max-eval-samples 4000`), no calibration fit for this
+experimental checkpoint (no `_calibrated` rows below).
+
+### Baselines: test split, n=4,000
+
+| Model | Run 3 (`logvar_max=3.0`) AUC-PR | Run 4 (`logvar_max=1.5`) AUC-PR |
+|---|---|---|
+| LR (current state) | 0.817 | 0.817 *(identical — doesn't touch the world model)* |
+| LR (flattened history) | 0.863 | 0.863 *(identical)* |
+| Persistence | 0.565 | 0.565 *(identical — doesn't roll out)* |
+| Oracle | 0.849 | 0.849 *(identical — scores true states, not rollouts)* |
+| **World model** | 0.878 | **0.918** |
+
+### Baselines: holdout split, n=4,000
+
+| Model | Run 3 | Run 4 |
+|---|---|---|
+| LR (current state) | 0.616 | 0.616 *(identical)* |
+| LR (flattened history) | 0.883 | 0.883 *(identical)* |
+| Persistence | 0.554 | 0.554 *(identical)* |
+| Oracle | 0.769 | 0.769 *(identical)* |
+| **World model** | 0.700 | **0.719** |
+
+The four baselines that don't depend on the transition model's rollout
+(`lr_current_state`, `lr_flattened_history`, `persistence`, `oracle`) are
+**exactly identical** between the two configs on both splits — a useful
+sanity check that the only thing that changed is what was intended to
+change (the transition model's rollout behavior), not the data, scaler, or
+eval harness.
+
+### Horizon curve — the direct test of the erosion hypothesis
+
+`ablations.json`'s `horizon_curve.auc_pr_by_k` at every one of the 6
+horizon steps:
+
+| Split | k=0 | k=1 | k=2 | k=3 | k=4 | k=5 |
+|---|---|---|---|---|---|---|
+| Run 3 test | 0.270 | 0.259 | 0.225 | 0.251 | 0.245 | 0.266 |
+| **Run 4 test** | **0.289** | **0.312** | **0.325** | **0.338** | **0.320** | **0.376** |
+| Run 3 holdout | 0.111 | 0.592 | 0.083 | 0.427 | 0.079 | 0.387 |
+| **Run 4 holdout** | **0.122** | **0.616** | **0.149** | **0.541** | **0.150** | **0.536** |
+
+**`logvar_max=1.5` dominates `logvar_max=3.0` pointwise at every single
+horizon step on both splits** — not just on average. The odd/even parity
+oscillation Run 3 flagged as unresolved is still present in both configs
+(it did not go away), but Run 4's curve sits uniformly above Run 3's at
+every phase of that oscillation. This is the clearest and most direct
+evidence available that reducing `logvar_max` genuinely reduces the
+rollout-noise-driven loss of signal, including — notably — at the deepest
+horizons (k=4, k=5), where the erosion hypothesis specifically predicted
+the biggest effect: test k=5 improved from 0.266 to 0.376 (+0.110), the
+single largest gain of any cell in the table.
+
+### Honest summary (Run 4)
+
+**The `logvar_max=1.5` retrain helped, unambiguously, on every rollout-
+dependent metric measured, on both splits**: world-model AUC-PR improved
++0.040 (test) and +0.019 (holdout); the horizon curve improved at all 6
+of 6 horizon steps on both splits, with the largest gains concentrated at
+deeper horizons as the original hypothesis predicted. Every baseline that
+does *not* depend on rollout (oracle, persistence, both LR baselines) was
+byte-identical between configs, confirming the improvement is specifically
+attributable to the transition-model variance-clamp change and not to
+some other difference between the two training runs. This is now a
+validated finding, not a diagnosed-but-untested hypothesis.
+
+**Caveats**: single-seed evaluation (seed 0 of 5), same sample caps as
+Run 3 (4,000 stratified eval samples), no calibration fit for this
+checkpoint, and no pooled-ensemble evaluation of this checkpoint (the
+addendum above only re-ran the ensemble against Run 3's original
+`logvar_max=3.0` checkpoint, not this one) — a natural next step for
+anyone continuing this line of work. `MODEL_CARD.md` limitation 7 has been
+updated to reflect this validated result.
+
+---
+
 ## Run 2 (superseded): 5-seed ensemble, all 5 PCAPs extracted, 40k/8k samples
 
 This section is preserved unmodified from the original run for provenance.

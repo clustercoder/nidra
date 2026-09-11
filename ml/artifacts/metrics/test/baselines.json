@@ -36,15 +36,15 @@
       "fn": 1713
     },
     "world_model": {
-      "f1": 0.05365597054182009,
+      "f1": 0.05672268907563025,
       "precision": 1.0,
-      "recall": 0.027567567567567567,
-      "auc_pr": 0.8802672887247225,
+      "recall": 0.02918918918918919,
+      "auc_pr": 0.8780676812584773,
       "fpr": 0.0,
-      "tp": 51,
+      "tp": 54,
       "fp": 0,
       "tn": 2150,
-      "fn": 1799
+      "fn": 1796
     },
     "oracle": {
       "f1": 0.41507835662854725,
@@ -58,15 +58,15 @@
       "fn": 1360
     },
     "world_model_calibrated": {
-      "f1": 0.08152734778121776,
-      "precision": 0.8977272727272727,
-      "recall": 0.042702702702702704,
-      "auc_pr": 0.8751745575213937,
-      "fpr": 0.004186046511627907,
-      "tp": 79,
-      "fp": 9,
-      "tn": 2141,
-      "fn": 1771
+      "f1": 0.08367768595041322,
+      "precision": 0.9418604651162791,
+      "recall": 0.04378378378378378,
+      "auc_pr": 0.8763082839536823,
+      "fpr": 0.002325581395348837,
+      "tp": 81,
+      "fp": 5,
+      "tn": 2145,
+      "fn": 1769
     },
     "calibration_fit_metadata": {
       "fit_split": "val",
@@ -85,6 +85,50 @@
       "note": "Fit on the validation split only, using the same pooled-ensemble rollout statistic (`ensemble_world_model_forecast`) that NidraPredictor serves at inference time. Does not retrain or modify the frozen risk head in any way \u2014 see eval/calibrate.py.",
       "applied_to_single_seed_approximation": true,
       "applied_to_seed": 0
+    },
+    "ensemble_persistence": {
+      "f1": 0.2330004755111745,
+      "precision": 0.9683794466403162,
+      "recall": 0.13243243243243244,
+      "auc_pr": 0.6661666589631371,
+      "fpr": 0.0037209302325581397,
+      "tp": 245,
+      "fp": 8,
+      "tn": 2142,
+      "fn": 1605
+    },
+    "ensemble_oracle": {
+      "f1": 0.6348978860623432,
+      "precision": 0.9415515409139213,
+      "recall": 0.4789189189189189,
+      "auc_pr": 0.9045444287800343,
+      "fpr": 0.02558139534883721,
+      "tp": 886,
+      "fp": 55,
+      "tn": 2095,
+      "fn": 964
+    },
+    "ensemble_world_model": {
+      "f1": 0.009682625067240451,
+      "precision": 1.0,
+      "recall": 0.004864864864864865,
+      "auc_pr": 0.9199307688087676,
+      "fpr": 0.0,
+      "tp": 9,
+      "fp": 0,
+      "tn": 2150,
+      "fn": 1841
+    },
+    "ensemble_world_model_calibrated": {
+      "f1": 0.0392156862745098,
+      "precision": 1.0,
+      "recall": 0.02,
+      "auc_pr": 0.9201392054135177,
+      "fpr": 0.0,
+      "tp": 37,
+      "fp": 0,
+      "tn": 2150,
+      "fn": 1813
     }
   }
 }
