@@ -4,34 +4,34 @@
   "ablations": {
     "persistence": {
       "auc_pr_persistence": 0.6938115138281136,
-      "auc_pr_world_model": 0.7972727251109631,
-      "auc_collapse": 0.10346121128284957,
+      "auc_pr_world_model": 0.7980571820309105,
+      "auc_collapse": 0.1042456682027969,
       "nrmse_persistence_mean": 5.714239267625871,
-      "nrmse_world_model_mean": 6.520197439565032,
+      "nrmse_world_model_mean": 6.5322107146548,
       "interpretation": "world model beats persistence"
     },
     "time_shuffle": {
-      "auc_pr_normal_order": 0.8056878854366362,
-      "auc_pr_shuffled_order": 0.7984885379944431,
-      "collapse": 0.0071993474421930825,
+      "auc_pr_normal_order": 0.804352284673969,
+      "auc_pr_shuffled_order": 0.7998038470911261,
+      "collapse": 0.004548437582842957,
       "interpretation": "NO COLLAPSE under shuffling \u2014 the model may be using per-window features only, not real temporal structure; this is a reportable negative result, not a bug to hide"
     },
     "horizon_curve": {
       "auc_pr_by_k": [
-        0.5175048840990087,
-        0.17421648573535892,
-        0.5595739454942039,
-        0.1593007750925551,
-        0.49727959757180773,
-        0.16199841859103425
+        0.5324230205523668,
+        0.17212783065381704,
+        0.5478415616780268,
+        0.15671003781631299,
+        0.4926066297122817,
+        0.15518233933002512
       ],
       "nrmse_by_k": [
-        7.37831257728346,
-        4.598617219652503,
-        7.4611927617048766,
-        5.548465806566155,
-        7.772624132858859,
-        6.390038246170583
+        7.381786254342584,
+        4.6017032713775015,
+        7.457241573406266,
+        5.546571098643832,
+        7.7598172520286175,
+        6.399329442401542
       ],
       "flat_curve_leakage_warning": false
     },

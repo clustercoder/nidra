@@ -4,34 +4,34 @@
   "ablations": {
     "persistence": {
       "auc_pr_persistence": 0.6349234600530391,
-      "auc_pr_world_model": 0.597679862474244,
-      "auc_collapse": -0.03724359757879514,
+      "auc_pr_world_model": 0.6201891606341943,
+      "auc_collapse": -0.014734299418844854,
       "nrmse_persistence_mean": 2.393771147225213,
-      "nrmse_world_model_mean": 2.5294004686731073,
+      "nrmse_world_model_mean": 2.544163971425374,
       "interpretation": "NO MEANINGFUL GAP over persistence \u2014 dynamics may not be adding value; this is a reportable negative result, not a bug to hide"
     },
     "time_shuffle": {
-      "auc_pr_normal_order": 0.6283292918487766,
-      "auc_pr_shuffled_order": 0.5748038570269972,
-      "collapse": 0.053525434821779405,
+      "auc_pr_normal_order": 0.6114536828576339,
+      "auc_pr_shuffled_order": 0.5737612341330932,
+      "collapse": 0.037692448724540695,
       "interpretation": "temporal order matters (collapse observed)"
     },
     "horizon_curve": {
       "auc_pr_by_k": [
-        0.2415037615738282,
-        0.3687905335016725,
-        0.23846967004595532,
-        0.20568746281575567,
-        0.22663086736580249,
-        0.162192237933973
+        0.25255769490906943,
+        0.26461765374184293,
+        0.2478563438681748,
+        0.15700843526409694,
+        0.22388600843511897,
+        0.13286532173017881
       ],
       "nrmse_by_k": [
-        2.9998133598357373,
-        1.8085370065394282,
-        2.960658766168519,
-        2.0734148719982386,
-        3.00420982287814,
-        2.350435179012398
+        3.0060156980516504,
+        1.8010697295249043,
+        2.9603011421744565,
+        2.0700055595719946,
+        3.0223782996768382,
+        2.3616317417710166
       ],
       "flat_curve_leakage_warning": false
     },

@@ -36,15 +36,15 @@
       "fn": 105
     },
     "world_model": {
-      "f1": 0.3955431754874652,
-      "precision": 0.8352941176470589,
-      "recall": 0.2591240875912409,
-      "auc_pr": 0.6346136957043363,
-      "fpr": 0.003757380568974772,
-      "tp": 71,
-      "fp": 14,
-      "tn": 3712,
-      "fn": 203
+      "f1": 0.4022038567493113,
+      "precision": 0.8202247191011236,
+      "recall": 0.2664233576642336,
+      "auc_pr": 0.6008540061373028,
+      "fpr": 0.0042941492216854536,
+      "tp": 73,
+      "fp": 16,
+      "tn": 3710,
+      "fn": 201
     },
     "oracle": {
       "f1": 0.6287069988137604,
@@ -56,6 +56,35 @@
       "fp": 304,
       "tn": 3422,
       "fn": 9
+    },
+    "world_model_calibrated": {
+      "f1": 0.08783783783783784,
+      "precision": 0.5909090909090909,
+      "recall": 0.04744525547445255,
+      "auc_pr": 0.48780873905678707,
+      "fpr": 0.0024154589371980675,
+      "tp": 13,
+      "fp": 9,
+      "tn": 3717,
+      "fn": 261
+    },
+    "calibration_fit_metadata": {
+      "fit_split": "val",
+      "n_val_samples": 4000,
+      "n_ensemble_members": 5,
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "n_samples_per_member": 100,
+      "fitted_at": "2026-09-11T10:37:57Z",
+      "method": "platt_scaling_per_horizon",
+      "note": "Fit on the validation split only, using the same pooled-ensemble rollout statistic (`ensemble_world_model_forecast`) that NidraPredictor serves at inference time. Does not retrain or modify the frozen risk head in any way \u2014 see eval/calibrate.py.",
+      "applied_to_single_seed_approximation": true,
+      "applied_to_seed": 0
     }
   }
 }

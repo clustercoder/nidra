@@ -74,10 +74,39 @@ sample-cap numbers.
   fix — see `REAL_DATA_RESULTS.md`): test 6.52 (world model) vs. 5.71
   (persistence); holdout 2.53 vs. 2.39.
 
-## Known limitations (all unresolved as of this run)
+## Known limitations
 
-1. **Calibration at threshold=0.75** produces near-zero recall on the test
-   split despite good AUC-PR ranking (§ above). Most consequential open item.
+1. **Calibration at threshold=0.75 — root-caused this session; the
+   hypothesized fix was implemented, measured, and found NOT to help.**
+   (Full detail: `PROJECT_DEEP_DIVE.md` Part 10, `REAL_DATA_RESULTS.md`.)
+   Individual rollout-trajectory risk scores are near-binary, so the
+   reported mean probability behaves like "fraction of imagined futures
+   the head calls risky" — for true positives that fraction averaged only
+   ~45%, well under 0.75 even though ~98-100% of those windows had at
+   least one individual trajectory cross 0.75. A **post-hoc Platt-scaling
+   calibration** (`nidra/eval/calibrate.py`) was fit on the validation
+   split against this exact ensemble (5 horizons, `a` in 1.8–3.6, all
+   non-degenerate) and measured two ways: a single-seed spot-check (test
+   split, recall@0.75 dropped 0.043→0.010) and a direct check against the
+   real pooled-5-seed serving path (500 stratified test-split windows:
+   recall@0.75 dropped to **0.000 at every horizon**, from a raw baseline
+   of 0.124/0.036/0.017/0.000/0.005/0.000). **Calibration makes recall
+   worse, not better.** Root cause: an honestly (base-rate-respecting)
+   fit calibration correctly reports that even this model's highest raw
+   scores rarely reflect a genuine ≥75% true-positive rate on this
+   dataset — the reliability data show the top raw-score bins are already
+   mildly *overconfident* on small sample counts (13-20 samples), not
+   underconfident. A class-weighted refit would very likely "fix" the
+   number, but was deliberately not done — it would manufacture confidence
+   the underlying signal doesn't support, purely to clear a fixed
+   threshold, which is exactly the kind of threshold-gaming this project's
+   own rules prohibit. **Consequence**: `NidraPredictor` now takes an
+   `apply_calibration: bool = False` parameter — off by default — so a
+   real deployment is never silently handed the worse-recall behavior.
+   The code/tests/artifact are kept as correct, useful infrastructure and
+   as documented negative-result evidence, not as a shipped improvement.
+   The calibration gap itself remains open; see limitation 7 for the more
+   promising remaining lead.
 2. **Odd/even horizon-parity oscillation** in AUC-PR/Brier on the test
    split, present at 5x the data/full ensemble — not explained by
    undertraining.
@@ -90,6 +119,28 @@ sample-cap numbers.
    seeds (noisy, 8-19 range).
 6. Not run at `config/default.yaml`'s full production scale (60/30 epochs,
    uncapped ~6.9M-candidate training set) — compute/time, not a blocker.
+7. **Rollout noise measurably erodes score separation with horizon depth —
+   diagnosed, not yet fixed by retraining.** Comparing the real stochastic
+   rollout against a noise-free (deterministic, mu-only) rollout on the
+   same real inputs: negative-class mean risk score nearly tripled by
+   horizon 5 under the stochastic rollout (0.119 → 0.356) while staying
+   flat without noise, and positive-class mean dropped ~0.08-0.10. This
+   points at `model.transition.logvar_max=3.0` (`config/mvp_2017.yaml` /
+   `config/default.yaml`) as a plausible tuning target — the clamp exists
+   to prevent NaN-producing variance explosion (a real, necessary
+   guardrail, see `nidra/models/transition.py`'s docstring), but 3.0 may be
+   wider than necessary for stable rollout. **This was diagnosed with real
+   instrumentation against the trained checkpoint but NOT validated by an
+   actual retrain in this session** — reducing it requires retraining
+   Stage 1 from scratch, which was deliberately deferred to the full
+   `config/default.yaml` production run rather than spending this
+   session's remaining time on a second MVP-scale retrain cycle. Whoever
+   runs the full production run (see `PRODUCTION_RUN_GUIDE.md`) should
+   consider trying `logvar_max: 1.5` as a documented experiment (not a
+   silent config change — compare against the default 3.0 explicitly) and
+   re-running the deterministic-vs-stochastic diagnostic described in
+   `REAL_DATA_RESULTS.md` to check whether it closes without reintroducing
+   NaN instability.
 
 ## Claims discipline
 

@@ -27,6 +27,7 @@ from nidra.eval.baselines import (
     baseline_persistence,
     world_model_forecast,
 )
+from nidra.eval.calibrate import apply_platt_by_horizon, load_calibration
 from nidra.eval.calibration import calibration_by_horizon
 from nidra.eval.lead_time_runner import compute_lead_time_report
 from nidra.eval.metrics import standard_metrics
@@ -69,6 +70,19 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
     model = _build_model(cfg)
     model.load_state_dict(torch.load(weights_dir / f"model_seed_{seed}.pt", map_location="cpu"))
     model.eval()
+
+    # Optional post-hoc calibration (nidra.scripts.fit_calibration), fit on
+    # the validation split, applied here to a "world_model_calibrated"
+    # variant alongside the raw/uncalibrated numbers — never silently
+    # replacing them, since it's an honest before/after comparison, not a
+    # correction. Absent file => every "_calibrated" section below is
+    # simply omitted, not an error (a model can be fully evaluated without
+    # ever running fit_calibration).
+    calibration_loaded = load_calibration(weights_dir / "risk_calibration.json")
+    calibration_params = calibration_loaded[0] if calibration_loaded else None
+    calibration_meta = calibration_loaded[1] if calibration_loaded else None
+    if calibration_params is not None:
+        logger.info("run_eval: applying post-hoc calibration from %s", weights_dir / "risk_calibration.json")
 
     splits = build_all_splits(cfg)
     windowed_all = build_windowed_splits(splits)
@@ -138,6 +152,25 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
         "world_model": standard_metrics(y_true, probs_world_model, threshold=cfg["eval"]["risk_threshold"]),
         "oracle": standard_metrics(y_true, probs_oracle, threshold=cfg["eval"]["risk_threshold"]),
     }
+    if calibration_params is not None:
+        # NOTE: this seed's OWN world_model_forecast is a single-model
+        # statistic, while calibration was fit against the pooled-ensemble
+        # statistic (ensemble_world_model_forecast) — applying it here to a
+        # single seed is an approximation (documented in
+        # calibration_meta/"applied_to_single_seed_approximation"), useful
+        # for a quick per-seed sanity check; the number that matters for
+        # serving is what NidraPredictor actually reports, which pools the
+        # full ensemble before calibrating, exactly matching the fit.
+        calibrated_risk_mean_k = apply_platt_by_horizon(world["risk_mean_k"], calibration_params)
+        probs_world_model_calibrated = calibrated_risk_mean_k.max(axis=1)
+        baselines["world_model_calibrated"] = standard_metrics(
+            y_true, probs_world_model_calibrated, threshold=cfg["eval"]["risk_threshold"]
+        )
+        baselines["calibration_fit_metadata"] = {
+            **calibration_meta,
+            "applied_to_single_seed_approximation": True,
+            "applied_to_seed": seed,
+        }
     with open(metrics_dir / "baselines.json", "w") as f:
         json.dump({"split": split_name, "seed": seed, "baselines": baselines}, f, indent=2)
     results["baselines"] = baselines
@@ -166,12 +199,29 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
         json.dump({"split": split_name, "seed": seed, "ablations": ablations}, f, indent=2)
     results["ablations"] = ablations
 
-    # --- Calibration ---
+    # --- Calibration (Brier/reliability) ---
     logger.info("running calibration")
     calibration = calibration_by_horizon(X_eval, eval_arrays.future_is_attack, model, n_samples=n_samples)
+    calibration_out = {"split": split_name, "seed": seed, "calibration": calibration}
+    if calibration_params is not None:
+        from nidra.eval.metrics import brier_score, reliability_diagram
+        calibrated_risk_mean_k = apply_platt_by_horizon(world["risk_mean_k"], calibration_params)
+        per_k_calibrated = []
+        for k in range(Y_eval.shape[1]):
+            y_true_k = eval_arrays.future_is_attack[:, k]
+            y_prob_k = calibrated_risk_mean_k[:, k]
+            per_k_calibrated.append({
+                "k": k,
+                "brier": brier_score(y_true_k, y_prob_k),
+                "reliability": reliability_diagram(y_true_k, y_prob_k, n_bins=10),
+            })
+        calibration_out["calibration_recalibrated"] = {
+            "per_horizon": per_k_calibrated,
+            "mean_brier": float(np.mean([p["brier"] for p in per_k_calibrated])),
+        }
     with open(metrics_dir / "calibration.json", "w") as f:
-        json.dump({"split": split_name, "seed": seed, "calibration": calibration}, f, indent=2)
-    results["calibration"] = calibration
+        json.dump(calibration_out, f, indent=2)
+    results["calibration"] = calibration_out["calibration"]
 
     # --- Lead time --- (uses the FULL split, not the capped eval_arrays —
     # see the comment above on why lead time needs complete per-host history)
@@ -180,9 +230,17 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
         full_eval_arrays, eval_split_df, model, scaler,
         threshold=cfg["eval"]["risk_threshold"], m=cfg["eval"]["lead_time_persistence_windows"], n_samples=n_samples,
     )
+    lead_time_out = {"split": split_name, "seed": seed, "raw": lead_time_report.to_dict()}
+    if calibration_params is not None:
+        lead_time_report_calibrated = compute_lead_time_report(
+            full_eval_arrays, eval_split_df, model, scaler,
+            threshold=cfg["eval"]["risk_threshold"], m=cfg["eval"]["lead_time_persistence_windows"],
+            n_samples=n_samples, calibration=calibration_params,
+        )
+        lead_time_out["calibrated"] = lead_time_report_calibrated.to_dict()
     with open(metrics_dir / "lead_time.json", "w") as f:
-        json.dump({"split": split_name, "seed": seed, **lead_time_report.to_dict()}, f, indent=2)
-    results["lead_time"] = lead_time_report.to_dict()
+        json.dump(lead_time_out, f, indent=2)
+    results["lead_time"] = lead_time_out
 
     return results
 
@@ -206,7 +264,13 @@ def main():
     results = run(cfg, args.seed, args.split, args.n_samples, max_eval_samples=max_eval_samples)
     print(json.dumps({k: v for k, v in results.items() if k not in ("baselines", "ablations", "calibration", "lead_time")}, indent=2))
     if "baselines" in results:
-        print("baselines:", json.dumps({k: {"f1": v["f1"], "auc_pr": v["auc_pr"]} for k, v in results["baselines"].items()}, indent=2))
+        # Not every entry is a per-model metrics dict — "calibration_fit_metadata"
+        # (present only when a risk_calibration.json was applied) is
+        # provenance info, not a {f1, auc_pr, ...} row, so it's skipped here.
+        print("baselines:", json.dumps(
+            {k: {"f1": v["f1"], "auc_pr": v["auc_pr"]} for k, v in results["baselines"].items() if isinstance(v, dict) and "f1" in v},
+            indent=2,
+        ))
     if "lead_time" in results:
         print("lead_time:", json.dumps(results["lead_time"], indent=2))
 

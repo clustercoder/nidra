@@ -36,14 +36,14 @@
       "fn": 1053
     },
     "world_model": {
-      "f1": 0.08247422680412371,
-      "precision": 0.8888888888888888,
+      "f1": 0.0825593395252838,
+      "precision": 0.9090909090909091,
       "recall": 0.043243243243243246,
-      "auc_pr": 0.8029438729098598,
-      "fpr": 0.004651162790697674,
+      "auc_pr": 0.7935394789268537,
+      "fpr": 0.0037209302325581397,
       "tp": 80,
-      "fp": 10,
-      "tn": 2140,
+      "fp": 8,
+      "tn": 2142,
       "fn": 1770
     },
     "oracle": {
@@ -56,6 +56,35 @@
       "fp": 192,
       "tn": 1958,
       "fn": 62
+    },
+    "world_model_calibrated": {
+      "f1": 0.019251336898395723,
+      "precision": 0.9,
+      "recall": 0.00972972972972973,
+      "auc_pr": 0.7814763143965249,
+      "fpr": 0.0009302325581395349,
+      "tp": 18,
+      "fp": 2,
+      "tn": 2148,
+      "fn": 1832
+    },
+    "calibration_fit_metadata": {
+      "fit_split": "val",
+      "n_val_samples": 4000,
+      "n_ensemble_members": 5,
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "n_samples_per_member": 100,
+      "fitted_at": "2026-09-11T10:37:57Z",
+      "method": "platt_scaling_per_horizon",
+      "note": "Fit on the validation split only, using the same pooled-ensemble rollout statistic (`ensemble_world_model_forecast`) that NidraPredictor serves at inference time. Does not retrain or modify the frozen risk head in any way \u2014 see eval/calibrate.py.",
+      "applied_to_single_seed_approximation": true,
+      "applied_to_seed": 0
     }
   }
 }

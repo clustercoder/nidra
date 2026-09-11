@@ -1,11 +1,20 @@
 {
   "split": "holdout",
   "seed": 0,
-  "median_lead_time_s": 18660.0,
-  "lead_time_distribution_s": [
-    18660.0
-  ],
-  "n_episodes": 2,
-  "n_no_warning": 1,
-  "fraction_no_warning": 0.5
+  "raw": {
+    "median_lead_time_s": 17160.0,
+    "lead_time_distribution_s": [
+      17160.0
+    ],
+    "n_episodes": 2,
+    "n_no_warning": 1,
+    "fraction_no_warning": 0.5
+  },
+  "calibrated": {
+    "median_lead_time_s": null,
+    "lead_time_distribution_s": [],
+    "n_episodes": 2,
+    "n_no_warning": 2,
+    "fraction_no_warning": 1.0
+  }
 }

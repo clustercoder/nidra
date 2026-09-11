@@ -99,13 +99,31 @@ performance, that is the reported result, never engineered away.
   benign — the regime-change case). A rise before onset is a positive
   secondary signal a classifier structurally cannot produce.
 
-## Calibration (`nidra/eval/calibration.py`)
+## Calibration (`nidra/eval/calibration.py`, `nidra/eval/calibrate.py`)
 
 Per-horizon Brier score + reliability diagram (predicted probability bin →
-observed frequency). Computed on whichever split is passed — pass
-validation data if this is meant to inform any downstream calibration
-fitting (none currently exists), test/holdout data only for final
-reporting, never both roles at once.
+observed frequency), computed by `nidra/eval/calibration.py`. Computed on
+whichever split is passed — pass validation data if this is meant to
+inform any downstream calibration fitting, test/holdout data only for
+final reporting, never both roles at once.
+
+**Post-hoc recalibration** (`nidra/eval/calibrate.py`, fit via
+`python -m nidra.scripts.fit_calibration`) exists, is unit-tested, and is
+wired into `run_eval.py` (which always computes and reports a
+`world_model_calibrated` comparison row/`calibration_recalibrated` section
+whenever `<weights_dir>/risk_calibration.json` is present) — but it is
+**off by default in `NidraPredictor`** (`apply_calibration=False`).
+Measured against the real trained ensemble, a correctly base-rate-
+respecting Platt fit *reduces* recall at threshold=0.75 rather than
+improving it (recall dropped to 0.000 at every horizon in a direct check
+against the pooled-ensemble serving path — see `MODEL_CARD.md` and
+`REAL_DATA_RESULTS.md` for the full root-cause explanation). Do not
+re-enable it by passing `apply_calibration=True` without re-reading that
+finding first, and never refit it with `class_weight="balanced"` to make
+the recall number look better — that would manufacture confidence the
+underlying signal doesn't support specifically to clear the mandated
+threshold, which `EVALUATION.md`'s own rule above (don't tune 0.75/m=2 to
+make numbers look better) already forbids one level up.
 
 ## Behavioral regimes (`nidra/explain/regimes.py`) — descriptive, not predictive
 

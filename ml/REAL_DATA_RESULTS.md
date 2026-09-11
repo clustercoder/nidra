@@ -9,6 +9,137 @@ under-resourced single-seed run showed. Nothing in this section is
 fabricated, extrapolated, or inherited from Run 1 — every number below comes
 from this run.
 
+## Run 2 addendum: calibration investigation (same artifacts, follow-up session)
+
+No retraining happened for this addendum — it uses the exact same 5-seed
+checkpoints and scaler as Run 2 above. This documents a focused
+investigation into Run 2's top open item (the calibration gap: good
+AUC-PR, near-zero recall at threshold=0.75) and an attempted fix that was
+implemented, measured, and found **not to work** — reported here in full
+rather than quietly dropped, per this project's own honesty rules.
+
+### Root cause of the calibration gap
+
+Instrumenting `WorldModel.rollout`/`score_states` directly against the
+real seed-0 checkpoint on real test-split data found two compounding,
+measured mechanisms (full detail: `PROJECT_DEEP_DIVE.md` Part 10.2):
+
+1. Individual rollout-trajectory risk scores are near-binary (std across
+   ~100 trajectories per sample averages 0.40-0.47, close to the 0.5
+   theoretical max; only 12-18% of individual scores land in the
+   ambiguous 0.25-0.75 band). The reported `risk_mean_k` therefore behaves
+   like "fraction of imagined futures the head calls risky" (measured
+   correlation with that literal statistic: 0.94-0.97). For genuine
+   future-attack windows, that fraction averaged only ~43-48% — even
+   though 98-100% of those windows had at least one individual trajectory
+   cross 0.75.
+2. The stochastic rollout's injected process noise measurably erodes
+   separation as horizon grows: comparing the real stochastic rollout
+   against a noise-free (deterministic, mu-only) version of the same
+   rollout on the same inputs, negative-class mean score nearly tripled by
+   horizon 5 (0.119 → 0.356) while staying flat without noise, and
+   positive-class mean dropped ~0.08-0.10.
+
+### The attempted fix: post-hoc Platt-scaling calibration — implemented, measured, and found to make things WORSE
+
+`nidra/eval/calibrate.py` + `nidra/scripts/fit_calibration.py`: a
+per-horizon Platt scale (`sigmoid(a*logit(p)+b)`), fit on the validation
+split (n=4,000) against the exact pooled-5-seed-ensemble rollout statistic
+`NidraPredictor` actually serves. All 6 horizons fit non-degenerately,
+with `a` in the 1.8-3.6 range (`k=0: a=1.807 b=-2.783`, `k=1: a=2.412
+b=-2.672`, `k=2: a=3.043 b=-2.749`, `k=3: a=2.750 b=-2.629`, `k=4: a=3.612
+b=-2.816`, `k=5: a=3.124 b=-2.775`) — the fit did find it should sharpen,
+not flatten, the score.
+
+**Measured result, three independent ways, all pointing the same
+direction:**
+
+| Check | Raw recall@0.75 | Calibrated recall@0.75 |
+|---|---|---|
+| Test split, single-seed (`run_eval.py` baselines, n=4,000) | 0.043 | 0.010 |
+| Test split, pooled 5-seed ensemble (500 stratified windows, per-horizon) | 0.124 / 0.036 / 0.017 / 0.000 / 0.005 / 0.000 (k=0..5) | **0.000 at every horizon** |
+| Holdout split lead-time (`run_eval.py`, real episodes) | 1 of 2 episodes warned (median 17,160s) | **0 of 2 episodes warned** |
+
+Calibration made recall/detection worse everywhere it was checked,
+including against the actual pooled-ensemble serving path (ruling out a
+single-seed artifact as the explanation) and on the holdout split (where
+it eliminated the one attack episode that was previously getting a
+warning at all).
+
+**One genuinely nuanced, worth-reporting detail**: aggregate Brier score
+(a different, non-threshold statistic — mean squared error between
+predicted probability and true 0/1 outcome, summed over ALL samples not
+just positives) actually *improved* with calibration: test 0.173→0.152,
+holdout 0.104→0.022. This is not a contradiction. It shows the fit is
+doing exactly what base-rate-respecting calibration is supposed to do —
+better matching predicted probability to true frequency in aggregate,
+dominated by the (numerous) true negatives it correctly keeps near 0 —
+while making the specific operational metric this project cares about
+(recall at a fixed high threshold, where few samples inform the fit) worse.
+"Well-calibrated in the aggregate L2 sense" and "useful at one specific
+far-out decision threshold" are different properties, and this is a clean,
+real demonstration that they can diverge.
+
+**Root cause of why the fix backfired**: `fit_platt` uses an unweighted
+logistic regression. True-positive windows are a small minority of the
+validation set, so an unweighted fit's log-loss optimum is dominated by
+the huge volume of easy true negatives — it correctly learns that, in
+aggregate, even this model's highest raw scores rarely correspond to a
+genuine ≥75% true-positive rate on this dataset (the reliability data
+back this up directly: the raw 0.75-0.85 score bin's observed frequency
+was 0.583 and the 0.85-0.95 bin's was 0.308 — both *below* their own bin
+center already, on small, noisy sample counts of 13 and 10 — i.e. mildly
+overconfident at the very top of the raw distribution, not compressed).
+An honest calibration doesn't invent confidence that isn't there.
+
+**What was deliberately NOT done**: refitting with
+`class_weight="balanced"` (which `nidra/eval/baselines.py`'s own
+`fit_logistic_regression` already uses for the LR baselines, and which
+would very likely make these recall numbers "look better"). This was
+avoided on purpose — it would manufacture inflated confidence specifically
+to clear a fixed decision threshold, which is exactly the "tuning to make
+the numbers look better" this project's rules already prohibit for the
+threshold itself (`EVALUATION.md`). Applying the same discipline to the
+calibration fit, not just the threshold, was a judgment call made this
+session and is stated here explicitly so it can be revisited or disputed.
+
+**Consequence — a code change made in response to this finding**:
+`NidraPredictor.__init__` gained `apply_calibration: bool = False`
+(off by default). `risk_calibration.json` is still generated and
+`run_eval.py` still always computes and reports the calibrated comparison
+(that comparison is the evidence above) — but the default, real-world
+serving path is never silently handed the worse-recall behavior. This is
+a minimal, reversible response to evidence discovered mid-session, not a
+redesign: all the calibration code, tests, and the fitted artifact remain
+in the repository as correct infrastructure and as documented negative-
+result evidence.
+
+**Net effect on the calibration gap**: still open (this was Run 2's top
+item and remains so), but narrowed. It rules out "the raw score is simply
+uniformly compressed and a monotonic remap fixes it" as too simple an
+explanation. The more promising remaining lead is Mechanism 2 above
+(rollout-noise erosion) — reducing `model.transition.logvar_max` (currently
+3.0) and retraining Stage 1 is a documented recommendation for whoever runs
+the full `config/default.yaml` production training (see
+`PRODUCTION_RUN_GUIDE.md` and `MODEL_CARD.md`'s limitations list), not yet
+executed in this session (retraining Stage 1 from scratch was judged not
+worth this session's remaining time versus letting the upcoming full
+production run absorb the change).
+
+### What to reproduce this addendum
+
+```bash
+cd ml
+python -m nidra.scripts.fit_calibration --config config/mvp_2017.yaml
+python -m nidra.eval.run_eval --config config/mvp_2017.yaml --seed 0 --split test    --n-samples 50 --max-eval-samples 4000
+python -m nidra.eval.run_eval --config config/mvp_2017.yaml --seed 0 --split holdout --n-samples 50 --max-eval-samples 4000
+```
+
+`baselines.json`/`calibration.json`/`lead_time.json` under each split's
+metrics directory will contain both the raw and calibrated numbers side by
+side (`world_model` vs `world_model_calibrated`, `calibration` vs
+`calibration_recalibrated`, `raw` vs `calibrated`).
+
 ### What changed since Run 1
 
 1. **All five raw PCAPs are now extracted** (Monday, Tuesday, Wednesday,
@@ -292,7 +423,14 @@ warnings on the test split.** AUC-PR says the signal is there; the fixed
 threshold says the system does not yet act on it. This is the top priority
 for follow-up work, and it is a head-training/calibration problem, not a
 transition-model problem (the transition model's own state nRMSE and
-AUC-PR-based ranking both improved with more data).
+AUC-PR-based ranking both improved with more data). **Update (Run 2
+addendum, above): the obvious fix — post-hoc Platt-scaling calibration —
+was implemented and tested, and empirically made recall at 0.75 worse, not
+better, on both splits and via the real pooled-ensemble serving path. This
+is now believed to reflect a genuine confidence-ceiling limitation of the
+risk head rather than a fixable score-compression artifact; see the
+addendum for the full mechanism and why the fit was not simply reweighted
+to force a better-looking number.**
 
 The three previously-unresolved open items from Run 1 — the odd/even
 horizon-parity oscillation on the test split, the time-shuffle

@@ -31,6 +31,7 @@ def build_episode_risk_curves(
     scaler: FeatureScaler,
     n_samples: int = 50,
     batch_size: int = 64,
+    calibration: list[dict] | None = None,
 ) -> list[tuple[list[tuple[int, float]], int]]:
     """Returns [(risk_curve, onset_ts), ...] — one entry per host that has
     at least one attack window in `labelled_state_table`, restricted to
@@ -59,7 +60,7 @@ def build_episode_risk_curves(
         risks = []
         for i in range(0, len(X_pre), batch_size):
             batch = X_pre[i : i + batch_size]
-            out = world_model_forecast(batch, model, K=windowed.Y.shape[1], n_samples=n_samples)
+            out = world_model_forecast(batch, model, K=windowed.Y.shape[1], n_samples=n_samples, calibration=calibration)
             risks.append(out["risk_over_horizon"])
         risks = np.concatenate(risks) if risks else np.array([])
 
@@ -77,6 +78,9 @@ def compute_lead_time_report(
     threshold: float = 0.75,
     m: int = 2,
     n_samples: int = 50,
+    calibration: list[dict] | None = None,
 ) -> LeadTimeReport:
-    episodes = build_episode_risk_curves(windowed, labelled_state_table, model, scaler, n_samples=n_samples)
+    episodes = build_episode_risk_curves(
+        windowed, labelled_state_table, model, scaler, n_samples=n_samples, calibration=calibration
+    )
     return lead_time_distribution(episodes, threshold=threshold, m=m)
