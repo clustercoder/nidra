@@ -1,0 +1,56 @@
+{
+  "params_by_k": [
+    {
+      "a": 1.8073480399923172,
+      "b": -2.7832139776398455,
+      "n": 4000,
+      "degenerate": false
+    },
+    {
+      "a": 2.411578829748854,
+      "b": -2.672272423805994,
+      "n": 4000,
+      "degenerate": false
+    },
+    {
+      "a": 3.0430994694571414,
+      "b": -2.749118254290522,
+      "n": 4000,
+      "degenerate": false
+    },
+    {
+      "a": 2.75032467284302,
+      "b": -2.6290700807671503,
+      "n": 4000,
+      "degenerate": false
+    },
+    {
+      "a": 3.61245323654622,
+      "b": -2.815791895064113,
+      "n": 4000,
+      "degenerate": false
+    },
+    {
+      "a": 3.123613932415284,
+      "b": -2.775366701618258,
+      "n": 4000,
+      "degenerate": false
+    }
+  ],
+  "metadata": {
+    "fit_split": "val",
+    "n_val_samples": 4000,
+    "n_ensemble_members": 5,
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "n_samples_per_member": 100,
+    "fitted_at": "2026-09-11T10:37:57Z",
+    "method": "platt_scaling_per_horizon",
+    "note": "Fit on the validation split only, using the same pooled-ensemble rollout statistic (`ensemble_world_model_forecast`) that NidraPredictor serves at inference time. Does not retrain or modify the frozen risk head in any way \u2014 see eval/calibrate.py."
+  }
+}

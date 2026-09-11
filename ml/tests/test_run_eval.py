@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -15,6 +16,7 @@ from nidra.data.schema import CONTEXT_LENGTH, HORIZON_LENGTH, WINDOW_SECONDS
 from nidra.data.splits import SplitResult, temporal_train_val_split
 from nidra.data.windowize import build_state_rows
 from nidra.eval import run_eval as run_eval_mod
+from nidra.eval.calibrate import save_calibration
 from nidra.explain.shap_runner import build_shap_background, save_background
 from nidra.train.pipeline import build_windowed_splits, fit_scaler
 from nidra.train.train_dynamics import train_one_seed
@@ -83,6 +85,69 @@ def test_run_eval_end_to_end_on_test_split(eval_ready_artifacts):
     for name in ["baselines.json", "ablations.json", "calibration.json", "lead_time.json"]:
         content = json.loads((metrics_dir / name).read_text())
         assert content  # valid, non-empty JSON
+
+
+def test_run_eval_without_calibration_file_omits_calibrated_sections(eval_ready_artifacts):
+    """Backward compatibility: a model that never ran fit_calibration must
+    evaluate exactly as before — no "_calibrated"/"recalibrated" sections
+    anywhere, not an error."""
+    cfg, tmp_path = eval_ready_artifacts
+    assert not (tmp_path / "weights" / "risk_calibration.json").exists()
+
+    results = run_eval_mod.run(cfg, seed=0, split_name="test", n_samples=10)
+
+    assert "world_model_calibrated" not in results["baselines"]
+    assert "calibration_fit_metadata" not in results["baselines"]
+    lead_time_json = json.loads((tmp_path / "metrics" / "test" / "lead_time.json").read_text())
+    assert "calibrated" not in lead_time_json
+
+
+def test_run_eval_applies_calibration_when_present(eval_ready_artifacts):
+    """When nidra.scripts.fit_calibration has been run (risk_calibration.json
+    exists next to the weights), run_eval must report a calibrated variant
+    of the world-model baseline, calibration, and lead-time sections
+    alongside the raw ones — never replacing them."""
+    cfg, tmp_path = eval_ready_artifacts
+    params_by_k = [{"a": 2.0, "b": 0.0, "n": 100, "degenerate": False} for _ in range(6)]
+    save_calibration(
+        tmp_path / "weights" / "risk_calibration.json", params_by_k,
+        {"fit_split": "val", "n_val_samples": 100},
+    )
+
+    results = run_eval_mod.run(cfg, seed=0, split_name="test", n_samples=10)
+
+    assert "world_model_calibrated" in results["baselines"]
+    assert "f1" in results["baselines"]["world_model_calibrated"]
+    assert results["baselines"]["calibration_fit_metadata"]["applied_to_single_seed_approximation"] is True
+
+    calibration_json = json.loads((tmp_path / "metrics" / "test" / "calibration.json").read_text())
+    assert "calibration_recalibrated" in calibration_json
+    assert len(calibration_json["calibration_recalibrated"]["per_horizon"]) == HORIZON_LENGTH
+
+    lead_time_json = json.loads((tmp_path / "metrics" / "test" / "lead_time.json").read_text())
+    assert "raw" in lead_time_json and "calibrated" in lead_time_json
+
+
+def test_run_eval_main_cli_prints_summary_without_crashing_when_calibrated(eval_ready_artifacts, monkeypatch, capsys):
+    """Regression test: main()'s trailing summary print assumed every entry
+    in results["baselines"] was a {f1, auc_pr, ...} metrics dict. Adding
+    "calibration_fit_metadata" (a provenance dict, not a metrics row) broke
+    that assumption and crashed with KeyError('f1') AFTER run() had already
+    computed and written every metrics JSON correctly — caught running this
+    exact CLI invocation by hand against the real trained ensemble."""
+    cfg, tmp_path = eval_ready_artifacts
+    params_by_k = [{"a": 1.5, "b": -0.5, "n": 50, "degenerate": False} for _ in range(HORIZON_LENGTH)]
+    save_calibration(tmp_path / "weights" / "risk_calibration.json", params_by_k, {"fit_split": "val"})
+
+    config_path = tmp_path / "config.yaml"
+    import yaml
+    config_path.write_text(yaml.safe_dump({k: v for k, v in cfg.items() if not k.startswith("_")}))
+    monkeypatch.setattr(
+        "sys.argv",
+        ["run_eval", "--config", str(config_path), "--seed", "0", "--split", "test", "--n-samples", "5"],
+    )
+    run_eval_mod.main()
+    assert "baselines:" in capsys.readouterr().out
 
 
 def test_run_eval_does_not_clobber_metrics_across_splits(eval_ready_artifacts):

@@ -30,6 +30,7 @@ from nidra.data.schema import (
     WINDOW_SECONDS,
     validate_state_array_width,
 )
+from nidra.eval.calibrate import apply_platt_by_horizon, load_calibration
 from nidra.explain.counterfactual import COUNTERFACTUAL_LABEL, counterfactual_rollout
 from nidra.explain.saliency import temporal_saliency
 from nidra.explain.shap_runner import explain_current_risk, explain_predicted_stage, load_background, top_signals
@@ -53,6 +54,7 @@ class NidraPredictor:
         config_path: str | Path | None = None,
         seeds: list[int] | None = None,
         device: str = "cpu",
+        apply_calibration: bool = False,
     ):
         self.cfg = load_config(config_path)
         self.device = device
@@ -92,6 +94,38 @@ class NidraPredictor:
         self.K = self.cfg["windowing"]["horizon_length"]
         self.L = self.cfg["windowing"]["context_length"]
         self.risk_threshold = self.cfg["eval"]["risk_threshold"]
+
+        # Post-hoc calibration (nidra.scripts.fit_calibration) is OFF BY
+        # DEFAULT — pass apply_calibration=True to opt in. This is a
+        # deliberate finding from this project's own evaluation, not an
+        # oversight: measured against the real trained ensemble (see
+        # REAL_DATA_RESULTS.md), a correctly-weighted (base-rate-respecting)
+        # Platt fit on this model's output *reduces* recall at the mandated
+        # 0.75 threshold rather than improving it — because honestly
+        # calibrated, even the highest raw scores rarely reflect a genuine
+        # 75%+ true-positive rate on this dataset, so the fit correctly
+        # pushes the effective bar higher, not lower. Applying it by default
+        # would silently reduce real detections. The file is still loaded
+        # (if present) and the flag is still supported, for evaluation/
+        # comparison and for future recalibration work — just not applied
+        # unless explicitly requested.
+        self._calibration = None
+        if apply_calibration:
+            calibration_loaded = load_calibration(weights_dir / "risk_calibration.json")
+            self._calibration = calibration_loaded[0] if calibration_loaded else None
+            if self._calibration is not None:
+                logger.warning(
+                    "NidraPredictor: apply_calibration=True — applying post-hoc risk calibration from %s. "
+                    "This is currently NOT the recommended default (see REAL_DATA_RESULTS.md): it measurably "
+                    "reduces recall at threshold=0.75 on this trained ensemble.",
+                    weights_dir / "risk_calibration.json",
+                )
+            else:
+                logger.warning(
+                    "NidraPredictor: apply_calibration=True but no risk_calibration.json found in %s — "
+                    "falling back to raw, uncalibrated p_compromise (run nidra.scripts.fit_calibration first)",
+                    weights_dir,
+                )
         logger.info("NidraPredictor: loaded %d ensemble member(s) from %s", len(self.models), weights_dir)
 
     def _build_model(self) -> WorldModel:
@@ -147,11 +181,22 @@ class NidraPredictor:
 
         q_low = self.cfg["rollout"]["ci_low_quantile"]
         q_high = self.cfg["rollout"]["ci_high_quantile"]
+        risk_mean_k = risk.mean(dim=1)[0].numpy()
+        risk_ci_low_k = risk.quantile(q_low, dim=1)[0].numpy()
+        risk_ci_high_k = risk.quantile(q_high, dim=1)[0].numpy()
+        if self._calibration is not None:
+            # Calibrate p_compromise (and its CI band) — see __init__ and
+            # eval/calibrate.py. Monotonic, so it never changes WHICH
+            # trajectories rank riskiest, only whether the reported number
+            # is comparable to the 0.75 decision threshold.
+            risk_mean_k = apply_platt_by_horizon(risk_mean_k, self._calibration)
+            risk_ci_low_k = apply_platt_by_horizon(risk_ci_low_k, self._calibration)
+            risk_ci_high_k = apply_platt_by_horizon(risk_ci_high_k, self._calibration)
         return {
             "predicted_states_mean": pooled_states.mean(dim=1)[0].numpy(),   # [K, F]
-            "risk_mean_k": risk.mean(dim=1)[0].numpy(),                       # [K]
-            "risk_ci_low_k": risk.quantile(q_low, dim=1)[0].numpy(),
-            "risk_ci_high_k": risk.quantile(q_high, dim=1)[0].numpy(),
+            "risk_mean_k": risk_mean_k,                                      # [K]
+            "risk_ci_low_k": risk_ci_low_k,
+            "risk_ci_high_k": risk_ci_high_k,
             "stage_mean_k": stage.mean(dim=1)[0].numpy(),                     # [K, n_stages]
             "n_trajectories": pooled_states.shape[1],
         }
