@@ -239,8 +239,9 @@ web/lib/types.gen.ts
 web/.env.local
 
 # The Python packaging rule `lib/` above matches any directory named `lib`,
-# including `web/lib/`, which holds the frontend's source of visual truth.
-!web/lib/
+# including the frontend's own source directory. Un-ignore it explicitly.
+!web/src/lib/
+!web/src/lib/**
 .gstack/
 deck/build_deck.py
 deck/charts
