@@ -16,10 +16,10 @@ dataset:
 
   days:
     monday: {file: "Monday-WorkingHours.pcap_ISCX.csv", role: benign_baseline, packets: "Monday-WorkingHours_packets.parquet"}
-    tuesday: {file: "Tuesday-WorkingHours.pcap_ISCX.csv", role: train}
-    wednesday: {file: "Wednesday-workingHours.pcap_ISCX.csv", role: train}
-    thursday_web: {file: "Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv", role: holdout}
-    thursday_infiltration: {file: "Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv", role: holdout}
+    tuesday: {file: "Tuesday-WorkingHours.pcap_ISCX.csv", role: train, packets: "Tuesday-WorkingHours_packets.parquet"}
+    wednesday: {file: "Wednesday-workingHours.pcap_ISCX.csv", role: train, packets: "Wednesday-workingHours_packets.parquet"}
+    thursday_web: {file: "Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv", role: holdout, packets: "Thursday-WorkingHours_packets.parquet"}
+    thursday_infiltration: {file: "Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv", role: holdout, packets: "Thursday-WorkingHours_packets.parquet"}
     friday_morning: {file: "Friday-WorkingHours-Morning.pcap_ISCX.csv", role: test, packets: "Friday-WorkingHours_packets.parquet"}
     friday_portscan: {file: "Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv", role: test, packets: "Friday-WorkingHours_packets.parquet"}
     friday_ddos: {file: "Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv", role: test, packets: "Friday-WorkingHours_packets.parquet"}
@@ -82,10 +82,14 @@ train_heads:
   patience: 6
 
 ensemble:
-  seeds: [0]   # MVP: single seed, not the production 5-member ensemble
+  seeds: [0, 1, 2, 3, 4]   # full 5-member ensemble, at MVP sample/epoch scale
 
 rollout:
-  n_samples_per_member: 30
+  # 200/member (~1000 total, matching config/default.yaml) measured p95=616ms
+  # on this CPU — over the 300ms target. Per the documented policy (cut
+  # samples toward 100 before cutting ensemble members), 100/member (500
+  # total trajectories) is the largest sample count that stays under target.
+  n_samples_per_member: 100
   stochastic: true
   ci_low_quantile: 0.05
   ci_high_quantile: 0.95
@@ -108,4 +112,9 @@ artifacts:
   weights_dir: "artifacts_mvp_2017/weights"
   scaler_dir: "artifacts_mvp_2017/scaler"
   metrics_dir: "artifacts_mvp_2017/metrics"
-  processed_dir: "artifacts_mvp_2017/processed"
+  # Shared with config/default.yaml deliberately: the cached labelled day
+  # tables here only depend on `windowing:` + `dataset:` (identical between
+  # the two configs), never on training/ensemble scale — so an MVP run and
+  # a full-scale run against the same dataset reuse the same expensive
+  # CSV-load -> windowize -> label pass instead of repeating it.
+  processed_dir: "artifacts/processed"

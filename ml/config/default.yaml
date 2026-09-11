@@ -42,10 +42,12 @@ dataset:
     # are downloaded — dropping a `packets:` file in packets_dir and
     # re-running is the entire upgrade path, no code changes needed.
     monday: {file: "Monday-WorkingHours.pcap_ISCX.csv", role: benign_baseline, packets: "Monday-WorkingHours_packets.parquet"}
-    tuesday: {file: "Tuesday-WorkingHours.pcap_ISCX.csv", role: train}
-    wednesday: {file: "Wednesday-workingHours.pcap_ISCX.csv", role: train}
-    thursday_web: {file: "Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv", role: holdout}
-    thursday_infiltration: {file: "Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv", role: holdout}
+    tuesday: {file: "Tuesday-WorkingHours.pcap_ISCX.csv", role: train, packets: "Tuesday-WorkingHours_packets.parquet"}
+    wednesday: {file: "Wednesday-workingHours.pcap_ISCX.csv", role: train, packets: "Wednesday-workingHours_packets.parquet"}
+    # Both Thursday day-files share one underlying PCAP capture, same
+    # pattern as the three Friday day-files below.
+    thursday_web: {file: "Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv", role: holdout, packets: "Thursday-WorkingHours_packets.parquet"}
+    thursday_infiltration: {file: "Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv", role: holdout, packets: "Thursday-WorkingHours_packets.parquet"}
     # All three Friday day-files share one underlying PCAP (a single
     # continuous Friday capture) — pointing all three at the same parquet
     # is correct: windowize's flow/packet join is keyed on (host_id,
