@@ -1,0 +1,5 @@
+node_modules/
+render/
+draft_media/
+package*.json
+deck.pdf
