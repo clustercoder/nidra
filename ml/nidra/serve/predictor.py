@@ -98,17 +98,22 @@ class NidraPredictor:
         # Post-hoc calibration (nidra.scripts.fit_calibration) is OFF BY
         # DEFAULT — pass apply_calibration=True to opt in. This is a
         # deliberate finding from this project's own evaluation, not an
-        # oversight: measured against the real trained ensemble (see
-        # REAL_DATA_RESULTS.md), a correctly-weighted (base-rate-respecting)
-        # Platt fit on this model's output *reduces* recall at the mandated
-        # 0.75 threshold rather than improving it — because honestly
-        # calibrated, even the highest raw scores rarely reflect a genuine
-        # 75%+ true-positive rate on this dataset, so the fit correctly
-        # pushes the effective bar higher, not lower. Applying it by default
-        # would silently reduce real detections. The file is still loaded
-        # (if present) and the flag is still supported, for evaluation/
-        # comparison and for future recalibration work — just not applied
-        # unless explicitly requested.
+        # oversight, and it is CHECKPOINT-DEPENDENT, not a fixed property of
+        # the technique (see REAL_DATA_RESULTS.md Run 2 addendum and Run 3):
+        # against the MVP-scale ensemble (artifacts_mvp_2017/), a correctly
+        # base-rate-respecting Platt fit measurably *reduces* recall at the
+        # mandated 0.75 threshold; against the full-scale ensemble
+        # (artifacts/, config/default.yaml), the same technique was
+        # re-fit and re-verified against the real pooled-ensemble path and
+        # was found to mildly *help* recall on both test and holdout splits
+        # (never hurting it) — though it does not fix the underlying
+        # miscalibration; recall stays low either way. Because one hardcoded
+        # default cannot correctly serve both checkpoints, the safe default
+        # stays False globally; REAL_DATA_RESULTS.md's Run 3 gives an
+        # explicit, evidence-backed recommendation to pass
+        # apply_calibration=True specifically when serving the full-scale
+        # artifacts. The file is still loaded (if present) and the flag is
+        # still supported for evaluation/comparison either way.
         self._calibration = None
         if apply_calibration:
             calibration_loaded = load_calibration(weights_dir / "risk_calibration.json")
@@ -116,8 +121,9 @@ class NidraPredictor:
             if self._calibration is not None:
                 logger.warning(
                     "NidraPredictor: apply_calibration=True — applying post-hoc risk calibration from %s. "
-                    "This is currently NOT the recommended default (see REAL_DATA_RESULTS.md): it measurably "
-                    "reduces recall at threshold=0.75 on this trained ensemble.",
+                    "Whether this helps or hurts recall at threshold=0.75 is checkpoint-dependent — see "
+                    "REAL_DATA_RESULTS.md (Run 2 addendum: harmful at MVP scale; Run 3: mildly helpful at "
+                    "full scale) before relying on this for the weights directory currently in use.",
                     weights_dir / "risk_calibration.json",
                 )
             else:

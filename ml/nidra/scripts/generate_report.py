@@ -109,7 +109,11 @@ def plot_auc_pr_horizon(ablations: dict, reports_dir: Path, split_label: str) ->
 
 
 def plot_baseline_comparison(baselines: dict, reports_dir: Path, out_name: str, split_label: str) -> None:
-    names = list(baselines.keys())
+    # baselines.json can also carry non-metrics provenance entries (e.g.
+    # "calibration_fit_metadata", added once run_eval.py started attaching
+    # calibration info to this dict) — only plot entries that are actually
+    # {f1, auc_pr} metrics rows.
+    names = [n for n, v in baselines.items() if isinstance(v, dict) and "f1" in v and "auc_pr" in v]
     f1 = [baselines[n]["f1"] for n in names]
     auc = [baselines[n]["auc_pr"] for n in names]
     x = np.arange(len(names))

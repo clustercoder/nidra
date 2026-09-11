@@ -112,18 +112,40 @@ final reporting, never both roles at once.
 wired into `run_eval.py` (which always computes and reports a
 `world_model_calibrated` comparison row/`calibration_recalibrated` section
 whenever `<weights_dir>/risk_calibration.json` is present) — but it is
-**off by default in `NidraPredictor`** (`apply_calibration=False`).
-Measured against the real trained ensemble, a correctly base-rate-
-respecting Platt fit *reduces* recall at threshold=0.75 rather than
-improving it (recall dropped to 0.000 at every horizon in a direct check
-against the pooled-ensemble serving path — see `MODEL_CARD.md` and
-`REAL_DATA_RESULTS.md` for the full root-cause explanation). Do not
-re-enable it by passing `apply_calibration=True` without re-reading that
-finding first, and never refit it with `class_weight="balanced"` to make
-the recall number look better — that would manufacture confidence the
-underlying signal doesn't support specifically to clear the mandated
-threshold, which `EVALUATION.md`'s own rule above (don't tune 0.75/m=2 to
-make numbers look better) already forbids one level up.
+**off by default in `NidraPredictor`** (`apply_calibration=False`), because
+whether it helps is **checkpoint-dependent, not a fixed property of the
+technique**: measured against the MVP-scale ensemble
+(`artifacts_mvp_2017/`), a correctly base-rate-respecting Platt fit
+*reduces* recall at threshold=0.75 (dropped to 0.000 at every horizon,
+pooled-ensemble-verified); measured again against the full-scale ensemble
+(`artifacts/`, `config/default.yaml`, 500k/50k samples), the same technique
+*mildly helps* recall on both test and holdout (pooled-ensemble-verified:
+~1%→2-9%), never hurting it. **Both findings are real; neither
+generalizes to the other checkpoint.** See `MODEL_CARD.md` and
+`REAL_DATA_RESULTS.md` (Run 2 addendum and Run 3) for the full root-cause
+explanations. Never refit either checkpoint's calibration with
+`class_weight="balanced"` to make the recall number look better — that
+would manufacture confidence the underlying signal doesn't support
+specifically to clear the mandated threshold, which this document's own
+rule above (don't tune 0.75/m=2 to make numbers look better) already
+forbids one level up.
+
+**Standing methodological note (added after Run 3): always verify a
+calibrated recall/lead-time claim against the real pooled-ensemble path
+before citing it.** `run_eval.py`'s `world_model_calibrated` baseline row
+and `lead_time.json`'s `"calibrated"` section apply the pooled-ensemble-fit
+calibration to a **single seed's own raw output** (`applied_to_single_seed_
+approximation: true` in the metadata) — a documented shortcut for a quick
+per-seed sanity check, not the real `NidraPredictor` serving statistic. At
+MVP scale this approximation agreed in direction with the real
+pooled-ensemble check. At full scale it did not just differ in magnitude —
+it looked *qualitatively* better than reality (single-seed lead-time:
+9-of-10 test episodes warned; real pooled-ensemble recall: 2.4%). Before
+trusting either file's calibrated numbers as a serving-behavior claim,
+re-verify with `ensemble_world_model_forecast` directly (pattern: see
+`REAL_DATA_RESULTS.md` Run 3's calibration section) — this cost nothing
+more than writing one script, and it caught what would otherwise have been
+a materially overstated recommendation.
 
 ## Behavioral regimes (`nidra/explain/regimes.py`) — descriptive, not predictive
 

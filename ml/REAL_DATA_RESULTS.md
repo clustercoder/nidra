@@ -1,10 +1,329 @@
 # Real CIC-IDS2017 Run — Results
 
-## Run 2 (current): 5-seed ensemble, all 5 PCAPs extracted, 40k/8k samples
+## Run 3 (current): full-scale production config, 5-seed ensemble, 500k/50k samples
 
-This supersedes Run 1 below as the current, best-supported result. Run 1's
-content is kept unmodified further down for provenance — nothing in it is
-deleted or rewritten, and it remains an honest record of what an
+This supersedes Run 2 below as the current, best-supported result. Run 2's
+content is kept unmodified further down for provenance. This is the first
+run against `config/default.yaml` (60/30 epoch budget, the full real
+6,911,848-candidate train split) rather than `config/mvp_2017.yaml` — with
+one honest caveat up front: **it is not the literal uncapped run.** Building
+the full ~6.9M-sample windowed tensor in memory needs ~35+ GB RAM (a real
+bug found and fixed this session — see `PRODUCTION_RUN_GUIDE.md` §1.3 and
+`nidra/data/dataset.py::build_windowed_arrays`'s two-pass capping design),
+which exceeds the 16GB machine this ran on. `--max-train-samples 500000
+--max-val-samples 50000` was used instead — a stratified (all positives
+kept) subsample roughly **12.5x larger** than Run 2's 40,000/8,000 MVP cap,
+but still a cap, not the full population. Every number below comes from
+this run; nothing is inherited or extrapolated from Run 2.
+
+### Training
+
+5 seeds (`0,1,2,3,4`), both stages, `config/default.yaml`'s 60/30 epoch
+budget — but **every seed early-stopped well before the budget**
+(`patience=6`), so the real wall time was far below the naive
+"60 epochs × 5 seeds" estimate:
+
+| Seed | Stage 1 stopped at epoch | Stage 1 best val_nll | Stage 2 stopped at epoch |
+|---|---|---|---|
+| 0 | 20 | -1.4544 | 8 |
+| 1 | 15 | -1.4531 | 6 |
+| 2 | 18 | -1.4535 | 8 |
+| 3 | 9  | -1.4450 | 6 |
+| 4 | 13 | -1.4656 | 6 |
+
+Total wall time (both stages, all 5 seeds, single-process-per-stage,
+16GB Apple M1, CPU only): **~3.5 hours** (Stage 1: ~3h23m; Stage 2: ~3m13s
+— heads training is a tiny classifier riding on a frozen representation, so
+it is dramatically cheaper per epoch). This is well under the ~14-hour
+naive estimate from the Step 3 timing probe, entirely because early
+stopping kicked in on every seed — a genuinely good sign (the model
+converges rather than needing the full budget), not a shortcut taken.
+
+Stage 2 class imbalance is severe and consistent across all 5 seeds:
+`pos_weight=1741.16`, per-stage class weights ranging from 0.167 (benign,
+the majority class) up to 83,334 (the rarest attack stages) — same
+imbalance structure as Run 2, now measured at 12.5x the data. Heads
+val_loss still does not converge cleanly (seed 0: 30.5 → 26.7 → 44.8 → …,
+non-monotonic across its 9 epochs) — **unresolved, same open item as Run
+2**, present at this larger scale too.
+
+### Evaluation — test split (Friday), n=4,000 (stratified from 438,708 real candidates)
+
+| Model | F1 | Precision | Recall | AUC-PR |
+|---|---|---|---|---|
+| LR (current state) | 0.758 | 0.944 | 0.632 | 0.817 |
+| LR (flattened history) | 0.785 | 0.968 | 0.659 | 0.863 |
+| Persistence | 0.137 | 0.958 | 0.074 | 0.565 |
+| **World model** | 0.054 | 1.000 | 0.028 | **0.880** |
+| Oracle (upper bound) | 0.415 | 0.959 | 0.265 | 0.849 |
+| World model, calibrated (single-seed approx.) | 0.082 | 0.898 | 0.043 | 0.875 |
+
+**World model beats persistence by a wide margin now** (AUC-PR 0.880 vs.
+0.565, +0.315) — a much larger structural win than Run 2's +0.103 at
+12.5x less data. The persistence ablation independently confirms this:
+`auc_collapse=+0.317`, `"world model beats persistence"`.
+
+**Odd result, reported honestly rather than hidden: the world model
+(0.880) slightly beats the oracle (0.849)** — oracle scores the same frozen
+risk head on the *true* future state, so it should be an upper bound on
+what any forecast of that state can achieve. This did **not** replicate on
+the holdout split below (oracle correctly beats world model there), so the
+most likely explanation is estimation noise in a 4,000-sample stratified
+AUC-PR estimate on this specific split rather than a real, general
+violation of the oracle bound — but it is flagged here rather than quietly
+smoothed over, and would be worth re-checking against the full (uncapped)
+438,708-sample split if someone wants to chase it further.
+
+Precision remains excellent (1.000 raw) but recall at the mandated 0.75
+threshold is still very low (0.028 raw) — the ranking-vs-calibration gap
+from Run 2 is still present in the same shape: the model separates risk
+classes well (AUC-PR) but its absolute probabilities still rarely cross
+0.75. See "Calibration" below for what's new about this in Run 3.
+
+### Evaluation — holdout split (Thursday, Web-Attacks + Infiltration), n=4,000 (stratified from 674,269 real candidates)
+
+| Model | F1 | Precision | Recall | AUC-PR |
+|---|---|---|---|---|
+| LR (current state) | 0.698 | 0.652 | 0.752 | 0.616 |
+| LR (flattened history) | 0.865 | 0.832 | 0.901 | 0.883 |
+| Persistence | 0.656 | 0.927 | 0.507 | 0.554 |
+| **World model** | 0.178 | 0.931 | 0.099 | **0.679** |
+| Oracle (upper bound) | 0.775 | 0.818 | 0.737 | 0.769 |
+| World model, calibrated (single-seed approx.) | 0.434 | 0.951 | 0.281 | 0.683 |
+
+**New, genuinely positive finding: the world model now beats persistence on
+the never-trained-on holdout split** (AUC-PR 0.679 vs. 0.554,
+`auc_collapse=+0.125`, `"world model beats persistence"`) — Run 2 found
+**no** measurable edge here (0.635 vs. 0.635, a real negative result at
+that scale). At 12.5x the training data, the learned dynamics now show a
+genuine generalization advantage on an attack family (Infiltration) never
+seen during training. Oracle correctly bounds the world model here (0.769
+> 0.679), the expected direction — this is the split that did **not** show
+the test split's odd oracle anomaly above.
+
+### Ablations — two Run 2 open items resolved, one relocated, one unchanged
+
+**Persistence ablation**: covered above — now a clean win on both splits
+(test +0.317, holdout +0.125), whereas Run 2 only won on test.
+
+**Time-shuffle ablation — the Run 2 split-inconsistency is resolved:**
+- Test: normal-order AUC-PR 0.882 vs. shuffled 0.807 (collapse 0.074) —
+  *"temporal order matters"*. Run 2 found **no** collapse here (0.007).
+- Holdout: normal-order AUC-PR 0.690 vs. shuffled 0.497 (collapse 0.192) —
+  *"temporal order matters"*, same direction as Run 2 (0.054) but a much
+  larger collapse.
+
+Both splits now show real temporal-order sensitivity — the "test doesn't
+care about order, holdout does" inconsistency Run 2 flagged as unexplained
+is gone at this scale. Read together with the horizon-curve finding below,
+this argues for "genuinely undertrained at MVP scale" as at least part of
+the Run 2 explanation, not the "unexplained structural quirk" framing Run
+2 had to use.
+
+**Horizon curve — the odd/even parity oscillation persists, but relocated:**
+- Test: `auc_pr_by_k = [0.260, 0.256, 0.219, 0.248, 0.230, 0.265]` — no
+  strong alternation, all six horizons within a similar band. Run 2's
+  dramatic ~3x test-split alternation (`[0.518, 0.174, 0.560, 0.159, 0.497,
+  0.162]`) is **gone**.
+- Holdout: `auc_pr_by_k = [0.106, 0.579, 0.080, 0.420, 0.076, 0.374]` — a
+  **strong** alternating pattern has appeared here instead (even-indexed
+  horizons 5-7x higher than odd-indexed ones), which Run 2's holdout curve
+  did **not** show. `flat_curve_leakage_warning=false` on both splits.
+
+So the phenomenon did not simply disappear with more data — it moved from
+the test split to the holdout split, and its phase flipped. That argues
+against "undertrained model" as the sole explanation (an undertraining
+artifact should shrink with more data, not relocate) and makes the
+task's original hypothesis — a genuine periodicity in one split's labelled
+attack windows aliasing against the 30s/K=6 window geometry — the more
+likely explanation, though still not confirmed. **Still an open item.**
+
+**Surprise signal** (still consistently positive on both splits):
+`mean_error_pre_attack` is ~13-14x `mean_error_benign` (test: 2.551 vs.
+0.191; holdout: 2.466 vs. 0.170), `error_rises_before_onset=true` on both —
+same qualitative finding as Run 2, now at scale.
+
+**State nRMSE — the world model now beats persistence on raw state
+accuracy too, not just risk ranking, reversing Run 2:** test
+`nrmse_world_model_mean=5.382` vs. `nrmse_persistence_mean=6.338`; holdout
+`world_model=2.277` vs. `persistence=2.654`. Run 2 had this the other way
+around on both splits (world model *worse* than persistence on raw state
+accuracy, e.g. test 6.52 vs. 5.71) — at 12.5x the data, the transition
+model's forecasts are now more accurate than "assume no change" by both
+the ranking metric (AUC-PR) and the raw-accuracy metric (nRMSE).
+
+### Calibration — the MVP-scale "calibration hurts recall" finding reverses, but more modestly than it first appears
+
+`fit_calibration` (fit on 4,000 validation-split windows, pooled across all
+5 ensemble members, `n_samples_per_member=100`) produced a non-degenerate
+Platt fit at every horizon: `a = [1.081, 2.342, 1.479, 3.057, 1.766,
+3.396]` (`artifacts/weights/risk_calibration.json`).
+
+**First look — `run_eval.py`'s built-in numbers (single-seed=0
+approximation, applying the pooled-ensemble-fit calibration to only one
+ensemble member's own raw output — a known, documented approximation, see
+`calibration_fit_metadata.applied_to_single_seed_approximation`) — look
+dramatic:**
+
+| Split | Raw lead-time | Calibrated lead-time |
+|---|---|---|
+| Test (n=10 episodes) | 0 of 10 warned | **9 of 10 warned**, median 8,220s (~2.3h) |
+| Holdout (n=2 episodes) | 0 of 2 warned | **1 of 2 warned**, median 18,600s (~5.2h) |
+
+Taken at face value, this reads as "calibration fixes lead-time at full
+scale" — the exact opposite of Run 2's finding that it made things worse.
+**That headline turned out to be an overstatement, caught before shipping
+it as a recommendation** by re-running the same rigor Run 2's addendum
+used: verifying against the *real* pooled-5-member ensemble path
+(`ensemble_world_model_forecast`, exactly what `NidraPredictor` serves),
+not the single-seed approximation `run_eval.py` uses for `baselines.json`/
+`lead_time.json`.
+
+**Second look — a dedicated verification script, pooled-ensemble, 500
+stratified samples per split, `n_samples_per_member=50`:**
+
+| Split | Raw recall@0.75 | Calibrated recall@0.75 | Raw mean prob (positives) | Calibrated mean prob (positives) |
+|---|---|---|---|---|
+| Test (n_positive=500) | 0.010 (5/500 tp) | 0.024 (12/500 tp) | 0.278 | 0.191 |
+| Holdout (n_positive=274) | 0.007 (2/274 tp) | 0.091 (25/274 tp) | 0.347 | 0.347 |
+
+Precision stayed 1.000 on both splits, both ways — calibration introduced
+zero false positives here. **The real, pooled-ensemble-verified finding:
+calibration's *direction* genuinely reversed from Run 2 — recall never
+decreases on either split at full scale, unlike Run 2 where it decreased
+every time it was checked — but the *magnitude* is far more modest than
+the single-seed lead-time numbers suggest.** Real recall improves from
+roughly 1% to 2-9%, not to "9 of 10 episodes warned." The mandated-0.75-
+threshold recall problem is not solved by calibration at this scale; it is
+measurably less harmful (and mildly helpful) than it was at MVP scale.
+
+**A new, genuinely useful methodological finding for future runs**:
+`run_eval.py`'s single-seed approximation for calibrated
+lead-time/baselines — a known, documented shortcut, not a bug — can
+diverge from the real pooled-ensemble serving path by enough to change the
+qualitative headline (a dramatic-looking "9 of 10 warned" vs. the real
+"2.4% recall"), not just its exact magnitude. Anyone about to cite
+`lead_time.json`'s `"calibrated"` section or `baselines.json`'s
+`world_model_calibrated` row as evidence for a serving-behavior claim
+should re-verify it against `ensemble_world_model_forecast` first,
+exactly as done here — this is now a standing recommendation, not a
+one-off caveat (see `EVALUATION.md`).
+
+**Decision on `NidraPredictor(apply_calibration=...)`'s default**: left
+**unchanged at `False`**. The right setting is checkpoint-dependent (MVP-
+scale artifacts still show real harm from the same technique — see Run 2's
+addendum below, unedited), so a single hardcoded global default cannot
+correctly serve both artifact sets, and flipping it to `True` globally
+would silently mis-serve anyone still using `artifacts_mvp_2017/`. Instead:
+**for these specific full-scale artifacts (`artifacts/weights/`), the
+pooled-ensemble-verified evidence above supports explicitly passing
+`apply_calibration=True`** when constructing `NidraPredictor` against this
+weights directory — a deliberate, evidence-backed, per-artifact choice,
+not a code-level default change, and not a claim that it meaningfully
+solves the underlying miscalibration (it does not).
+
+Mean Brier score (lower is better, lower means more-calibrated
+probabilities in a squared-error sense): test 0.149, holdout 0.030 — full
+reliability-diagram data is in `artifacts/metrics/{test,holdout}/calibration.json`.
+
+### Benchmark
+
+```
+{'n_calls': 20, 'mean_ms': 136.9, 'median_ms': 136.6, 'p95_ms': 141.1, 'max_ms': 142.9}
+target: 300 ms — PASS
+```
+
+Comfortably under the 300ms serving-latency target with the full 5-member
+ensemble, `rollout.n_samples_per_member` as configured.
+
+### Honest summary (Run 3)
+
+More training data (12.5x the MVP cap) produced several genuine,
+independently-measured improvements over Run 2: the world model now beats
+persistence by a wide margin on **both** splits (not just test), state
+nRMSE now favors the world model over persistence on **both** splits
+(reversed from Run 2), and the time-shuffle split-inconsistency Run 2
+flagged as unexplained is resolved (both splits now show real
+shuffle-sensitivity). These are real, not spun.
+
+The calibration story is genuinely better but was **almost overstated**:
+the single-seed approximation `run_eval.py` reports made it look like
+calibration had completely fixed lead-time at full scale (0→9 of 10
+episodes warned). Checking against the real pooled-ensemble serving path —
+the same rigor Run 2's addendum used, applied again here specifically
+because the headline looked too good — showed the real effect is much more
+modest (recall moves from ~1% to single-digit-to-low-double-digit percent).
+**The direction reversed (no longer harmful, mildly helpful); the
+underlying miscalibration problem did not go away.**
+
+The horizon-curve parity oscillation did not resolve with more data, it
+relocated (test → holdout, phase flipped) — evidence against "just needs
+more data" for this specific open item; heads val_loss convergence remains
+unresolved, unchanged from Run 2.
+
+The oracle anomaly on the test split (world model AUC-PR slightly exceeding
+oracle) is flagged, not hidden, and most likely small-sample AUC-PR
+estimation noise given it did not replicate on holdout.
+
+### Reproduction (Run 3)
+
+```bash
+cd ml
+python -m nidra.train.train_dynamics --config config/default.yaml \
+    --max-train-samples 500000 --max-val-samples 50000
+python -m nidra.train.train_heads    --config config/default.yaml \
+    --max-train-samples 500000 --max-val-samples 50000
+python -m nidra.scripts.fit_calibration --config config/default.yaml
+python -m nidra.eval.run_eval --config config/default.yaml --seed 0 --split test    --n-samples 50 --max-eval-samples 4000
+python -m nidra.eval.run_eval --config config/default.yaml --seed 0 --split holdout --n-samples 50 --max-eval-samples 4000
+python -m nidra.serve.benchmark --weights-dir artifacts/weights --scaler-path artifacts/scaler/robust_scaler.joblib --config config/default.yaml
+python -m nidra.scripts.generate_report --config config/default.yaml --test-metrics-dir artifacts/metrics/test --holdout-metrics-dir artifacts/metrics/holdout --reports-dir reports --metadata-dir artifacts/metadata
+```
+
+See `PRODUCTION_RUN_GUIDE.md` for the full step-by-step walkthrough,
+including why the `--max-train-samples`/`--max-val-samples` flags are
+necessary on a 16GB machine.
+
+### Caveats that materially limit every number above
+
+- **Still not the literal uncapped run** — 500,000/50,000-sample cap
+  (stratified, all positives kept), not the full ~6.9M-candidate train
+  split; a 16GB machine cannot hold the uncapped tensor in memory (see
+  `PRODUCTION_RUN_GUIDE.md` §1.3). 12.5x Run 2's cap, not infinite.
+- **Ensemble evaluation still ran per-seed for baselines/ablations/
+  oracle/lead-time** (seed 0 only) — same limitation Run 2 flagged as "a
+  good next step, not completed here." This session did complete that
+  next step, but **only for the calibration comparison specifically**
+  (the dedicated pooled-ensemble verification above) — a full
+  pooled-ensemble baselines/ablations/oracle re-run is still not done.
+- **The world-model-beats-oracle result on test is unexplained** beyond
+  "likely small-sample noise" — not confirmed against the full unsampled
+  split.
+- **Lead-time numbers are based on 10 (test) and 2 (holdout) episodes** —
+  small samples, same caveat as every prior run.
+- **Heads val_loss still does not converge cleanly** — unresolved,
+  unchanged from Run 2, now confirmed present at 12.5x the data too.
+- **The horizon-curve parity oscillation is unexplained**, and its
+  relocation between runs (rather than disappearance) is itself unexplained.
+
+---
+
+## Run 2 (superseded): 5-seed ensemble, all 5 PCAPs extracted, 40k/8k samples
+
+This section is preserved unmodified from the original run for provenance.
+Run 3 above supersedes it as the current, best-supported result — in
+particular, the calibration finding below ("Platt scaling makes recall
+worse, not better") is a genuine MVP-scale (40k/8k samples) result that
+**reversed at full production scale** (see Run 3's calibration section);
+this section is kept exactly as written at the time, not retroactively
+edited, because it remains an honest, real record of what the smaller-scale
+run showed and why. Nothing in this section is fabricated, extrapolated, or
+retroactively corrected — every number below is exactly what was measured
+against the MVP-scale artifacts.
+
+This supersedes Run 1 below as the (then-)current, best-supported result.
+Run 1's content is kept unmodified further down for provenance — nothing in
+it is deleted or rewritten, and it remains an honest record of what an
 under-resourced single-seed run showed. Nothing in this section is
 fabricated, extrapolated, or inherited from Run 1 — every number below comes
 from this run.

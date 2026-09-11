@@ -76,37 +76,45 @@ sample-cap numbers.
 
 ## Known limitations
 
-1. **Calibration at threshold=0.75 — root-caused this session; the
-   hypothesized fix was implemented, measured, and found NOT to help.**
-   (Full detail: `PROJECT_DEEP_DIVE.md` Part 10, `REAL_DATA_RESULTS.md`.)
-   Individual rollout-trajectory risk scores are near-binary, so the
-   reported mean probability behaves like "fraction of imagined futures
-   the head calls risky" — for true positives that fraction averaged only
-   ~45%, well under 0.75 even though ~98-100% of those windows had at
-   least one individual trajectory cross 0.75. A **post-hoc Platt-scaling
-   calibration** (`nidra/eval/calibrate.py`) was fit on the validation
-   split against this exact ensemble (5 horizons, `a` in 1.8–3.6, all
-   non-degenerate) and measured two ways: a single-seed spot-check (test
-   split, recall@0.75 dropped 0.043→0.010) and a direct check against the
-   real pooled-5-seed serving path (500 stratified test-split windows:
-   recall@0.75 dropped to **0.000 at every horizon**, from a raw baseline
-   of 0.124/0.036/0.017/0.000/0.005/0.000). **Calibration makes recall
-   worse, not better.** Root cause: an honestly (base-rate-respecting)
-   fit calibration correctly reports that even this model's highest raw
-   scores rarely reflect a genuine ≥75% true-positive rate on this
-   dataset — the reliability data show the top raw-score bins are already
-   mildly *overconfident* on small sample counts (13-20 samples), not
-   underconfident. A class-weighted refit would very likely "fix" the
-   number, but was deliberately not done — it would manufacture confidence
-   the underlying signal doesn't support, purely to clear a fixed
-   threshold, which is exactly the kind of threshold-gaming this project's
-   own rules prohibit. **Consequence**: `NidraPredictor` now takes an
-   `apply_calibration: bool = False` parameter — off by default — so a
-   real deployment is never silently handed the worse-recall behavior.
-   The code/tests/artifact are kept as correct, useful infrastructure and
-   as documented negative-result evidence, not as a shipped improvement.
-   The calibration gap itself remains open; see limitation 7 for the more
-   promising remaining lead.
+1. **Calibration at threshold=0.75 — root-caused at MVP scale (harmful),
+   re-measured at full production scale (mildly helpful, but not a fix).**
+   (Full detail: `PROJECT_DEEP_DIVE.md` Part 10, `REAL_DATA_RESULTS.md`
+   Run 2 addendum and Run 3.) At MVP scale (40k/8k samples), individual
+   rollout-trajectory risk scores were near-binary, so the reported mean
+   probability behaved like "fraction of imagined futures the head calls
+   risky" — for true positives that fraction averaged only ~45%, well
+   under 0.75. A **post-hoc Platt-scaling calibration**
+   (`nidra/eval/calibrate.py`) fit on the validation split against that
+   ensemble made recall **worse**, verified via a direct check against the
+   real pooled-5-seed serving path (recall@0.75 dropped to 0.000 at every
+   horizon). **At full production scale (500k/50k samples, `config/
+   default.yaml`, this checkpoint), the same technique was re-fit and
+   re-verified against the real pooled-ensemble path and the direction
+   reversed**: recall never decreases on either split (test: 0.010→0.024;
+   holdout: 0.007→0.091; precision stays 1.000 both ways) — mildly
+   helpful, not harmful. **This is a real, checkpoint-dependent reversal,
+   not a fix**: recall at the mandated threshold is still low
+   (single-digit-to-low-double-digit percent) even after calibration; the
+   underlying miscalibration is measurably less bad at this scale, not
+   solved. A first look at `run_eval.py`'s built-in single-seed
+   approximation for this checkpoint looked dramatically better (0→9 of
+   10 test episodes warned) — that number does **not** hold up against the
+   real pooled-ensemble path (which gives the modest 0.024 recall above)
+   and should not be cited as a serving-behavior claim; see
+   `REAL_DATA_RESULTS.md` Run 3's calibration section for the full
+   methodological note on why the single-seed approximation can overstate
+   the effect at production scale. A class-weighted refit to force a
+   better-looking recall number was, again, deliberately not done — see
+   the MVP-scale reasoning above, which still applies regardless of scale.
+   **Consequence**: `NidraPredictor`'s code-level default stays
+   `apply_calibration=False` (checkpoint-dependent behavior cannot
+   correctly be captured by one hardcoded default — the MVP-scale
+   artifacts still show real harm from the same technique), **but for
+   these specific full-scale artifacts (`artifacts/weights/`), passing
+   `apply_calibration=True` explicitly is now a deliberate,
+   evidence-backed recommendation**, not a code default change. The
+   calibration gap itself remains open; see limitation 7 for the other
+   remaining lead.
 2. **Odd/even horizon-parity oscillation** in AUC-PR/Brier on the test
    split, present at 5x the data/full ensemble — not explained by
    undertraining.

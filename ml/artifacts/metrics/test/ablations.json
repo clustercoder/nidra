@@ -1,0 +1,68 @@
+{
+  "split": "test",
+  "seed": 0,
+  "ablations": {
+    "persistence": {
+      "auc_pr_persistence": 0.5654811409247893,
+      "auc_pr_world_model": 0.8827372362794728,
+      "auc_collapse": 0.31725609535468347,
+      "nrmse_persistence_mean": 6.338448616257436,
+      "nrmse_world_model_mean": 5.382235641957621,
+      "interpretation": "world model beats persistence"
+    },
+    "time_shuffle": {
+      "auc_pr_normal_order": 0.8815102098223718,
+      "auc_pr_shuffled_order": 0.8073813087273122,
+      "collapse": 0.07412890109505965,
+      "interpretation": "temporal order matters (collapse observed)"
+    },
+    "horizon_curve": {
+      "auc_pr_by_k": [
+        0.2595782543667571,
+        0.25572815105286284,
+        0.21888741308723822,
+        0.2483534343149239,
+        0.23031402654071287,
+        0.26516306928829647
+      ],
+      "nrmse_by_k": [
+        5.712669795456523,
+        4.3307988637316015,
+        5.768036106967784,
+        4.94319624969435,
+        5.99861537002173,
+        5.502368045583922
+      ],
+      "flat_curve_leakage_warning": false
+    },
+    "surprise_signal": {
+      "mean_error_benign": 0.19091411005584683,
+      "mean_error_pre_attack": 2.55116553532737,
+      "n_benign": 2150,
+      "n_pre_attack": 1850,
+      "error_rises_before_onset": true
+    },
+    "nrmse_normalization": {
+      "method": "train_population_reference_std",
+      "scale_floor": 0.05,
+      "low_variance_features_floored": [
+        "syn_ratio",
+        "ack_ratio",
+        "rst_ratio",
+        "fin_ratio",
+        "psh_ratio",
+        "urg_ratio",
+        "tcp_window_entropy",
+        "frag_flag_rate",
+        "payload_size_entropy",
+        "retrans_count",
+        "retrans_rate",
+        "local_clustering_coeff",
+        "d_syn_ratio",
+        "d_retrans_rate",
+        "slope3_syn_ratio",
+        "slope3_dst_port_entropy"
+      ]
+    }
+  }
+}
