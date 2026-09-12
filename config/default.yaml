@@ -18,16 +18,22 @@ lead_time_m: 2          # consecutive windows above threshold before a crossing 
 episode_close_after: 4  # windows below threshold before an episode closes
 
 predictor:
-  impl: stub            # stub | nidra
+  impl: stub            # stub | nidra — NIDRA_PREDICTOR_IMPL overrides at deploy time
   # Only read when impl == nidra; the stub needs no artifacts. Relative paths resolve
-  # against the repo root, as everywhere else in this file.
-  weights_dir: artifacts/weights
-  scaler_path: artifacts/scaler/robust_scaler.joblib
+  # against the repo root, as everywhere else in this file. `deploy/model/` is the
+  # tracked copy of the trained 5-seed ensemble + scaler baked into the Docker image
+  # (see Dockerfile) so a container needs no separate artifact transfer step; local
+  # docker compose overrides this with a bind mount of the repo-root `artifacts/` dir.
+  weights_dir: deploy/model/weights
+  scaler_path: deploy/model/scaler/robust_scaler.joblib
   # A DIFFERENT file from this one, deliberately: NidraPredictor needs the nested
   # training/model/rollout config nidra.utils.config.load_config() reads (cfg["model"],
   # cfg["ensemble"], cfg["rollout"], ...), not this file's flat backend tunables. The two
   # configs serve two different consumers and are not meant to be merged into one schema.
-  config_path: config/ml_mvp_2017.yaml
+  # Must match the ensemble actually present under weights_dir — ml_default.yaml is the
+  # 5-seed ensemble config; ml_mvp_2017.yaml is single-seed and would silently only use
+  # model_seed_0.pt if paired with a multi-seed checkpoint.
+  config_path: config/ml_default.yaml
 
 # Host-side URLs: docker compose publishes redis and postgres on the NIDRA port block
 # (DECISIONS.md D14). In-container services get NIDRA_REDIS_URL / NIDRA_POSTGRES_URL

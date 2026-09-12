@@ -24,10 +24,18 @@ COPY nidra_common/ ./nidra_common/
 COPY nidra/ ./nidra/
 COPY api/ ./api/
 COPY services/ ./services/
+COPY scripts/ ./scripts/
 COPY alembic.ini ./
 COPY migrations/ ./migrations/
 
-RUN pip install --upgrade pip && pip install -e "."
+# The trained 5-seed ensemble + scaler (~6MB, tracked in git deliberately — see
+# deploy/model/README.md) baked in so a platform with no shared/persistent filesystem
+# (Render) needs no separate artifact-transfer step. Local docker compose still bind-
+# mounts the repo-root `artifacts/` dir over this for iterating on unreleased weights.
+COPY deploy/model/ ./deploy/model/
+
+RUN pip install --upgrade pip && pip install -e "." \
+    && chmod +x scripts/render_api_start.sh
 
 RUN mkdir -p /var/lib/nidra/uploads /app/artifacts
 

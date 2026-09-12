@@ -1,0 +1,128 @@
+# Render Blueprint — deploys the whole NIDRA backend from one repo connection.
+# https://render.com/docs/blueprint-spec
+#
+# Maps docker-compose.yml's services onto Render:
+#   postgres, redis  -> a managed Postgres database + a managed Key Value (Redis) instance
+#   api              -> a web service, co-located with `ingest` (see scripts/render_api_start.sh
+#                        for why: they share a filesystem in compose, which Render's separate
+#                        services cannot do without an external object store)
+#   features, inference, persister -> background workers (no public URL, no shared disk needed —
+#                        they only touch Redis/Postgres and the model weights baked into the image)
+#   web              -> NOT here; the frontend deploys to Vercel (see DEPLOYMENT.md)
+#
+# All five app services build from the same root Dockerfile/context, exactly like
+# docker-compose's `x-app` anchor — only the command differs per service.
+
+databases:
+  - name: nidra-postgres
+    databaseName: nidra
+    user: nidra
+    plan: starter
+    region: oregon
+
+services:
+  - type: redis
+    name: nidra-redis
+    plan: starter
+    region: oregon
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
+
+  - type: web
+    name: nidra-api
+    runtime: docker
+    region: oregon
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: ./scripts/render_api_start.sh
+    healthCheckPath: /health
+    disk:
+      name: nidra-uploads
+      mountPath: /var/lib/nidra/uploads
+      sizeGB: 1
+    envVars:
+      - key: NIDRA_ENV
+        value: prod
+      - key: NIDRA_PREDICTOR_IMPL
+        value: nidra
+      - key: NIDRA_UPLOAD_DIR
+        value: /var/lib/nidra/uploads
+      - key: NIDRA_SECRET_KEY
+        generateValue: true
+      - key: NIDRA_REDIS_URL
+        fromService:
+          name: nidra-redis
+          type: redis
+          property: connectionString
+      # Render's Postgres connectionString is `postgresql://...` (psycopg-style); the
+      # app's async engine needs the `+asyncpg` driver in the scheme. Set this by hand
+      # in the Render dashboard after the first deploy: copy nidra-postgres's Internal
+      # Connection String and change `postgresql://` to `postgresql+asyncpg://` — see
+      # DEPLOYMENT.md step 4. A Blueprint cannot rewrite a fromDatabase value in place.
+      - key: NIDRA_POSTGRES_URL
+        sync: false
+      # Set once the Vercel frontend has a URL — comma-separated for more than one
+      # (e.g. a preview deployment origin alongside production). See DEPLOYMENT.md
+      # step 7. Empty/unset means no browser origin is allowed to call this API.
+      - key: NIDRA_CORS_ORIGINS
+        sync: false
+
+  - type: worker
+    name: nidra-features
+    runtime: docker
+    region: oregon
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: python -m services.features
+    envVars:
+      - key: NIDRA_ENV
+        value: prod
+      - key: NIDRA_REDIS_URL
+        fromService:
+          name: nidra-redis
+          type: redis
+          property: connectionString
+      - key: NIDRA_POSTGRES_URL
+        sync: false
+
+  - type: worker
+    name: nidra-inference
+    runtime: docker
+    region: oregon
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: python -m services.inference
+    envVars:
+      - key: NIDRA_ENV
+        value: prod
+      - key: NIDRA_PREDICTOR_IMPL
+        value: nidra
+      - key: NIDRA_REDIS_URL
+        fromService:
+          name: nidra-redis
+          type: redis
+          property: connectionString
+      - key: NIDRA_POSTGRES_URL
+        sync: false
+
+  - type: worker
+    name: nidra-persister
+    runtime: docker
+    region: oregon
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: python -m services.persister
+    envVars:
+      - key: NIDRA_ENV
+        value: prod
+      - key: NIDRA_REDIS_URL
+        fromService:
+          name: nidra-redis
+          type: redis
+          property: connectionString
+      - key: NIDRA_POSTGRES_URL
+        sync: false
