@@ -35,7 +35,13 @@ ENV_OVERRIDES: dict[str, tuple[str, ...]] = {
     f"{ENV_PREFIX}SECRET_KEY": ("auth", "secret_key"),
     f"{ENV_PREFIX}UPLOAD_DIR": ("ingest", "upload_dir"),
     f"{ENV_PREFIX}ENV": ("env",),
+    f"{ENV_PREFIX}PREDICTOR_IMPL": ("predictor", "impl"),
 }
+
+#: Comma-separated list, not a single scalar, so it is handled separately from
+#: ENV_OVERRIDES: the frontend's deployed origin (e.g. a Vercel URL) is only known at
+#: deploy time and must not require editing config/default.yaml per environment.
+CORS_ORIGINS_ENV = f"{ENV_PREFIX}CORS_ORIGINS"
 
 #: The environment name that relaxes the API rate limits. Everything else — including an
 #: unset `NIDRA_ENV` under a config that does not say `dev` — gets the real ceilings.
@@ -79,6 +85,11 @@ def load_config(path: Path | str | None = None) -> dict[str, Any]:
         value = os.environ.get(env_name)
         if value:
             _set_in(cfg, target, value)
+
+    cors_origins = os.environ.get(CORS_ORIGINS_ENV)
+    if cors_origins:
+        origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
+        _set_in(cfg, ("api", "cors_origins"), origins)
 
     auth = cfg.setdefault("auth", {})
     if not auth.get("secret_key"):

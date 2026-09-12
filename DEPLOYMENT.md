@@ -1,150 +1,102 @@
-# Deploying NIDRA — backend via Docker + nginx, frontend via Vercel
+# Deploying NIDRA — backend on Render, frontend on Vercel
 
-Nothing in this file has been run yet — this is the step-by-step for taking the
-merged `main` branch (PR #4: backend + ML + frontend together) live. Two independent
-pieces: the backend (Docker Compose + nginx, on your own server) and the frontend
-(`web/`, on Vercel).
+A real, publicly reachable deployment: the backend (API + all four workers + Postgres +
+Redis) on [Render](https://render.com), the frontend (`web/`) on
+[Vercel](https://vercel.com). Both give you HTTPS on a public URL with no server to
+patch, no nginx config, and no certbot renewal cron — the thing the previous version of
+this file asked you to hand-roll on a bare Linux VM.
 
 ## 0. Prerequisites
 
-- A Linux server (any small VM — 2 vCPU/4GB RAM is enough; the ML inference workers
-  are the heaviest part) with a public IP and a domain/subdomain pointed at it
-  (e.g. `api.yourdomain.com`).
-- Docker + Docker Compose installed on that server.
-- A Vercel account (free tier is fine) linked to this GitHub repo, or the `vercel`
-  CLI installed locally.
-- The trained model weights (`model_seed_0.pt` .. `model_seed_4.pt`, the scaler
-  files, and the SHAP background) — these are gitignored and must be copied to the
-  server separately; they are not part of the repo.
+- A Render account (free to create; the `starter` plans this Blueprint uses are Render's
+  cheapest paid tier — Render's free tier does not support background workers, which
+  this backend needs four of).
+- A Vercel account (free tier is enough for the frontend).
+- This repo pushed to GitHub, with Render and Vercel both given access to it (each asks
+  you to authorize a GitHub App on first use — via their dashboards, not the CLI).
+- Nothing to install locally to *deploy*: both platforms build from your GitHub repo on
+  their own infrastructure. The `render` and `vercel` CLIs are optional, only useful for
+  managing an existing deployment from a terminal afterwards.
 
-## 1. Merge the PR and pull it on the server
+The trained model weights are no longer something you copy onto a server by hand: the
+5-seed ensemble + scaler (~6MB) now live in this repo under `deploy/model/` (see
+`deploy/model/README.md`) and are baked into the Docker image at build time. Skip
+straight to step 1.
 
-```bash
-# Review and merge https://github.com/clustercoder/nidra/pull/4 on GitHub first.
-# Then, on the server:
-git clone https://github.com/clustercoder/nidra.git
-cd nidra
-git checkout main
-git pull
-```
+## 1. Deploy the backend to Render via the Blueprint
 
-## 2. Place the trained weights
+This repo's `render.yaml` defines the whole backend as one Render Blueprint: a managed
+Postgres database, a managed Redis (Key Value) instance, the API service, and three
+background workers (`features`, `inference`, `persister`).
 
-`config/default.yaml`'s `predictor:` section (read by `services/inference/
-predictor_loader.py`) points at:
+1. In the Render dashboard: **New → Blueprint**, pick this repo, branch `main`.
+2. Render parses `render.yaml` and shows every resource it's about to create
+   (`nidra-postgres`, `nidra-redis`, `nidra-api`, `nidra-features`, `nidra-inference`,
+   `nidra-persister`). Click **Apply**.
+3. Render builds the Docker image once and reuses it for `nidra-api` and all three
+   workers (same `Dockerfile`, different `dockerCommand` — the same pattern
+   `docker-compose.yml`'s `x-app` anchor uses locally). The first build takes several
+   minutes (torch, tshark, scikit-learn, shap).
 
-```yaml
-predictor:
-  impl: stub            # change to `nidra` once weights are in place (step 4)
-  weights_dir: artifacts/weights
-  scaler_path: artifacts/scaler/robust_scaler.joblib
-```
+`predictor.impl` is switched on for you: `render.yaml` sets `NIDRA_PREDICTOR_IMPL=nidra`
+on `nidra-api` and `nidra-inference` (the two services that call the predictor), so the
+trained ensemble baked into the image is what actually serves forecasts from the first
+deploy — not the stub.
 
-Copy the real artifacts onto the server at those exact paths, repo-root-relative:
+### Why `ingest` isn't its own Render service
 
-```bash
-mkdir -p artifacts/weights artifacts/scaler
-scp -r <wherever the trained ml/artifacts/weights/*.pt and *_metadata.json live> \
-    user@server:/path/to/nidra/artifacts/weights/
-scp <ml/artifacts/scaler/robust_scaler.joblib, scaler_metadata.json, shap_background.npy> \
-    user@server:/path/to/nidra/artifacts/scaler/
-```
+`docker-compose.yml` runs `ingest` as a fifth container sharing a Docker volume with
+`api`: `api/ingest.py` writes an uploaded capture to disk, `services/ingest/worker.py`
+reads it back from that same path. Render web services and background workers are
+separate containers with no shared filesystem — a Render Disk attaches to exactly one
+service. Rather than route uploads through an external object store for what is, today,
+a single-instance deployment, `render.yaml` keeps `ingest` co-located inside the
+`nidra-api` service: `scripts/render_api_start.sh` starts `python -m services.ingest` in
+the background and runs `uvicorn` in the foreground (so Render's health check and
+`$PORT` binding land on the process it expects). A 1GB Render Disk is mounted on
+`nidra-api` at `/var/lib/nidra/uploads` so an in-progress upload survives a restart.
 
-(`ml/artifacts/` on the `MLimplement` branch has the Run 3 production checkpoint —
-5 seeds, `logvar_max=3.0` — the current best-supported ensemble; see
-`ml/REAL_DATA_RESULTS.md` if you want to ship the `logvar_max=1.5` single-model
-checkpoint instead, though the ensemble is the one with the stronger validated
-numbers.)
+`features`, `inference`, and `persister` don't touch the upload directory — only
+Redis, Postgres, and the model weights already baked into the image — so they stay
+separate, independently scalable Render background workers.
 
-## 3. Configure secrets
+## 2. Finish the two secrets Render can't fill in for you
 
-```bash
-cp .env.example .env
-```
+Two env vars on `render.yaml` are marked `sync: false` — Render creates the field but
+leaves it blank, because their value isn't knowable until other things exist:
 
-Edit `.env` and set a real `NIDRA_SECRET_KEY` (anything long and random —
-`openssl rand -hex 32` works). Leave `NIDRA_REDIS_URL`/`NIDRA_POSTGRES_URL` as the
-defaults; Docker Compose's internal network resolves `redis`/`postgres` by
-hostname for the app containers regardless of what's in `.env` (that file matters
-for running things *outside* Compose, like a one-off script).
+**`NIDRA_POSTGRES_URL`** (on `nidra-api`, `nidra-features`, `nidra-inference`,
+`nidra-persister`): open `nidra-postgres` in the Render dashboard, copy the **Internal
+Database URL**, and change its scheme from `postgresql://` to `postgresql+asyncpg://`
+(the app's async engine needs the driver named explicitly; Render's own URL doesn't
+know your app is async). Paste the result into each of the four services' environment
+tab. Internal URLs only work between services in the same Render region — that's why
+every service in `render.yaml` pins `region: oregon`.
 
-## 4. Switch the predictor on
+**`NIDRA_CORS_ORIGINS`** (on `nidra-api` only): leave this blank until step 4, once you
+know the Vercel URL, then come back and set it — see step 4.
 
-Edit `config/default.yaml`:
+Redis needs no manual step: `render.yaml` wires `NIDRA_REDIS_URL` via `fromService`
+automatically, and Render's Redis connection string already carries the right scheme.
 
-```yaml
-predictor:
-  impl: nidra   # was: stub
-```
+`NIDRA_SECRET_KEY` also needs no manual step (`generateValue: true` — Render generates
+a random one on first deploy and keeps it stable across redeploys).
 
-## 5. Bring up the backend
+Each service **Manual Deploy** after you save its env vars.
 
-```bash
-docker compose up -d
-```
+## 3. Apply migrations
 
-This starts Postgres, Redis, the API, and all four workers (ingest, features,
-inference, persister) — not `web` (that's Vercel's job). Apply migrations if this
-is a fresh database:
-
-```bash
-docker compose exec api alembic upgrade head
-```
-
-Verify:
+Fresh database, so the schema doesn't exist yet. Open `nidra-api`'s **Shell** tab in the
+Render dashboard (a terminal inside the running container) and run:
 
 ```bash
-curl http://localhost:8000/api/v1/health
+alembic upgrade head
 ```
 
-## 6. Put nginx in front of it (TLS + reverse proxy)
+## 4. Deploy the frontend to Vercel
 
-Install nginx and certbot on the server, then:
-
-```bash
-sudo apt-get update && sudo apt-get install -y nginx certbot python3-certbot-nginx
-```
-
-Create `/etc/nginx/sites-available/nidra-api`:
-
-```nginx
-server {
-    listen 80;
-    server_name api.yourdomain.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # WebSocket route (api/ws.py) needs the upgrade headers explicitly —
-    # the generic location block above does not add them.
-    location /api/v1/ws/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_read_timeout 3600s;   # WS connections are long-lived
-    }
-}
-```
-
-```bash
-sudo ln -s /etc/nginx/sites-available/nidra-api /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d api.yourdomain.com   # issues + auto-configures TLS
-```
-
-Verify from outside the server: `curl https://api.yourdomain.com/api/v1/health`.
-
-## 7. Deploy the frontend to Vercel
-
-From the `web/` directory (or point Vercel's dashboard import at this repo with
-`web/` as the root directory):
+From the `web/` directory (or point Vercel's dashboard import at this repo with `web/`
+as the root directory):
 
 ```bash
 cd web
@@ -152,7 +104,7 @@ npm install -g vercel   # if not already installed
 vercel login
 vercel link             # links this directory to a Vercel project
 vercel env add NEXT_PUBLIC_API_URL production
-# paste: https://api.yourdomain.com
+# paste nidra-api's Render URL, e.g. https://nidra-api.onrender.com
 vercel --prod
 ```
 
@@ -161,26 +113,50 @@ If importing via the Vercel dashboard instead: set **Root Directory** to `web`,
 `NEXT_PUBLIC_API_URL` environment variable under Project Settings → Environment
 Variables before the first production deploy.
 
-## 8. Point DNS
+Once Vercel gives you the production URL (`https://<project>.vercel.app`, or a custom
+domain if you attach one under Project Settings → Domains), go back to `nidra-api` in
+Render and set the `NIDRA_CORS_ORIGINS` env var left blank in step 2 to that exact
+origin (scheme + host, no trailing slash — e.g. `https://nidra.vercel.app`; comma-
+separate more than one, such as a preview-deployment origin alongside production).
+Manual Deploy `nidra-api` again to pick it up. Skipping this step doesn't break the
+API — it means every browser request from the frontend is silently blocked by CORS
+before it reaches a route, while `curl`/Postman keep working, which is a confusing
+failure mode to debug blind.
 
-- `api.yourdomain.com` → the server's IP (A record) — this is what nginx terminates
-  TLS for and proxies to the backend.
-- Your main domain / `www` → Vercel (Vercel's dashboard gives you the exact CNAME/A
-  record once the project is linked to a custom domain).
+## 5. Smoke-test end to end
 
-## 9. Smoke-test end to end
+- `https://<nidra-api>.onrender.com/health` returns `{"status": "ok", ...}`.
+- `https://<your-vercel-domain>` loads the frontend.
+- The frontend's forecast/demo views successfully call the Render API (check the
+  browser network tab for CORS errors if step 4's origin doesn't match exactly).
+- The frontend's live console view receives forecasts over the WebSocket route
+  (`wss://<nidra-api>.onrender.com/api/v1/ws/<host>`) — Render terminates TLS and
+  proxies WebSocket upgrades on its own, no nginx config needed.
 
-- `https://yourdomain.com` loads the frontend.
-- The frontend's forecast/demo views successfully call `https://api.yourdomain.com`
-  (check the browser network tab for CORS or connection errors — `api/main.py`'s
-  CORS config may need `https://yourdomain.com` added to its allowed origins if it
-  isn't already wildcard/permissive).
-- `wscat -c wss://api.yourdomain.com/api/v1/ws/<host>` (or the frontend's live
-  console view) receives forecasts over the WebSocket route.
+## Notes on Render's free/starter tier
+
+- A `starter`-plan web service and background workers do not spin down when idle (that
+  behavior is specific to Render's *free* web service tier, not used here — the free
+  tier also doesn't support background workers at all, which this backend needs four
+  of). If cost matters more than always-on latency, some workers (e.g. `persister`) can
+  be scaled to `plan: free` in `render.yaml` individually, at the cost of a cold-start
+  delay after idle periods.
+- Scale `inference` horizontally the same way `docker-compose.yml`'s comment describes
+  locally: increase its instance count in the Render dashboard (Settings → Scaling).
+  It's stateless — sequence buffers live in Redis — so this is safe with no code change.
 
 ## Rollback
 
-Nothing here is destructive to data: `docker compose down` stops the backend
-without touching `pgdata` (a named volume); `docker compose up -d` brings it back.
-To roll back to the stub predictor without touching data, flip
-`predictor.impl` back to `stub` and `docker compose restart inference api`.
+- Render keeps every previous deploy; **Manual Deploy → Rollback to this deploy** on any
+  service reverts it without touching Postgres/Redis data.
+- To roll back to the stub predictor without a full rollback, set `NIDRA_PREDICTOR_IMPL`
+  back to `stub` on `nidra-api` and `nidra-inference` and redeploy both.
+- Nothing here is destructive to data: Render's managed Postgres and Redis persist
+  independently of the app services' deploy history.
+
+## Local development is unaffected
+
+`docker compose up -d` still runs the whole stack against `config/default.yaml`'s
+`predictor.impl: stub` default exactly as before — none of the above changes what a
+local `make demo` / `make e2e` does. `NIDRA_PREDICTOR_IMPL`, `NIDRA_CORS_ORIGINS`, and
+`deploy/model/` are additive: unset, they're a no-op locally.
