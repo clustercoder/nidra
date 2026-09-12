@@ -31,6 +31,7 @@ from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError, version
 
 from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from redis.exceptions import RedisError
 
@@ -46,6 +47,7 @@ from api.metrics import (
 )
 from api.ratelimit import RateLimiter, rate_limit_settings
 from nidra_common.bus import create_redis
+from nidra_common.config import get_config
 from nidra_common.db import dispose_engine
 from services.inference.predictor_loader import load_predictor
 
@@ -124,6 +126,21 @@ def create_app() -> FastAPI:
     app.include_router(forecasts.router)
     app.include_router(explain.router)
     app.include_router(ws.router)
+
+    # Empty by default (see config/default.yaml's `api.cors_origins` comment) — a
+    # same-origin deploy or the test suite needs no CORS headers at all. Set this to
+    # the real frontend origin(s) once the frontend is served from a different origin
+    # than this API (e.g. Vercel), or every browser fetch/XHR call will be silently
+    # blocked by the browser itself before it ever reaches a route.
+    cors_origins = list(get_config().get("api", {}).get("cors_origins", []))
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     # Registered before the counter, so it runs *after* it: Starlette applies middleware
     # in reverse. A throttled request is still a request the process served, and

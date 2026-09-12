@@ -112,6 +112,12 @@ api:
   # served verbatim; an empty directory answers "pending" rather than a fabricated
   # number. Relative paths resolve against the repo root, as everywhere else here.
   metrics_dir: artifacts/metrics
+  # Browser origins allowed to call this API cross-origin (e.g. the Vercel-hosted
+  # frontend's domain, which is a different origin from wherever this API is served).
+  # Empty by default: same-origin tooling (tests, curl, a same-domain deploy) needs no
+  # CORS headers at all, and a wildcard-by-default API is not a safe thing to ship.
+  # Set this to the real frontend origin(s) before deploying — see DEPLOYMENT.md.
+  cors_origins: []
 
 streams:
   raw_events: raw_events
