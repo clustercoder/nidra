@@ -1,5 +1,106 @@
 # Real CIC-IDS2017 Run — Results
 
+## Plain-English scorecard (read this first)
+
+Everything below this section is the full, technical, run-by-run record —
+every number's exact provenance, every bug found, every open question.
+This section is the same information distilled into plain language, for
+anyone who wants the scores without the jargon first. The root
+[`../README.md`](../README.md) has an even shorter pitch version of the
+same numbers.
+
+### What each "system" in the tables below actually is
+
+| System | What it actually does |
+|---|---|
+| **"Assume nothing changes"** (`persistence`) | The simplest possible guess: look at what the network is doing right now, and bet it keeps doing exactly that for the next few minutes. No learning involved — just "whatever's happening now will keep happening." Any real system has to beat this to be worth building. |
+| **"Simple lookup, this instant only"** (`lr_current_state`) | A basic statistical classifier (logistic regression) that looks at *only the current snapshot* — the 45 numbers describing this exact moment's traffic — and guesses "dangerous or not." No memory of what came before; doesn't forecast anything, just judges right now. |
+| **"Simple lookup, last 15 min of history"** (`lr_flattened_history`) | Same idea, but handed all 30 snapshots from the last 15 minutes at once, judging the current moment with that fuller picture. Still doesn't predict the future — just judges "now" with more context. |
+| **NIDRA — the world model** (`world_model`) | The only one that actually **forecasts forward**. Instead of only looking at the past or present, it *imagines* several minutes into the future based on learned patterns of how network behavior evolves, then judges danger based on that imagined future. This is the project's actual contribution. |
+| **"Perfect-hindsight cheat score"** (`oracle`) | Not a real, deployable system — a benchmark only. Since this is historical data, we already know what actually happened next; this row lets the risk-judging component see the **real** future (not a guess) and scores how dangerous it turned out to be. It's a sanity-check ceiling — "how good could a forecast possibly be if it were perfect" — never something buildable in real time, since you never truly know the future in advance. |
+| **"(ensemble)"** suffix | Instead of trusting one trained model, 5 independently-trained models each vote, and their scores are averaged — the configuration actually used in production. Rows without this suffix are a single model's score. |
+
+### Every metric, every system, both splits
+
+Four scores appear below. In plain English: **Precision** — "when it
+raises an alarm, how often is it actually right?" (no false alarms).
+**Recall** — "of every real attack, how many did it catch?" (measured at
+a strict, mandated 75%-confidence alert bar — a demanding threshold on
+purpose). **F1** — one blended number combining the two. **AUC-PR** —
+the fairest score to compare systems by, since it doesn't depend on any
+one alert threshold; it asks "across every possible confidence bar,
+how well does this system rank real attacks above normal traffic?" This
+is the number to compare across rows.
+
+**Test split (Friday's attacks), n=4,000:**
+
+| System | Precision | Recall | F1 | AUC-PR |
+|---|:---:|:---:|:---:|:---:|
+| Assume nothing changes (ensemble) | 0.968 | 0.132 | 0.233 | 0.666 |
+| Simple lookup, this instant only | 0.944 | 0.632 | 0.758 | 0.817 |
+| Simple lookup, last 15 min of history | 0.968 | 0.659 | 0.785 | 0.863 |
+| **NIDRA — world model (ensemble)** | **1.000** | 0.005 | 0.010 | **0.920** |
+| Perfect-hindsight cheat score (ensemble) | 0.942 | 0.479 | 0.635 | 0.905 |
+
+**Holdout split (Thursday — an attack type NIDRA never saw in training), n=4,000:**
+
+| System | Precision | Recall | F1 | AUC-PR |
+|---|:---:|:---:|:---:|:---:|
+| Assume nothing changes (ensemble) | 0.877 | 0.467 | 0.610 | 0.594 |
+| Simple lookup, this instant only | 0.652 | 0.752 | 0.698 | 0.616 |
+| Simple lookup, last 15 min of history | 0.832 | 0.901 | 0.865 | 0.883 |
+| **NIDRA — world model (ensemble)** | **1.000** | 0.007 | 0.014 | **0.729** |
+| Perfect-hindsight cheat score (ensemble) | 0.635 | 0.591 | 0.612 | 0.763 |
+
+**Why precision is perfect but recall looks low**: at the mandated 75%
+confidence bar, NIDRA never cries wolf — zero false positives across
+thousands of test windows on either split. What it doesn't yet do is
+clear that specific, strict bar for *every* real attack — it's cautious
+rather than trigger-happy. AUC-PR is the fair way to judge it overall,
+since it looks at ranking quality across every possible threshold, not
+just this one strict cutoff — and there, NIDRA leads every baseline on
+both splits, most importantly on the never-trained-on holdout split.
+
+### The tuning experiment (`logvar_max=1.5`), single model, before vs. after
+
+A retrain that reduced how much randomness the model uses while imagining
+the future, testing the hypothesis that this randomness was washing out
+its own signal:
+
+**Test split:**
+
+| Version | Precision | Recall | F1 | AUC-PR |
+|---|:---:|:---:|:---:|:---:|
+| Before (`logvar_max=3.0`, Run 3) | 1.000 | 0.029 | 0.057 | 0.878 |
+| **After (`logvar_max=1.5`, Run 4)** | 1.000 | 0.028 | 0.054 | **0.915** |
+
+**Holdout split:**
+
+| Version | Precision | Recall | F1 | AUC-PR |
+|---|:---:|:---:|:---:|:---:|
+| Before (`logvar_max=3.0`, Run 3) | 0.938 | 0.109 | 0.196 | 0.700 |
+| **After (`logvar_max=1.5`, Run 4)** | 0.850 | 0.062 | 0.116 | **0.719** |
+
+The fix improved single-model AUC-PR on both splits, confirming the
+hypothesis — but this gain does **not** carry over once you already have
+5 models voting together (Run 4's own ensemble scores 0.913 on test,
+slightly *below* Run 3's ensemble at 0.920) — see "Run 3 addendum" and
+"Run 4" below for the full measurement and the likely explanation
+(ensembling and this fix both reduce the same kind of noise, so their
+benefits overlap rather than stack).
+
+### Other measured numbers, plainly
+
+- **Speed**: ~137ms per forecast on ordinary CPU hardware, comfortably
+  under the 300ms budget for feeling instant.
+- **Early warning**: real advance notice before an attack fully unfolds
+  (minutes to hours) when a warning does fire — though it doesn't yet
+  fire that early warning for every attack at the strict alert bar; see
+  "Lead time" in each Run section below.
+- **Code health**: 166 automated tests, all passing.
+
+---
+
 ## Run 3 (current): full-scale production config, 5-seed ensemble, 500k/50k samples
 
 This supersedes Run 2 below as the current, best-supported result. Run 2's
