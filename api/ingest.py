@@ -215,7 +215,7 @@ async def _store_upload(file: UploadFile, destination: Path, cap_bytes: int) -> 
                 written += len(chunk)
                 if written > cap_bytes:
                     raise _reject(
-                        status.HTTP_413_CONTENT_TOO_LARGE,
+                        status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                         f"upload exceeds the {cap_bytes // (1024 * 1024)} MB limit",
                     )
                 if len(head) < SNIFF_BYTES:
