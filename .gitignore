@@ -237,3 +237,29 @@ artifacts/*
 # not a repository deliverable. See REAL_DATA_RESULTS.md for how to obtain it.
 cicids2017/
 *.parquet
+# Raw captures and derived parquet.
+data/
+
+# ---------------------------------------------------------------- frontend --
+# Donor clones are read-only reference material harvested into tokens/docs.
+# They are large, third-party, and never built in — the harvest is the artifact.
+donors/
+
+web/node_modules/
+web/.next/
+web/lib/types.gen.ts
+web/.env.local
+
+# The Python packaging rule `lib/` above matches any directory named `lib`,
+# including the frontend's own source directory. Un-ignore it explicitly.
+!web/src/lib/
+!web/src/lib/**
+.gstack/
+deck/build_deck.py
+deck/charts
+deck/diagrams
+
+# macOS / local build noise
+.DS_Store
+deck/node_modules/
+deck/render/
