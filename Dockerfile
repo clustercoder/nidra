@@ -19,6 +19,16 @@ RUN echo "wireshark-common wireshark-common/install-setuid boolean false" | debc
 WORKDIR /app
 
 COPY pyproject.toml README.md ./
+
+# CLAUDE.md: "CPU is the target. Do not add CUDA-only paths." PyPI's default Linux torch
+# wheel is the CUDA build and drags in several GB of nvidia-* packages (cudnn alone is
+# ~650MB) that a CPU-only container never uses — the actual reason this image used to
+# take 1-2 hours and fail on any network hiccup, not a broken build. Installed from
+# PyTorch's own CPU index, in its own layer so it's cached across every source-only
+# rebuild below and only re-downloads if pyproject.toml's torch constraint changes.
+RUN pip install --upgrade pip \
+    && pip install torch --index-url https://download.pytorch.org/whl/cpu
+
 COPY config/ ./config/
 COPY nidra_common/ ./nidra_common/
 COPY nidra/ ./nidra/
@@ -34,7 +44,9 @@ COPY migrations/ ./migrations/
 # mounts the repo-root `artifacts/` dir over this for iterating on unreleased weights.
 COPY deploy/model/ ./deploy/model/
 
-RUN pip install --upgrade pip && pip install -e "." \
+# torch is already installed (above) and satisfies "torch>=2.4" below, so this does not
+# re-resolve or replace it with the CUDA build.
+RUN pip install -e "." \
     && chmod +x scripts/render_api_start.sh
 
 RUN mkdir -p /var/lib/nidra/uploads /app/artifacts

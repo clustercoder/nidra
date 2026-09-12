@@ -166,16 +166,6 @@ export function DemoConsole({
 
   return (
     <div className="bg-console-bg text-console-text min-h-screen">
-      <aside
-        role="note"
-        aria-label="Demo notice"
-        title={sourceSummary}
-        className="border-threshold-lit/25 bg-threshold-lit/10 text-console-text sticky top-0 z-50 border-b px-4 py-1.5 text-center text-[11px]"
-      >
-        Demo — synthesised replay shaped on CIC-IDS2017 Wednesday, driven through
-        the stub pipeline. No trained model; values are illustrative.
-      </aside>
-
       <header className="border-console-line bg-console-surface/80 flex h-14 shrink-0 items-center gap-3 border-b px-5 backdrop-blur">
         <Link href="/" className="flex items-center gap-2.5">
           <NidraMark className="text-observed-lit size-7" />
