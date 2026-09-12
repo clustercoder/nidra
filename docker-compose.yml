@@ -30,6 +30,12 @@ x-app: &app
     NIDRA_POSTGRES_URL: postgresql+asyncpg://nidra:nidra@postgres:5432/nidra
     NIDRA_SECRET_KEY: ${NIDRA_SECRET_KEY:-dev-insecure-secret-change-me}
     NIDRA_UPLOAD_DIR: /var/lib/nidra/uploads
+    # Both default to a no-op (stub predictor, no CORS headers) so plain `docker compose
+    # up` is unaffected; set them in the shell or `.env` to switch on the trained
+    # ensemble / allow a deployed frontend's origin without editing config/default.yaml
+    # — see DEPLOYMENT.md.
+    NIDRA_PREDICTOR_IMPL: ${NIDRA_PREDICTOR_IMPL:-stub}
+    NIDRA_CORS_ORIGINS: ${NIDRA_CORS_ORIGINS:-}
     # The compose stack is the deployment, so the API rate limits apply here in full
     # (100 req/min, 5 uploads/hour). Set NIDRA_ENV=dev to relax them while developing.
     NIDRA_ENV: ${NIDRA_ENV:-prod}

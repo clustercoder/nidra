@@ -1,99 +1,81 @@
-# Deploying NIDRA — backend on Render, frontend on Vercel
+# Deploying NIDRA — free: self-hosted backend via Cloudflare Tunnel, frontend on Vercel
 
-A real, publicly reachable deployment: the backend (API + all four workers + Postgres +
-Redis) on [Render](https://render.com), the frontend (`web/`) on
-[Vercel](https://vercel.com). Both give you HTTPS on a public URL with no server to
-patch, no nginx config, and no certbot renewal cron — the thing the previous version of
-this file asked you to hand-roll on a bare Linux VM.
+**If Render (or Fly.io, Railway, ...) just asked you for a card:** that's expected. This
+backend is five long-running processes plus Postgres and Redis — nothing about that is
+free on a managed PaaS in 2026; even Render's Blueprint provisions billed resources
+(managed Postgres, managed Redis, background workers) the moment it applies, which is
+why it asks up front. `render.yaml` and the Render path are still in this repo and still
+documented below, but as an *optional, paid* alternative — not the primary path.
+
+The primary path costs nothing and asks for no card anywhere: run the existing
+`docker-compose.yml` stack on a machine you already control (this Mac, or the Kali VM
+under UTM — anywhere Docker runs, for as long as you want it up), and expose it to the
+internet with [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/),
+which Cloudflare made free with no usage limits and no credit card in July 2026. It also
+solves the actual problem with the old "Linux VM + nginx + certbot" approach without a
+tunnel: a home machine (or a VM on one) usually has no public IP and sits behind NAT —
+`cloudflared` opens an *outbound* connection to Cloudflare's edge, so nothing needs to
+be port-forwarded and no static IP or domain is required to get a real `https://` URL.
 
 ## 0. Prerequisites
 
-- A Render account (free to create; the `starter` plans this Blueprint uses are Render's
-  cheapest paid tier — Render's free tier does not support background workers, which
-  this backend needs four of).
-- A Vercel account (free tier is enough for the frontend).
-- This repo pushed to GitHub, with Render and Vercel both given access to it (each asks
-  you to authorize a GitHub App on first use — via their dashboards, not the CLI).
-- Nothing to install locally to *deploy*: both platforms build from your GitHub repo on
-  their own infrastructure. The `render` and `vercel` CLIs are optional, only useful for
-  managing an existing deployment from a terminal afterwards.
+- Docker + Docker Compose, already working in this repo (`docker compose ps` should show
+  `postgres`/`redis` healthy if you've been following along).
+- `cloudflared` — installed already in this environment (`brew install cloudflared`
+  elsewhere: no account, no card, just a binary).
+- A Vercel account for the frontend (Hobby tier, free, no card).
+- Nothing else. No cloud account is required for the backend at all with the quick-tunnel
+  option below.
 
-The trained model weights are no longer something you copy onto a server by hand: the
-5-seed ensemble + scaler (~6MB) now live in this repo under `deploy/model/` (see
-`deploy/model/README.md`) and are baked into the Docker image at build time. Skip
-straight to step 1.
-
-## 1. Deploy the backend to Render via the Blueprint
-
-This repo's `render.yaml` defines the whole backend as one Render Blueprint: a managed
-Postgres database, a managed Redis (Key Value) instance, the API service, and three
-background workers (`features`, `inference`, `persister`).
-
-1. In the Render dashboard: **New → Blueprint**, pick this repo, branch `main`.
-2. Render parses `render.yaml` and shows every resource it's about to create
-   (`nidra-postgres`, `nidra-redis`, `nidra-api`, `nidra-features`, `nidra-inference`,
-   `nidra-persister`). Click **Apply**.
-3. Render builds the Docker image once and reuses it for `nidra-api` and all three
-   workers (same `Dockerfile`, different `dockerCommand` — the same pattern
-   `docker-compose.yml`'s `x-app` anchor uses locally). The first build takes several
-   minutes (torch, tshark, scikit-learn, shap).
-
-`predictor.impl` is switched on for you: `render.yaml` sets `NIDRA_PREDICTOR_IMPL=nidra`
-on `nidra-api` and `nidra-inference` (the two services that call the predictor), so the
-trained ensemble baked into the image is what actually serves forecasts from the first
-deploy — not the stub.
-
-### Why `ingest` isn't its own Render service
-
-`docker-compose.yml` runs `ingest` as a fifth container sharing a Docker volume with
-`api`: `api/ingest.py` writes an uploaded capture to disk, `services/ingest/worker.py`
-reads it back from that same path. Render web services and background workers are
-separate containers with no shared filesystem — a Render Disk attaches to exactly one
-service. Rather than route uploads through an external object store for what is, today,
-a single-instance deployment, `render.yaml` keeps `ingest` co-located inside the
-`nidra-api` service: `scripts/render_api_start.sh` starts `python -m services.ingest` in
-the background and runs `uvicorn` in the foreground (so Render's health check and
-`$PORT` binding land on the process it expects). A 1GB Render Disk is mounted on
-`nidra-api` at `/var/lib/nidra/uploads` so an in-progress upload survives a restart.
-
-`features`, `inference`, and `persister` don't touch the upload directory — only
-Redis, Postgres, and the model weights already baked into the image — so they stay
-separate, independently scalable Render background workers.
-
-## 2. Finish the two secrets Render can't fill in for you
-
-Two env vars on `render.yaml` are marked `sync: false` — Render creates the field but
-leaves it blank, because their value isn't knowable until other things exist:
-
-**`NIDRA_POSTGRES_URL`** (on `nidra-api`, `nidra-features`, `nidra-inference`,
-`nidra-persister`): open `nidra-postgres` in the Render dashboard, copy the **Internal
-Database URL**, and change its scheme from `postgresql://` to `postgresql+asyncpg://`
-(the app's async engine needs the driver named explicitly; Render's own URL doesn't
-know your app is async). Paste the result into each of the four services' environment
-tab. Internal URLs only work between services in the same Render region — that's why
-every service in `render.yaml` pins `region: oregon`.
-
-**`NIDRA_CORS_ORIGINS`** (on `nidra-api` only): leave this blank until step 4, once you
-know the Vercel URL, then come back and set it — see step 4.
-
-Redis needs no manual step: `render.yaml` wires `NIDRA_REDIS_URL` via `fromService`
-automatically, and Render's Redis connection string already carries the right scheme.
-
-`NIDRA_SECRET_KEY` also needs no manual step (`generateValue: true` — Render generates
-a random one on first deploy and keeps it stable across redeploys).
-
-Each service **Manual Deploy** after you save its env vars.
-
-## 3. Apply migrations
-
-Fresh database, so the schema doesn't exist yet. Open `nidra-api`'s **Shell** tab in the
-Render dashboard (a terminal inside the running container) and run:
+## 1. Bring up the backend
 
 ```bash
-alembic upgrade head
+docker compose up -d --build
+docker compose exec api alembic upgrade head
+curl http://localhost:8000/health   # {"status": "ok", ...}
 ```
 
-## 4. Deploy the frontend to Vercel
+To actually serve real forecasts instead of the stub, switch the predictor on — the
+trained 5-seed ensemble is already baked into the image (`deploy/model/`, see
+`deploy/model/README.md`), so this is one env var, not a file copy:
+
+```bash
+NIDRA_PREDICTOR_IMPL=nidra docker compose up -d --build api inference
+```
+
+Add `NIDRA_PREDICTOR_IMPL=nidra` to `.env` instead if you want this to survive future
+plain `docker compose up` calls without re-exporting it each time.
+
+## 2. Expose it publicly with Cloudflare Tunnel
+
+**Quickest — no Cloudflare account, no domain, gives you a URL right now:**
+
+```bash
+cloudflared tunnel --url http://localhost:8000
+```
+
+This prints a `https://<random-words>.trycloudflare.com` URL within a few seconds.
+Traffic to it — including WebSocket upgrades on `/api/v1/ws/` — is proxied straight to
+your local `api` container. Leave this process running (it's the tunnel); closing it
+tears the URL down. Good enough for a demo; the URL is different every time you start
+it, so don't hardcode it anywhere durable.
+
+**Stable — a URL that survives restarts, needs a free Cloudflare account + a domain on
+Cloudflare's nameservers** (a domain you already own, or a free one from any registrar
+pointed at Cloudflare's nameservers — Cloudflare itself doesn't sell domains, just DNS):
+
+```bash
+cloudflared tunnel login                       # opens a browser, authorizes once
+cloudflared tunnel create nidra-api
+cloudflared tunnel route dns nidra-api api.yourdomain.com
+cloudflared tunnel run --url http://localhost:8000 nidra-api
+```
+
+Run the last command under something that keeps it alive across reboots — `pm2`,
+a `launchd`/`systemd` unit, or simply a `screen`/`tmux` session on the Kali VM if this
+is a short-lived hackathon demo rather than a long-running service.
+
+## 3. Deploy the frontend to Vercel
 
 From the `web/` directory (or point Vercel's dashboard import at this repo with `web/`
 as the root directory):
@@ -104,7 +86,7 @@ npm install -g vercel   # if not already installed
 vercel login
 vercel link             # links this directory to a Vercel project
 vercel env add NEXT_PUBLIC_API_URL production
-# paste nidra-api's Render URL, e.g. https://nidra-api.onrender.com
+# paste the Cloudflare Tunnel URL from step 2, e.g. https://random-words.trycloudflare.com
 vercel --prod
 ```
 
@@ -113,46 +95,66 @@ If importing via the Vercel dashboard instead: set **Root Directory** to `web`,
 `NEXT_PUBLIC_API_URL` environment variable under Project Settings → Environment
 Variables before the first production deploy.
 
+## 4. Turn on CORS for the Vercel origin
+
 Once Vercel gives you the production URL (`https://<project>.vercel.app`, or a custom
-domain if you attach one under Project Settings → Domains), go back to `nidra-api` in
-Render and set the `NIDRA_CORS_ORIGINS` env var left blank in step 2 to that exact
-origin (scheme + host, no trailing slash — e.g. `https://nidra.vercel.app`; comma-
-separate more than one, such as a preview-deployment origin alongside production).
-Manual Deploy `nidra-api` again to pick it up. Skipping this step doesn't break the
-API — it means every browser request from the frontend is silently blocked by CORS
-before it reaches a route, while `curl`/Postman keep working, which is a confusing
-failure mode to debug blind.
+domain under Project Settings → Domains):
+
+```bash
+NIDRA_CORS_ORIGINS=https://<project>.vercel.app docker compose up -d api
+```
+
+(comma-separate more than one origin, e.g. a preview-deployment URL alongside
+production). Skipping this doesn't break the API — it means every browser request from
+the frontend is silently blocked by CORS before it reaches a route, while `curl`/Postman
+keep working, which is a confusing failure mode to debug blind.
 
 ## 5. Smoke-test end to end
 
-- `https://<nidra-api>.onrender.com/health` returns `{"status": "ok", ...}`.
+- The Cloudflare Tunnel URL's `/health` returns `{"status": "ok", ...}`.
 - `https://<your-vercel-domain>` loads the frontend.
-- The frontend's forecast/demo views successfully call the Render API (check the
+- The frontend's forecast/demo views successfully call the tunnel URL (check the
   browser network tab for CORS errors if step 4's origin doesn't match exactly).
-- The frontend's live console view receives forecasts over the WebSocket route
-  (`wss://<nidra-api>.onrender.com/api/v1/ws/<host>`) — Render terminates TLS and
-  proxies WebSocket upgrades on its own, no nginx config needed.
-
-## Notes on Render's free/starter tier
-
-- A `starter`-plan web service and background workers do not spin down when idle (that
-  behavior is specific to Render's *free* web service tier, not used here — the free
-  tier also doesn't support background workers at all, which this backend needs four
-  of). If cost matters more than always-on latency, some workers (e.g. `persister`) can
-  be scaled to `plan: free` in `render.yaml` individually, at the cost of a cold-start
-  delay after idle periods.
-- Scale `inference` horizontally the same way `docker-compose.yml`'s comment describes
-  locally: increase its instance count in the Render dashboard (Settings → Scaling).
-  It's stateless — sequence buffers live in Redis — so this is safe with no code change.
+- The frontend's live console view receives forecasts over the WebSocket route —
+  Cloudflare proxies the upgrade automatically, no nginx config needed.
 
 ## Rollback
 
-- Render keeps every previous deploy; **Manual Deploy → Rollback to this deploy** on any
-  service reverts it without touching Postgres/Redis data.
-- To roll back to the stub predictor without a full rollback, set `NIDRA_PREDICTOR_IMPL`
-  back to `stub` on `nidra-api` and `nidra-inference` and redeploy both.
-- Nothing here is destructive to data: Render's managed Postgres and Redis persist
-  independently of the app services' deploy history.
+Nothing here is destructive to data: `docker compose down` stops the backend without
+touching `pgdata` (a named volume); `docker compose up -d` brings it back. To roll back
+to the stub predictor, drop `NIDRA_PREDICTOR_IMPL` (or set it to `stub`) and
+`docker compose up -d api inference` again.
+
+---
+
+## Optional, paid alternative: Render
+
+`render.yaml` in this repo still defines the same backend as a Render Blueprint —
+managed Postgres, managed Redis, the API service, and three background workers — for
+anyone who'd rather not keep a personal machine running and doesn't mind linking a card
+(Render's own free tier doesn't support background workers or managed Redis at all,
+which is why applying this Blueprint prompts for billing).
+
+1. In the Render dashboard: **New → Blueprint**, pick this repo, branch `main`. Render
+   parses `render.yaml` and shows every resource it's about to create — Apply.
+2. Two env vars are marked `sync: false` because Render can't fill them in for you:
+   - **`NIDRA_POSTGRES_URL`** (on all four app services): copy `nidra-postgres`'s
+     Internal Database URL and change its scheme from `postgresql://` to
+     `postgresql+asyncpg://` (the app's async engine needs the driver named explicitly).
+   - **`NIDRA_CORS_ORIGINS`** (on `nidra-api` only): set once you have the Vercel URL
+     (same value as step 4 above).
+   Manual Deploy each service after saving its env vars.
+3. Open `nidra-api`'s **Shell** tab and run `alembic upgrade head` against the fresh
+   database.
+4. Point `NEXT_PUBLIC_API_URL` (Vercel) at `nidra-api`'s `.onrender.com` URL instead of
+   a Cloudflare Tunnel URL — everything else in steps 3–5 above is identical.
+
+`ingest` is co-located inside `nidra-api` here (`scripts/render_api_start.sh`) rather
+than a separate service: `api/ingest.py` writes an uploaded capture to disk and
+`services/ingest/worker.py` reads it back from the same path, which requires a shared
+filesystem that Render's separate services don't have (a Render Disk attaches to
+exactly one service) — self-hosting via docker compose doesn't have this problem since
+every container already shares the host's Docker volumes.
 
 ## Local development is unaffected
 
