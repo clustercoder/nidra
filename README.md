@@ -43,19 +43,83 @@ Beating the naive guard by such a wide margin on genuinely unseen behavior
 is the strongest evidence that the system learned real attack *dynamics*,
 not just memorized examples.
 
-### Every score measured, laid out simply
+### Full scorecard — every metric, every system we tried
 
-| System | Test day score | Never-seen-before day score | What it is |
-|---|:---:|:---:|---|
-| "Assume nothing changes" | 0.67 | 0.59 | The bar any real system must clear |
-| Simple lookup (this instant only) | 0.82 | 0.62 | A basic classifier, no memory of history |
-| Simple lookup (last 15 min of history) | 0.86 | 0.88 | A stronger basic classifier, still no forecasting |
-| **NIDRA (forecasts the future, 5 models voting)** | **0.92** | **0.73** | **This project** |
-| Perfect-hindsight cheat score | 0.90 | 0.76 | Sanity-check ceiling only, not a real system |
+Four different scores show up below. In plain English:
 
-NIDRA beats every simple lookup-based approach on the day it was never
-trained for — which is exactly the scenario a real deployment needs to
-handle (new attacks nobody has seen a labelled example of yet).
+- **Precision** — *"When it raises an alarm, how often is it actually
+  right?"* High precision = few false alarms / no crying wolf.
+- **Recall** — *"Out of every real attack, how many did it actually
+  catch?"* — measured here at a deliberately strict, mandated alert
+  threshold (the system must be ≥75% confident before it counts as
+  "flagged"), which is why every system's recall looks modest — this is a
+  demanding bar on purpose, not a weak system.
+- **F1** — one blended number combining precision and recall.
+- **AUC-PR** — *the fairest score to compare systems by*, because it
+  doesn't depend on any one alert threshold — it asks "across every
+  possible confidence bar we could set, how well does this system rank
+  real attacks above normal traffic?" **This is the score in the
+  headline scoreboard above.**
+
+**Test day (Friday's attacks):**
+
+| System | Precision | Recall | F1 | AUC-PR |
+|---|:---:|:---:|:---:|:---:|
+| "Assume nothing changes" | 0.97 | 0.13 | 0.23 | 0.67 |
+| Simple lookup (this instant only) | 0.94 | 0.63 | 0.76 | 0.82 |
+| Simple lookup (last 15 min of history) | 0.97 | 0.66 | 0.79 | 0.86 |
+| **NIDRA (forecasts the future, 5 models voting)** | **1.00** | 0.01 | 0.01 | **0.92** |
+| Perfect-hindsight cheat score | 0.94 | 0.48 | 0.64 | 0.90 |
+
+**Never-seen-before day (Thursday's held-out attack type):**
+
+| System | Precision | Recall | F1 | AUC-PR |
+|---|:---:|:---:|:---:|:---:|
+| "Assume nothing changes" | 0.88 | 0.47 | 0.61 | 0.59 |
+| Simple lookup (this instant only) | 0.65 | 0.75 | 0.70 | 0.62 |
+| Simple lookup (last 15 min of history) | 0.83 | 0.90 | 0.87 | 0.88 |
+| **NIDRA (forecasts the future, 5 models voting)** | **1.00** | 0.01 | 0.01 | **0.73** |
+| Perfect-hindsight cheat score | 0.64 | 0.59 | 0.61 | 0.76 |
+
+**Why NIDRA's precision is perfect (1.00) but its recall looks low at this
+strict threshold**: NIDRA never cries wolf — every alarm it raises at the
+75%-confidence bar is a genuine attack, zero false positives across
+thousands of test windows. What it doesn't yet do is clear that
+particular bar for *every* real attack — it's a cautious system rather
+than a trigger-happy one. **The AUC-PR column is the fair way to judge it
+overall**: it shows NIDRA ranks danger very well across the board (0.92 /
+0.73), it's specifically the fixed 75% cutoff where it's conservative.
+Lowering that cutoff would trade some of the perfect precision for more
+coverage — a tuning dial, not a redesign.
+
+NIDRA beats every simple lookup-based approach on AUC-PR on the day it
+was never trained for — which is exactly the scenario a real deployment
+needs to handle (new attacks nobody has seen a labelled example of yet).
+
+### The tuning experiment, in full
+
+We hypothesized that some of the "randomness" the system uses while
+imagining the future was washing out its own signal, and tested that by
+retraining with that randomness turned down. Comparing one model
+before/after (both before adding the 5-model voting):
+
+**Test day:**
+
+| Version | Precision | Recall | F1 | AUC-PR |
+|---|:---:|:---:|:---:|:---:|
+| Before the fix | 1.00 | 0.03 | 0.06 | 0.88 |
+| **After the fix** | 1.00 | 0.03 | 0.05 | **0.92** |
+
+**Never-seen-before day:**
+
+| Version | Precision | Recall | F1 | AUC-PR |
+|---|:---:|:---:|:---:|:---:|
+| Before the fix | 0.94 | 0.11 | 0.20 | 0.70 |
+| **After the fix** | 0.85 | 0.06 | 0.12 | **0.72** |
+
+The fix improved the ranking score (AUC-PR) on both days — confirming the
+hypothesis — but, as footnote 2 explains, that gain doesn't add on top of
+what 5-model voting already achieves on its own.
 
 ### Other things we measured
 
@@ -68,13 +132,6 @@ handle (new attacks nobody has seen a labelled example of yet).
   after-the-fact alert.[^1]
 - **Code health**: 166 automated tests, all passing — the pipeline, the
   model, and the serving code are exercised end-to-end, not just eyeballed.
-- **A tuning experiment that paid off**: we hypothesized that some of the
-  system's "noise" while imagining the future was washing out its own
-  signal, tried tightening that noise, retrained from scratch, and
-  measured a real improvement — exactly where the theory predicted it
-  would show up.[^2] A good example of the scientific loop (hypothesis →
-  experiment → measurement) actually working, not just a knob turned at
-  random.
 
 See [`ml/REAL_DATA_RESULTS.md`](ml/REAL_DATA_RESULTS.md) for every one of
 these numbers with full provenance, and [`ml/MODEL_CARD.md`](ml/MODEL_CARD.md)

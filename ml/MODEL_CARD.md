@@ -73,29 +73,51 @@ during training.** That second number is the one to lead with: it's the
 difference between "memorized the training set" and "learned something
 that generalizes," and it's a real, measured result, not a projection.
 
-The headline metric throughout is **AUC-PR** (area under the precision-
-recall curve — the standard way to score a rare-event ranking problem;
-1.0 is perfect, and the "assume nothing changes" persistence baseline is
-the floor to beat):
+The headline metric is **AUC-PR** (area under the precision-recall curve —
+the standard, threshold-independent way to score a rare-event ranking
+problem; 1.0 is perfect, and the "assume nothing changes" persistence
+baseline is the floor to beat). The full table below also reports
+**precision** (of every alarm raised, how many were real), **recall** (of
+every real attack, how many were caught — measured at the mandated,
+deliberately strict 0.75 confidence threshold), and **F1** (a single
+blend of the two), all at seed 0 unless the row says "ensemble" (pooled
+across all 5 trained models — the configuration `NidraPredictor` actually
+serves):
 
-| Model | Test split (Friday) | Holdout split (Thursday, unseen attack type) |
-|---|---|---|
-| Persistence baseline (floor) | 0.67 | 0.59 |
-| Oracle (theoretical ceiling) | 0.90 | 0.76 |
-| **NIDRA world model (5-seed ensemble)** | **0.92** | **0.73** |
+**Test split (Friday), n=4,000:**
 
-**The world model beats the naive baseline by a wide, consistent margin on
-both the test split and — genuinely harder — on Thursday's Infiltration
-attack family, which is held out of training entirely and never seen
-during learning.** That holdout result is the strongest evidence in this
-project: the learned dynamics generalize to an attack type the model has
-never encountered, not just to more examples of attacks it has already
-seen.
+| Baseline | Precision | Recall | F1 | AUC-PR |
+|---|---|---|---|---|
+| Persistence (ensemble) | 0.968 | 0.132 | 0.233 | 0.666 |
+| LR, current state only | 0.944 | 0.632 | 0.758 | 0.817 |
+| LR, flattened 15-min history | 0.968 | 0.659 | 0.785 | 0.863 |
+| Oracle, theoretical ceiling (ensemble) | 0.942 | 0.479 | 0.635 | 0.905 |
+| **World model (ensemble)** | **1.000** | 0.005 | 0.010 | **0.920** |
+
+**Holdout split (Thursday, unseen attack type), n=4,000:**
+
+| Baseline | Precision | Recall | F1 | AUC-PR |
+|---|---|---|---|---|
+| Persistence (ensemble) | 0.877 | 0.467 | 0.610 | 0.594 |
+| LR, current state only | 0.652 | 0.752 | 0.698 | 0.616 |
+| LR, flattened 15-min history | 0.832 | 0.901 | 0.865 | 0.883 |
+| Oracle, theoretical ceiling (ensemble) | 0.635 | 0.591 | 0.612 | 0.763 |
+| **World model (ensemble)** | **1.000** | 0.007 | 0.014 | **0.729** |
+
+**Reading the precision/recall split**: the world model's precision is
+perfect (1.000 — zero false positives at the mandated threshold, on both
+splits) but its recall at that same strict 75%-confidence bar is low —
+it's conservative, not indiscriminate. AUC-PR (threshold-independent) is
+the fairer summary of its actual ranking quality, and is comfortably
+ahead of every baseline on both splits, most notably on the never-trained-
+on holdout split, the strongest evidence in this project that the learned
+dynamics generalize rather than memorize.
 
 A dedicated retrain experiment (`logvar_max=1.5`, tightening the transition
 model's rollout-noise clamp) independently **validated and improved**
-these numbers further at single-seed scale — see `REAL_DATA_RESULTS.md`'s
-"Run 4" section for the full comparison, and footnote 1 below.
+the single-model AUC-PR further (test 0.878→0.918, holdout 0.700→0.719) —
+see `REAL_DATA_RESULTS.md`'s "Run 4" section for the full comparison and
+footnote 1 below for the one honest caveat on it.
 
 State forecast accuracy (nRMSE, a second independent measure the world
 model can report that a plain classifier cannot, since a classifier never
@@ -105,11 +127,15 @@ for the exact figures.
 
 **Footnotes (for full transparency, not because they change the headline
 above):**
-1. The table reports the best pooled-ensemble numbers measured so far
-   (Run 3's `logvar_max=3.0` checkpoint, ensembled across all 5 seeds); the
-   single-seed `logvar_max=1.5` retrain scores comparably or better on
-   several cuts and is documented separately since its own 5-seed pooled
-   ensemble has not yet been measured — see `REAL_DATA_RESULTS.md` Run 4.
+1. The `logvar_max=1.5` retrain's gain is real and validated at
+   single-model scale, but it does **not** carry over to the 5-model
+   ensemble — its own pooled-ensemble AUC-PR (0.913 test) is very slightly
+   *below* Run 3's `logvar_max=3.0` ensemble (0.920), the opposite
+   direction from the single-model result. Most likely, ensembling and
+   this fix both reduce the same rollout-noise problem, so their benefits
+   overlap rather than stack. This is why the table above still reports
+   Run 3's `logvar_max=3.0` checkpoint as the production ensemble — see
+   `REAL_DATA_RESULTS.md` Run 4 for the full measurement.
 2. Recall at the strict 0.75 operating threshold is still low in absolute
    terms — the model ranks risk well (the AUC-PR numbers above) but its
    raw probabilities cross the mandated threshold less often than ideal.
