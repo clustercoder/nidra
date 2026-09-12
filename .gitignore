@@ -219,3 +219,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# macOS
+.DS_Store
+
+# Raw dataset / local-only run artifacts at repo root (never commit — large,
+# machine-local; the real, tracked artifacts live under ml/artifacts*)
+/cicids2017/
+/artifacts/

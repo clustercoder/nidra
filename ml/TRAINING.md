@@ -118,8 +118,13 @@ change — swap it back to 200 on faster hardware.
 
 ```bash
 cd ml
-pytest tests/ -q   # 136 tests, synthetic fixtures, seconds
+pytest tests/ -q   # 166 tests, synthetic fixtures, seconds
 
+# Full-scale production config (what the current best results use):
+python -m nidra.train.train_dynamics --config config/default.yaml --max-train-samples 500000 --max-val-samples 50000
+python -m nidra.train.train_heads    --config config/default.yaml --max-train-samples 500000 --max-val-samples 50000
+
+# Faster MVP-scale iteration:
 for seed in 0 1 2 3 4; do
   python -m nidra.train.train_dynamics --config config/mvp_2017.yaml --max-train-samples 40000 --max-val-samples 8000 --epochs 30 --seed $seed
   python -m nidra.train.train_heads    --config config/mvp_2017.yaml --max-train-samples 40000 --max-val-samples 8000 --seed $seed
@@ -127,4 +132,5 @@ done
 ```
 
 See `EVALUATION.md` for the evaluation commands and `REAL_DATA_RESULTS.md`
-§Run 2 for what this produced.
+for what this produced — Run 4 and the Run 3 pooled-ensemble addendum are
+the current, best-supported numbers.

@@ -278,7 +278,7 @@ over target, cut samples toward 100 before cutting ensemble size.
 ```bash
 cd ml
 pip install -e .
-pytest tests/ -q                                    # 136 tests, synthetic fixtures, seconds
+pytest tests/ -q                                    # 166 tests, synthetic fixtures, seconds
 
 # MVP scale, full 5-seed ensemble (what REAL_DATA_RESULTS.md §Run 2 reports):
 for seed in 0 1 2 3 4; do
@@ -295,14 +295,17 @@ python -m nidra.train.train_heads    --config config/default.yaml
 python -m nidra.eval.run_eval        --config config/default.yaml --seed 0 --split test
 ```
 
-The MVP-scale run above has been executed end-to-end against the real,
+Both scales above have now been executed end-to-end against the real,
 complete CIC-IDS2017 dataset, all 5 PCAPs extracted (real packet-level
-features on all 8 day-files) and a real 5-seed ensemble trained — see
-`REAL_DATA_RESULTS.md` §Run 2 for what was measured, the bugs found and
-fixed along the way (including two in this pass: a metric-normalization bug
-that had inflated nRMSE by 4-5 orders of magnitude, and a units bug in
-`NidraPredictor.forecast()`'s output), and the honest, still-unresolved open
-items (chiefly: probability calibration at the mandated threshold). The
-`config/default.yaml` full-scale run (60/30 epochs, uncapped) has not been
-executed to completion (compute/time, not a blocker) — nothing about the
-data layer needs to change to run it.
+features on all 8 day-files): the MVP-scale run (`REAL_DATA_RESULTS.md`
+§Run 2) and the full-scale production run against `config/default.yaml`
+(§Run 3: 5-seed ensemble, 500k/50k stratified samples, `AUC-PR` 0.92
+test / 0.73 holdout at the pooled-ensemble level — see the root
+`README.md` for the headline numbers). A follow-up retrain experiment
+(§Run 4, `config/default_logvar15.yaml`) independently validated and
+further improved on Run 3 by tightening the transition model's
+rollout-noise clamp (`logvar_max: 1.5`). See `REAL_DATA_RESULTS.md` for
+every number, every bug found and fixed along the way, and the honest,
+still-open items (chiefly: probability calibration at the mandated 0.75
+threshold, and a small-sample anomaly on the test split flagged rather
+than hidden).

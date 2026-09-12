@@ -1,8 +1,10 @@
 # Evaluation
 
-All numbers cited here are from `REAL_DATA_RESULTS.md` §Run 2 — this
-document explains the harness and metric definitions; that one is the
-source of truth for actual measured results.
+This document explains the harness and metric definitions.
+`REAL_DATA_RESULTS.md` is the source of truth for actual measured
+results — Run 4 and the Run 3 pooled-ensemble addendum are the current,
+best-supported numbers; Run 2 (still referenced below for the harness
+examples that predate Run 3/4) is kept for provenance.
 
 ## Running it
 
