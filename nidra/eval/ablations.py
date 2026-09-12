@@ -17,7 +17,9 @@ from nidra.eval.metrics import state_nrmse_by_horizon
 from nidra.models.world_model import WorldModel
 
 
-def persistence_ablation(X: np.ndarray, Y: np.ndarray, risk_label: np.ndarray, model: WorldModel) -> dict:
+def persistence_ablation(
+    X: np.ndarray, Y: np.ndarray, risk_label: np.ndarray, model: WorldModel, feature_scale: np.ndarray | None = None
+) -> dict:
     """Replace the transition model with copy-forward (mu=0): S_hat[t+k]=S_t
     for every k. Compares risk-prediction AUC-PR and state nRMSE against
     the full world model's rollout on the SAME inputs.
@@ -36,8 +38,8 @@ def persistence_ablation(X: np.ndarray, Y: np.ndarray, risk_label: np.ndarray, m
     auc_persistence = float(average_precision_score(risk_label, persistence_risk)) if len(np.unique(risk_label)) > 1 else float("nan")
     auc_world_model = float(average_precision_score(risk_label, world["risk_over_horizon"])) if len(np.unique(risk_label)) > 1 else float("nan")
 
-    nrmse_persistence = state_nrmse_by_horizon(Y, persisted_states)
-    nrmse_world_model = state_nrmse_by_horizon(Y, world["predicted_states_mean"])
+    nrmse_persistence = state_nrmse_by_horizon(Y, persisted_states, feature_scale)
+    nrmse_world_model = state_nrmse_by_horizon(Y, world["predicted_states_mean"], feature_scale)
 
     return {
         "auc_pr_persistence": auc_persistence,
@@ -94,6 +96,7 @@ def horizon_curve(
     model: WorldModel,
     X: np.ndarray,
     n_samples: int = 50,
+    feature_scale: np.ndarray | None = None,
 ) -> dict:
     """AUC-PR and state nRMSE plotted against horizon k. Smooth degradation
     is expected; a FLAT curve across all k is a leakage red flag, not a
@@ -111,7 +114,7 @@ def horizon_curve(
         else:
             auc_per_k.append(float("nan"))
 
-    nrmse_per_k = state_nrmse_by_horizon(Y, pred_states_k).mean(axis=1)  # mean over features -> [K]
+    nrmse_per_k = state_nrmse_by_horizon(Y, pred_states_k, feature_scale).mean(axis=1)  # mean over features -> [K]
 
     is_flat = (np.nanmax(auc_per_k) - np.nanmin(auc_per_k)) < 0.02 if not all(np.isnan(auc_per_k)) else True
 

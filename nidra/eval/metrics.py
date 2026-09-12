@@ -148,21 +148,46 @@ def stage_accuracy_at_k(true_stage: np.ndarray, pred_stage_probs: np.ndarray, to
 # State forecast nRMSE — the metric that proves a world model was built.
 # ---------------------------------------------------------------------------
 
-def state_nrmse(y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
+# Floor for the nRMSE normalizer, in scaled (RobustScaler) units where 1.0
+# is one training-IQR. Many of the 45 features are structurally near-constant
+# for large slices of this dataset (packet aggregates are all-zero on a
+# flow-only day; urg_ratio/frag_flag_rate are ~0 for most benign hosts), so
+# their true variance is genuinely tiny. Dividing by that tiny number (the
+# textbook nRMSE = RMSE/std definition) inflates the ratio by orders of
+# magnitude for reasons that have nothing to do with forecast quality — this
+# is what produced the 10^5-10^6 nRMSE values in earlier runs. The floor
+# bounds the worst case (state_clamp=10 => rmse<=20) to a legible ~20/0.05=400
+# rather than ~20/1e-8=2e9, without touching the numerator.
+_NRMSE_SCALE_FLOOR = 0.05
+
+
+def state_nrmse(y_true: np.ndarray, y_pred: np.ndarray, feature_scale: np.ndarray | None = None) -> np.ndarray:
     """y_true, y_pred: [N, F] (already selected for one horizon k). Returns
-    per-feature nRMSE, normalized by that feature's true-value std (guards
-    against divide-by-zero with a small epsilon)."""
+    per-feature nRMSE.
+
+    `feature_scale`, when given, should be the per-feature std of the TRAIN
+    population in scaled units (`FeatureScaler.reference_std_`) — a stable
+    statistic computed once over millions of rows. This is strongly
+    preferred over the alternative of recomputing std(y_true) on whatever
+    (often small, stratified) eval batch is passed in: a batch of a few
+    thousand rows can have near-zero variance on a near-constant feature
+    purely by chance, which does not mean that feature's forecast is
+    actually 10^5x worse than a well-behaved one. Falls back to the
+    eval-batch std, floored, if no reference is supplied (e.g. an older
+    scaler artifact saved before `reference_std_` existed)."""
     rmse = np.sqrt(np.mean((y_true - y_pred) ** 2, axis=0))
-    scale = np.std(y_true, axis=0)
-    return rmse / np.clip(scale, 1e-8, None)
+    scale = feature_scale if feature_scale is not None else np.std(y_true, axis=0)
+    return rmse / np.clip(scale, _NRMSE_SCALE_FLOOR, None)
 
 
-def state_nrmse_by_horizon(y_true_k: np.ndarray, y_pred_k: np.ndarray) -> np.ndarray:
+def state_nrmse_by_horizon(
+    y_true_k: np.ndarray, y_pred_k: np.ndarray, feature_scale: np.ndarray | None = None
+) -> np.ndarray:
     """y_true_k, y_pred_k: [N, K, F]. Returns [K, F] nRMSE grid — per
     feature, per horizon. This is the metric a classifier cannot report at
-    all, since it never emits a state."""
+    all, since it never emits a state. See `state_nrmse` re: `feature_scale`."""
     K = y_true_k.shape[1]
-    return np.stack([state_nrmse(y_true_k[:, k, :], y_pred_k[:, k, :]) for k in range(K)])
+    return np.stack([state_nrmse(y_true_k[:, k, :], y_pred_k[:, k, :], feature_scale) for k in range(K)])
 
 
 # ---------------------------------------------------------------------------

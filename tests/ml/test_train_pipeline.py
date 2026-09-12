@@ -16,7 +16,9 @@ from nidra.data.schema import WINDOW_SECONDS
 from nidra.data.splits import SplitResult, temporal_train_val_split
 from nidra.data.windowize import build_state_rows
 from nidra.models.world_model import WorldModel
+from nidra.train import pipeline as pipeline_mod
 from nidra.train import train_dynamics as train_dynamics_mod
+from nidra.train.pipeline import load_and_label_day
 from nidra.train.train_dynamics import prepare_training_data, train_one_seed
 from nidra.train.train_heads import train_heads_for_seed
 from tests.ml.fixtures.synth import make_synthetic_flows, make_synthetic_packets
@@ -60,6 +62,41 @@ def _synthetic_split_result() -> SplitResult:
     labelled = attach_risk_label(states, stage_table, horizon_k=6, window_seconds=WINDOW_SECONDS)
     train, val = temporal_train_val_split(labelled, val_fraction=0.2)
     return SplitResult(train=train, val=val, test=pd.DataFrame(), holdout=pd.DataFrame())
+
+
+def test_load_and_label_day_caches_and_skips_recompute(tmp_path, monkeypatch):
+    """The CSV-load -> join -> windowize -> label pass is expensive at real
+    dataset scale and is otherwise re-run from scratch by every one of
+    train_dynamics, train_heads, and each run_eval.py split — cache_path
+    must make the second call a pure parquet read, not a recompute. The
+    internal stages are stubbed out (fast, deterministic) so this exercises
+    only the caching mechanism, not real CSV/windowing correctness (covered
+    elsewhere by test_windowize.py / test_flow_load.py)."""
+    call_count = {"n": 0}
+    labelled_stub = pd.DataFrame({
+        "host_id": ["h1", "h1"], "window_ts": [0, 30],
+        "stage_label": ["benign", "benign"], "risk_label": [0, 0],
+    })
+
+    def fake_load_csv(*args, **kwargs):
+        call_count["n"] += 1
+        return pd.DataFrame({"label": ["BENIGN"]}), None
+
+    monkeypatch.setattr(pipeline_mod, "load_cicflowmeter_csv", fake_load_csv)
+    monkeypatch.setattr(pipeline_mod, "build_day_inputs", lambda raw, packets, ws: (raw, packets))
+    monkeypatch.setattr(pipeline_mod, "windowize_day", lambda flows_w, packets_w, ws, m: pd.DataFrame())
+    monkeypatch.setattr(pipeline_mod, "label_stage_table", lambda flows_w: (pd.DataFrame(), {"unmapped_labels": []}))
+    monkeypatch.setattr(pipeline_mod, "attach_risk_label", lambda states, stage_table, horizon_k, window_seconds: labelled_stub)
+
+    cache_path = tmp_path / "cache" / "day__cached.parquet"
+    first = load_and_label_day("unused.csv", window_seconds=WINDOW_SECONDS, min_windows_per_host=10, cache_path=cache_path)
+    assert cache_path.exists()
+    assert call_count["n"] == 1
+    pd.testing.assert_frame_equal(first, labelled_stub)
+
+    second = load_and_label_day("unused.csv", window_seconds=WINDOW_SECONDS, min_windows_per_host=10, cache_path=cache_path)
+    assert call_count["n"] == 1, "second call must be served from cache, not recomputed"
+    pd.testing.assert_frame_equal(first, second)
 
 
 def test_full_two_stage_training_runs_and_freezes_correctly(tmp_path, monkeypatch):

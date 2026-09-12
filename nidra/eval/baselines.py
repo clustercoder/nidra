@@ -77,12 +77,56 @@ def baseline_oracle(Y_true: np.ndarray, model: WorldModel) -> tuple[np.ndarray, 
 
 
 @torch.no_grad()
+def ensemble_baseline_persistence(X_last: np.ndarray, models: list[WorldModel]) -> np.ndarray:
+    """Ensemble-pooled version of `baseline_persistence`: averages each
+    member's own frozen-head score on the same S_t, mirroring how
+    `ensemble_world_model_forecast` averages head outputs across members —
+    so an "ensemble world model vs. ensemble persistence" comparison isolates
+    the transition model's contribution the same way the single-seed
+    comparison does, just at the statistic `NidraPredictor` actually serves."""
+    x = torch.from_numpy(X_last).float()
+    risks = []
+    for model in models:
+        model.eval()
+        r, _ = model.score_states(x)
+        risks.append(r)
+    return torch.stack(risks, dim=0).mean(dim=0).numpy()
+
+
+@torch.no_grad()
+def ensemble_baseline_oracle(Y_true: np.ndarray, models: list[WorldModel]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Ensemble-pooled version of `baseline_oracle`: averages each member's
+    own frozen-head score on the true future state. Same contract as
+    `baseline_oracle` otherwise."""
+    y = torch.from_numpy(Y_true).float()
+    risks, stages = [], []
+    for model in models:
+        model.eval()
+        r, s = model.score_states(y)
+        risks.append(r)
+        stages.append(s)
+    risk_k = torch.stack(risks, dim=0).mean(dim=0)
+    stage_k = torch.stack(stages, dim=0).mean(dim=0)
+    risk_over_horizon = risk_k.max(dim=1).values.numpy()
+    return risk_over_horizon, risk_k.numpy(), stage_k.numpy()
+
+
+@torch.no_grad()
 def world_model_forecast(X: np.ndarray, model: WorldModel, K: int, n_samples: int = 200,
-                          stochastic: bool = True) -> dict:
+                          stochastic: bool = True, calibration: list[dict] | None = None) -> dict:
     """The system under test: recursive rollout -> frozen heads -> quantiles
     across sampled trajectories. Returns per-k mean risk, per-k confidence
     band, the composite risk-over-horizon score (max_k mean risk), and
-    per-k mean stage distribution."""
+    per-k mean stage distribution.
+
+    `calibration`, if given (a length-K list from
+    `nidra.eval.calibrate.fit_platt_by_horizon`/`load_calibration`), is
+    applied to `risk_mean_k`/`risk_ci_low_k`/`risk_ci_high_k` BEFORE
+    `risk_over_horizon` is derived from them — see `eval/calibrate.py` for
+    why (raw ensemble-mean probabilities are compressed well below the
+    0.75 decision threshold even for true positives). Leaving it `None`
+    reproduces the original, uncalibrated behavior exactly.
+    """
     model.eval()
     x_t = torch.from_numpy(X).float()
     out = model.rollout(x_t, K=K, n_samples=n_samples, stochastic=stochastic)  # states: [B,S,K,F]
@@ -96,6 +140,13 @@ def world_model_forecast(X: np.ndarray, model: WorldModel, K: int, n_samples: in
     risk_ci_low_k = risk.quantile(0.05, dim=1).numpy()
     risk_ci_high_k = risk.quantile(0.95, dim=1).numpy()
     stage_mean_k = stage.mean(dim=1).numpy()                # [B, K, n_stages]
+
+    if calibration is not None:
+        from nidra.eval.calibrate import apply_platt_by_horizon
+        risk_mean_k = apply_platt_by_horizon(risk_mean_k, calibration)
+        risk_ci_low_k = apply_platt_by_horizon(risk_ci_low_k, calibration)
+        risk_ci_high_k = apply_platt_by_horizon(risk_ci_high_k, calibration)
+
     risk_over_horizon = risk_mean_k.max(axis=1)
 
     return {
@@ -105,4 +156,55 @@ def world_model_forecast(X: np.ndarray, model: WorldModel, K: int, n_samples: in
         "stage_mean_k": stage_mean_k,
         "risk_over_horizon": risk_over_horizon,
         "predicted_states_mean": out.states.mean(dim=1).numpy(),  # [B, K, F] for state_nrmse
+    }
+
+
+@torch.no_grad()
+def ensemble_world_model_forecast(X: np.ndarray, models: list[WorldModel], K: int,
+                                   n_samples_per_member: int = 100, stochastic: bool = True,
+                                   calibration: list[dict] | None = None) -> dict:
+    """Same contract as `world_model_forecast`, but pools rollout
+    trajectories AND head scores across every ensemble member first —
+    mirrors `NidraPredictor._ensemble_rollout` exactly, so calibration fit
+    against this function's output matches what serving actually produces
+    (a per-seed fit against a single model's own `world_model_forecast`
+    would not, since the pooled ensemble mean is a different statistic than
+    any one seed's own mean).
+    """
+    x_t = torch.from_numpy(X).float()
+    all_states = []
+    for model in models:
+        model.eval()
+        out = model.rollout(x_t, K=K, n_samples=n_samples_per_member, stochastic=stochastic)
+        all_states.append(out.states)  # [B, S, K, F]
+    pooled_states = torch.cat(all_states, dim=1)  # [B, S_total, K, F]
+    B, S, K_, F = pooled_states.shape
+    flat_states = pooled_states.reshape(B * S, K_, F)
+
+    risk_list, stage_list = [], []
+    for model in models:
+        r, s = model.score_states(flat_states)
+        risk_list.append(r.reshape(B, S, K_))
+        stage_list.append(s.reshape(B, S, K_, -1))
+    risk = torch.stack(risk_list, dim=0).mean(dim=0)     # average head outputs across members too
+    stage = torch.stack(stage_list, dim=0).mean(dim=0)
+
+    risk_mean_k = risk.mean(dim=1).numpy()
+    risk_ci_low_k = risk.quantile(0.05, dim=1).numpy()
+    risk_ci_high_k = risk.quantile(0.95, dim=1).numpy()
+    stage_mean_k = stage.mean(dim=1).numpy()
+
+    if calibration is not None:
+        from nidra.eval.calibrate import apply_platt_by_horizon
+        risk_mean_k = apply_platt_by_horizon(risk_mean_k, calibration)
+        risk_ci_low_k = apply_platt_by_horizon(risk_ci_low_k, calibration)
+        risk_ci_high_k = apply_platt_by_horizon(risk_ci_high_k, calibration)
+
+    return {
+        "risk_mean_k": risk_mean_k,
+        "risk_ci_low_k": risk_ci_low_k,
+        "risk_ci_high_k": risk_ci_high_k,
+        "stage_mean_k": stage_mean_k,
+        "risk_over_horizon": risk_mean_k.max(axis=1),
+        "predicted_states_mean": pooled_states.mean(dim=1).numpy(),
     }

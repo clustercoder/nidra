@@ -31,6 +31,7 @@ from nidra.data.schema import (
     validate_state_array_width,
 )
 from nidra.eval.baselines import world_model_forecast
+from nidra.eval.calibrate import apply_platt_by_horizon, load_calibration
 from nidra.explain.counterfactual import COUNTERFACTUAL_LABEL, counterfactual_rollout
 from nidra.explain.saliency import temporal_saliency
 from nidra.explain.shap_runner import explain_current_risk, explain_predicted_stage, load_background, top_signals
@@ -60,6 +61,7 @@ class NidraPredictor:
         config_path: str | Path | None = None,
         seeds: list[int] | None = None,
         device: str = "cpu",
+        apply_calibration: bool = False,
     ):
         self.cfg = load_config(config_path)
         self.device = device
@@ -99,6 +101,44 @@ class NidraPredictor:
         self.K = self.cfg["windowing"]["horizon_length"]
         self.L = self.cfg["windowing"]["context_length"]
         self.risk_threshold = self.cfg["eval"]["risk_threshold"]
+
+        # Post-hoc calibration (nidra.scripts.fit_calibration) is OFF BY
+        # DEFAULT — pass apply_calibration=True to opt in. This is a
+        # deliberate finding from this project's own evaluation, not an
+        # oversight, and it is CHECKPOINT-DEPENDENT, not a fixed property of
+        # the technique (see REAL_DATA_RESULTS.md Run 2 addendum and Run 3):
+        # against the MVP-scale ensemble (artifacts_mvp_2017/), a correctly
+        # base-rate-respecting Platt fit measurably *reduces* recall at the
+        # mandated 0.75 threshold; against the full-scale ensemble
+        # (artifacts/, config/default.yaml), the same technique was
+        # re-fit and re-verified against the real pooled-ensemble path and
+        # was found to mildly *help* recall on both test and holdout splits
+        # (never hurting it) — though it does not fix the underlying
+        # miscalibration; recall stays low either way. Because one hardcoded
+        # default cannot correctly serve both checkpoints, the safe default
+        # stays False globally; REAL_DATA_RESULTS.md's Run 3 gives an
+        # explicit, evidence-backed recommendation to pass
+        # apply_calibration=True specifically when serving the full-scale
+        # artifacts. The file is still loaded (if present) and the flag is
+        # still supported for evaluation/comparison either way.
+        self._calibration = None
+        if apply_calibration:
+            calibration_loaded = load_calibration(weights_dir / "risk_calibration.json")
+            self._calibration = calibration_loaded[0] if calibration_loaded else None
+            if self._calibration is not None:
+                logger.warning(
+                    "NidraPredictor: apply_calibration=True — applying post-hoc risk calibration from %s. "
+                    "Whether this helps or hurts recall at threshold=0.75 is checkpoint-dependent — see "
+                    "REAL_DATA_RESULTS.md (Run 2 addendum: harmful at MVP scale; Run 3: mildly helpful at "
+                    "full scale) before relying on this for the weights directory currently in use.",
+                    weights_dir / "risk_calibration.json",
+                )
+            else:
+                logger.warning(
+                    "NidraPredictor: apply_calibration=True but no risk_calibration.json found in %s — "
+                    "falling back to raw, uncalibrated p_compromise (run nidra.scripts.fit_calibration first)",
+                    weights_dir,
+                )
         logger.info("NidraPredictor: loaded %d ensemble member(s) from %s", len(self.models), weights_dir)
 
     def _build_model(self) -> WorldModel:
@@ -154,11 +194,22 @@ class NidraPredictor:
 
         q_low = self.cfg["rollout"]["ci_low_quantile"]
         q_high = self.cfg["rollout"]["ci_high_quantile"]
+        risk_mean_k = risk.mean(dim=1)[0].numpy()
+        risk_ci_low_k = risk.quantile(q_low, dim=1)[0].numpy()
+        risk_ci_high_k = risk.quantile(q_high, dim=1)[0].numpy()
+        if self._calibration is not None:
+            # Calibrate p_compromise (and its CI band) — see __init__ and
+            # eval/calibrate.py. Monotonic, so it never changes WHICH
+            # trajectories rank riskiest, only whether the reported number
+            # is comparable to the 0.75 decision threshold.
+            risk_mean_k = apply_platt_by_horizon(risk_mean_k, self._calibration)
+            risk_ci_low_k = apply_platt_by_horizon(risk_ci_low_k, self._calibration)
+            risk_ci_high_k = apply_platt_by_horizon(risk_ci_high_k, self._calibration)
         return {
             "predicted_states_mean": pooled_states.mean(dim=1)[0].numpy(),   # [K, F]
-            "risk_mean_k": risk.mean(dim=1)[0].numpy(),                       # [K]
-            "risk_ci_low_k": risk.quantile(q_low, dim=1)[0].numpy(),
-            "risk_ci_high_k": risk.quantile(q_high, dim=1)[0].numpy(),
+            "risk_mean_k": risk_mean_k,                                      # [K]
+            "risk_ci_low_k": risk_ci_low_k,
+            "risk_ci_high_k": risk_ci_high_k,
             "stage_mean_k": stage.mean(dim=1)[0].numpy(),                     # [K, n_stages]
             "n_trajectories": pooled_states.shape[1],
         }
@@ -185,7 +236,14 @@ class NidraPredictor:
         for k in range(self.K):
             ts = origin_ts + timedelta(seconds=window_seconds * (k + 1))
             stage_dist = {name: float(p) for name, p in zip(STAGE_LABELS, rollout["stage_mean_k"][k])}
-            predicted_features = {name: float(v) for name, v in zip(FEATURE_ORDER, rollout["predicted_states_mean"][k])}
+            # predicted_states_mean is in the model's internal scaled
+            # (RobustScaler + log1p) space — inverse-transform back to raw
+            # units before handing it to a consumer, which never operates in
+            # scaled space (see nidra.data.normalize.FeatureScaler docstring
+            # and the web-contract example, e.g. bytes_total in the
+            # thousands, not a small RobustScaler-normalized float).
+            raw_predicted = self.scaler.inverse_transform(rollout["predicted_states_mean"][k])
+            predicted_features = {name: float(v) for name, v in zip(FEATURE_ORDER, raw_predicted)}
             horizons.append({
                 "k": k + 1,
                 "ts": ts.isoformat(),

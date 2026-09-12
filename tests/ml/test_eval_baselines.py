@@ -6,6 +6,8 @@ from nidra.eval.baselines import (
     baseline_lr_flattened_history,
     baseline_oracle,
     baseline_persistence,
+    ensemble_baseline_oracle,
+    ensemble_baseline_persistence,
     world_model_forecast,
 )
 from nidra.models.world_model import WorldModel
@@ -53,6 +55,44 @@ def test_oracle_baseline_shapes():
     assert risk_over_horizon.shape == (5,)
     assert risk_k.shape == (5, 6)
     assert stage_k.shape == (5, 6, 6)
+
+
+def test_ensemble_baseline_persistence_matches_single_model_with_one_member():
+    model = _tiny_model()
+    model.eval()
+    X_last = np.random.randn(5, 45).astype("float32")
+    single = baseline_persistence(X_last, model)
+    ensemble = ensemble_baseline_persistence(X_last, [model])
+    np.testing.assert_allclose(single, ensemble, atol=1e-6)
+
+
+def test_ensemble_baseline_persistence_averages_across_members():
+    models = [_tiny_model() for _ in range(3)]
+    for m in models:
+        m.eval()
+    X_last = np.random.randn(5, 45).astype("float32")
+    ensemble = ensemble_baseline_persistence(X_last, models)
+    individual = [baseline_persistence(X_last, m) for m in models]
+    np.testing.assert_allclose(ensemble, np.mean(individual, axis=0), atol=1e-6)
+
+
+def test_ensemble_baseline_oracle_shapes():
+    models = [_tiny_model() for _ in range(3)]
+    Y_true = np.random.randn(5, 6, 45).astype("float32")
+    risk_over_horizon, risk_k, stage_k = ensemble_baseline_oracle(Y_true, models)
+    assert risk_over_horizon.shape == (5,)
+    assert risk_k.shape == (5, 6)
+    assert stage_k.shape == (5, 6, 6)
+
+
+def test_ensemble_baseline_oracle_matches_single_model_with_one_member():
+    model = _tiny_model()
+    Y_true = np.random.randn(5, 6, 45).astype("float32")
+    single_risk, single_risk_k, single_stage_k = baseline_oracle(Y_true, model)
+    ens_risk, ens_risk_k, ens_stage_k = ensemble_baseline_oracle(Y_true, [model])
+    np.testing.assert_allclose(single_risk, ens_risk, atol=1e-6)
+    np.testing.assert_allclose(single_risk_k, ens_risk_k, atol=1e-6)
+    np.testing.assert_allclose(single_stage_k, ens_stage_k, atol=1e-6)
 
 
 def test_world_model_forecast_shapes_and_bounds():
