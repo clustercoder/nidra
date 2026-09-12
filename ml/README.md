@@ -10,7 +10,9 @@ original filename) for product framing. This file is the top-level entry
 point; `MODEL_CARD.md` / `TRAINING.md` / `EVALUATION.md` cover architecture-
 vs-spec deviations, the training procedure, and the eval harness in more
 depth, and `REAL_DATA_RESULTS.md` is the single source of truth for actual
-measured numbers.
+measured numbers. **For the plain-English version of the scores — no
+jargon, just what they mean — see the "Results" section of the root
+[`../README.md`](../README.md).**
 
 ## Claims discipline (read this before reading any metric below)
 

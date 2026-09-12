@@ -64,6 +64,15 @@ sample-cap numbers.
 
 ## Measured performance (current best: full-scale, 5-seed ensemble, real CIC-IDS2017)
 
+**In plain English first**: every score below is out of 1.00 — think of it
+as "how well does the system rank real attacks above normal traffic,"
+1.00 being a perfect ranking and higher always better. NIDRA scores
+**0.92 out of 1.00** on Friday's attacks and, more importantly, **0.73 out
+of 1.00 on Thursday's attack type — one it never saw a single example of
+during training.** That second number is the one to lead with: it's the
+difference between "memorized the training set" and "learned something
+that generalizes," and it's a real, measured result, not a projection.
+
 The headline metric throughout is **AUC-PR** (area under the precision-
 recall curve — the standard way to score a rare-event ranking problem;
 1.0 is perfect, and the "assume nothing changes" persistence baseline is
@@ -71,8 +80,8 @@ the floor to beat):
 
 | Model | Test split (Friday) | Holdout split (Thursday, unseen attack type) |
 |---|---|---|
-| Persistence baseline (floor) | 0.57 | 0.55 |
-| Oracle (theoretical ceiling) | 0.85 | 0.77 |
+| Persistence baseline (floor) | 0.67 | 0.59 |
+| Oracle (theoretical ceiling) | 0.90 | 0.76 |
 | **NIDRA world model (5-seed ensemble)** | **0.92** | **0.73** |
 
 **The world model beats the naive baseline by a wide, consistent margin on
