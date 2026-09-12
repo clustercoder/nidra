@@ -930,37 +930,55 @@ harder to trace back to the actual input problem.
 
 ## Part 9 — What was actually measured (see `REAL_DATA_RESULTS.md` for full detail and provenance)
 
-This section summarizes; treat `REAL_DATA_RESULTS.md` and the metrics JSON
-under `artifacts_mvp_2017/metrics/` as the source of truth for exact
-numbers, since they get updated as new runs happen.
+This section summarizes; treat `REAL_DATA_RESULTS.md` as the source of
+truth for exact numbers, since they get updated as new runs happen. **This
+section reflects the current best-supported results (Run 4 and the Run 3
+pooled-ensemble addendum, full-scale `config/default.yaml`/
+`config/default_logvar15.yaml`, 5-seed ensembles)** — the paragraphs below
+were originally written against the earlier MVP-scale run (§Run 2) and
+have been updated in place where the full-scale run changed the finding;
+see Part 10's addendum for the calibration/rollout-noise story
+specifically.
 
 **Supported by real measurement**: the full pipeline runs end to end on
 the complete real CIC-IDS2017 dataset (all 8 day-files, all 5 PCAPs
-extracted); the world model beats the "the one that matters" flattened-
-history LR baseline and the persistence baseline on AUC-PR on the test
-split (a real, measured, central result); state-forecast nRMSE is
-computable and legible; the 5-seed ensemble trains, converges more stably
-with more data, and loads/serves correctly from a clean process within the
-300ms latency budget; unsupervised latent-space clustering separates
-cleanly into high-risk/low-risk regimes without ever seeing labels — a
-genuine positive, unprompted finding.
+extracted); the world model beats both the "the one that matters"
+flattened-history LR baseline and the persistence baseline on AUC-PR on
+**both** the test split (0.92 pooled-ensemble AUC-PR vs. 0.67 persistence)
+**and the Infiltration holdout split** (0.73 vs. 0.59) — at MVP scale the
+holdout edge was not measurable at all, and it appearing cleanly at full
+scale is the single strongest piece of evidence in the project, since
+Infiltration is never trained on; state-forecast nRMSE is computable,
+legible, and now favors the world model over persistence on both splits
+(reversed from MVP scale); the 5-seed ensemble trains, converges more
+stably with more data, and loads/serves correctly from a clean process
+within the 300ms latency budget; unsupervised latent-space clustering
+separates cleanly into high-risk/low-risk regimes without ever seeing
+labels — a genuine positive, unprompted finding.
 
 **Reported honestly as unresolved, not hidden or tuned away**: the
-world model does *not* show a measurable AUC-PR edge over persistence on
-the Infiltration holdout split — an honest negative generalization result
-on a genuinely unseen attack type. The time-shuffle ablation is
-inconsistent between splits (no collapse on test, real collapse on
-holdout) — unexplained. An odd/even horizon-parity oscillation appears in
-the test split's per-horizon AUC-PR — unexplained, ruled out as an
-"undertrained model" artifact since it persists at 5x the data/full
-ensemble scale. Head-training validation loss does not converge cleanly
-across any of the 5 seeds.
+time-shuffle ablation is still inconsistent between splits at full scale
+(large collapse on holdout, smaller on test) — the MVP-scale
+"no collapse at all on test" finding resolved, but the split-asymmetry
+itself did not. An odd/even horizon-parity oscillation is still present
+in the per-horizon AUC-PR curve — it has **relocated** between runs
+(MVP-scale test → full-scale holdout, with its phase flipped), which is
+itself evidence against "just needs more data" as the explanation, since
+an undertraining artifact should shrink rather than move. Head-training
+validation loss still does not converge cleanly across any of the 5 seeds,
+at either scale. A new item surfaced at full scale: the world model's
+pooled-ensemble AUC-PR on the test split (0.92) slightly *exceeds* the
+theoretical oracle ceiling (0.90) — flagged rather than hidden, most
+likely small-sample AUC-PR estimation noise since it does not appear on
+the holdout split, where the oracle correctly stays on top.
 
-**The calibration gap — the most consequential open item, and the subject
-of a full root-cause investigation this session (Part 10)**: despite good
-AUC-PR ranking, the model's probability outputs rarely cross the mandated
-0.75 decision threshold even for genuine true positives, producing
-near-zero recall/lead-time coverage at that fixed operating point.
+**The calibration gap — real, but now measurably narrower than first
+diagnosed, and the model's rollout-noise mechanism has since been
+independently validated and improved by retraining**: despite good AUC-PR
+ranking, the model's probability outputs still cross the mandated 0.75
+decision threshold less often than would be ideal — this remains the
+clearest next-step item — but it is no longer purely a diagnosed-but-
+unaddressed problem: see Part 10's addendum below for what changed.
 
 ---
 
@@ -1122,6 +1140,65 @@ described in Mechanism 2 (§10.2) — meaning the more promising next step is
 likely the `logvar_max` reduction + retrain (documented as a recommendation,
 not yet executed, in `MODEL_CARD.md`), not a better post-hoc remap of an
 already-frozen head's output.
+
+### 10.4 Addendum (later session, full production scale): both open threads from §10.3 were followed up — one reversed, one confirmed
+
+Everything above (§10.1-10.3) was diagnosed at MVP scale against a
+single-epoch-capped checkpoint. Two follow-up sessions, working against
+the full-scale `config/default.yaml` production checkpoint (5-seed
+ensemble, 500k/50k samples), closed out both open threads §10.3 left
+hanging. Neither required touching the frozen risk head's weights — the
+Rule 1 boundary from §10.3 still holds throughout.
+
+**Thread 1 — calibration's direction reversed.** §10.3's MVP-scale finding
+was unambiguous: Platt-scaling calibration made recall *worse*, at every
+horizon, on both the single-seed spot-check and the real pooled-ensemble
+serving path. Re-running that same pooled-ensemble verification (500
+stratified samples, `n_samples_per_member=50`, exactly the rigor §10.3
+originally used) against the full-scale checkpoint found the opposite
+direction: recall at threshold=0.75 improved on both splits (test
+~1.0%→2.4%, holdout ~0.7%→9.1%), with precision staying at 1.000
+throughout — zero new false positives introduced. **The magnitude is far
+more modest than a single-seed approximation initially suggested** (that
+approximation showed "9 of 10 test episodes warned," which did not survive
+pooled-ensemble verification and was caught before being reported as a
+headline number — see `REAL_DATA_RESULTS.md`'s Run 3 calibration section
+for the full two-look comparison). The most likely explanation for the
+reversal itself: §10.3's root-cause diagnosis (an unweighted Platt fit
+correctly learning that even high raw scores rarely correspond to a
+genuine ≥75% true-positive rate on this dataset) was a property of *that*
+checkpoint's actual score distribution, and more training data changed
+that distribution enough to shift the fit's effect from harmful to mildly
+helpful — consistent with, not contradicting, §10.3's root-cause reasoning.
+The underlying miscalibration problem the 0.75 threshold surfaces did not
+go away; its direction did.
+
+**Thread 2 — the `logvar_max` reduction §10.3 recommended but had not yet
+run was executed, and it worked.** A full 5-seed retrain with
+`model.transition.logvar_max=1.5` (down from 3.0, `config/
+default_logvar15.yaml`, otherwise identical to `config/default.yaml`)
+directly tests Mechanism 2 from §10.2 (rollout noise eroding separation
+with horizon depth). At matched evaluation settings against the
+`logvar_max=3.0` checkpoint: world-model AUC-PR improved on both splits
+(test 0.878→0.918, holdout 0.700→0.719), and the horizon-curve ablation
+improved at **all 6 of 6 horizon steps on both splits**, with the single
+largest gain at the deepest horizon tested (test k=5: 0.266→0.376) —
+exactly where §10.2's Mechanism 2 predicted the biggest effect, since
+injected process noise compounds with each additional rollout step. Every
+baseline that does not depend on rollout (oracle, persistence, both LR
+baselines) was byte-identical between the two checkpoints, isolating the
+improvement specifically to the variance-clamp change rather than some
+other difference between the two training runs. No NaN instability was
+observed at the lower clamp. This is now a validated result, not a
+diagnosed-but-untested hypothesis — see `REAL_DATA_RESULTS.md`'s "Run 4"
+section and `MODEL_CARD.md` limitation 7 for the full numbers.
+
+**Net effect on the calibration gap (§10.1)**: still open, still the
+clearest next-step item, but measurably less severe on two independent
+fronts than it looked after §10.3 — calibration no longer actively hurts
+(and mildly helps), and the rollout-noise mechanism §10.2 identified as a
+likely contributor has been directly targeted and confirmed improved by
+retraining, not just theorized about.
 
 ---
 
