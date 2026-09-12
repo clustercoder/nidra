@@ -7,5 +7,12 @@
     "n_episodes": 10,
     "n_no_warning": 10,
     "fraction_no_warning": 1.0
+  },
+  "ensemble": {
+    "median_lead_time_s": null,
+    "lead_time_distribution_s": [],
+    "n_episodes": 10,
+    "n_no_warning": 10,
+    "fraction_no_warning": 1.0
   }
 }

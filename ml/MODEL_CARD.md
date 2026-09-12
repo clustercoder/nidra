@@ -188,11 +188,20 @@ above):**
    two checkpoints, confirming the improvement is attributable specifically
    to the variance-clamp change. No NaN instability was observed during
    training or evaluation at `logvar_max=1.5`. See `REAL_DATA_RESULTS.md`'s
-   "Run 4: `logvar_max=1.5` experiment" section for full numbers. Caveats:
-   single-seed evaluation (seed 0 of 5) at Run 3-matched sample caps, no
-   calibration fit for this checkpoint, and no pooled-ensemble evaluation
-   of this checkpoint specifically — natural next steps, not blockers to
-   the headline finding.
+   "Run 4: `logvar_max=1.5` experiment" section for full numbers. **One
+   honestly-reported nuance**: the pooled 5-member ensemble of this
+   checkpoint does *not* show the same gain — its test-split ensemble
+   AUC-PR (0.913) is very slightly below Run 3's `logvar_max=3.0` ensemble
+   (0.920), the opposite direction from the single-seed result. Most
+   likely explanation: pooling 5 independent members already reduces
+   rollout-noise impact by averaging across sources of variance, so the
+   two techniques' benefits overlap rather than stack — the single-seed
+   improvement is real and independently confirmed, but is not shown to
+   compound with ensembling. This is why the production headline numbers
+   (`README.md`) still cite Run 3's ensemble checkpoint rather than this
+   one. Caveats: single-seed evaluation (seed 0 of 5) at Run 3-matched
+   sample caps, no calibration fit for this checkpoint — natural next
+   steps, not blockers to the single-seed finding.
 
 ## Claims discipline
 

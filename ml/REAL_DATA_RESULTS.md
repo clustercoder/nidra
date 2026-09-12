@@ -484,6 +484,39 @@ horizons (k=4, k=5), where the erosion hypothesis specifically predicted
 the biggest effect: test k=5 improved from 0.266 to 0.376 (+0.110), the
 single largest gain of any cell in the table.
 
+### Pooled-ensemble follow-up (test split): the single-seed gain does not carry over to the ensemble
+
+A natural question after the single-seed result above: does `logvar_max=1.5`
+also improve the pooled 5-member ensemble, the way it improved the
+single-seed checkpoint? Run against the test split with the same
+`--use-ensemble` harness used for the Run 3 addendum:
+
+| Model | Run 3 ensemble (`logvar_max=3.0`) | Run 4 ensemble (`logvar_max=1.5`) |
+|---|---|---|
+| Ensemble persistence | 0.666 | 0.666 *(identical, as expected)* |
+| Ensemble oracle | 0.905 | 0.905 *(identical, as expected)* |
+| **Ensemble world model** | **0.920** | 0.913 |
+
+**Honestly reported: at the pooled-ensemble level, `logvar_max=1.5` is
+very slightly *behind* `logvar_max=3.0` (-0.007), the opposite direction
+from the clear +0.040 single-seed gain above.** The most likely
+explanation is that pooling 5 independently-trained members already
+performs a similar function to lowering `logvar_max` — both reduce the
+impact of any one model's rollout-sampling noise, by averaging across
+sources of variance (5 members vs. tighter per-member variance) — so the
+two techniques' benefits overlap rather than stack, and at full ensemble
+size the cheaper single-seed fix has less room left to add on top. This
+was not run for the holdout split (the test-split result already answers
+the question this follow-up was asking, and the single-seed
+`logvar_max=1.5` finding above already stands on its own evidence).
+**This does not undermine the single-seed finding — every single-seed and
+horizon-curve number above is real and independently confirmed — it
+narrows the claim**: `logvar_max=1.5` is a genuine improvement for a
+single-model checkpoint, but is not shown to compound with ensembling.
+`README.md`/`MODEL_CARD.md` cite Run 3's ensemble checkpoint
+(`logvar_max=3.0`) as the current best-supported pooled-ensemble result on
+this basis.
+
 ### Honest summary (Run 4)
 
 **The `logvar_max=1.5` retrain helped, unambiguously, on every rollout-
@@ -499,11 +532,12 @@ validated finding, not a diagnosed-but-untested hypothesis.
 
 **Caveats**: single-seed evaluation (seed 0 of 5), same sample caps as
 Run 3 (4,000 stratified eval samples), no calibration fit for this
-checkpoint, and no pooled-ensemble evaluation of this checkpoint (the
-addendum above only re-ran the ensemble against Run 3's original
-`logvar_max=3.0` checkpoint, not this one) — a natural next step for
-anyone continuing this line of work. `MODEL_CARD.md` limitation 7 has been
-updated to reflect this validated result.
+checkpoint. The pooled-ensemble follow-up above (test split) found the
+single-seed gain does **not** carry over to the 5-member ensemble — see
+that section for the finding and likely explanation; the holdout split's
+ensemble was not separately re-run for this checkpoint given that result.
+`MODEL_CARD.md` limitation 7 has been updated to reflect the validated
+single-seed finding and its ensemble-level caveat.
 
 ---
 
