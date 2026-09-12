@@ -1,18 +1,15 @@
-"""Canonical feature and stage vocabulary for NIDRA.
+"""Canonical NIDRA state-vector schema.
 
-This file is the single definition of feature order for the whole project — the ML
-pipeline builds state vectors in this order, the services validate against it, and the
-SHAP display labels from it. Feature-name drift between training and display is the bug
-that eats an afternoon late in a build; importing this list is how it is avoided.
-
-Never construct feature order from a dict iteration, never hardcode an index, never
-restate the list anywhere else.
+FEATURE_ORDER is the single source of truth for the 45-dimensional per-host,
+per-window state vector. Every other module (windowing, normalization,
+training, serving, explainability) imports this list rather than
+reconstructing feature order from a dict. Never rely on dict iteration order
+to determine feature position — dict insertion order is an implementation
+detail, this list is the contract.
 """
 
 from __future__ import annotations
 
-#: Ordered feature names of a per-host, per-window state vector.
-#: 15 flow aggregates + 11 packet aggregates + 8 graph scalars + 10 dynamics + activity.
 FEATURE_ORDER: list[str] = [
     # --- flow aggregates (15) ---
     "syn_ratio",
@@ -66,7 +63,69 @@ FEATURE_ORDER: list[str] = [
     "is_active",
 ]
 
-assert len(FEATURE_ORDER) == 45
+assert len(FEATURE_ORDER) == 45, f"FEATURE_ORDER must have 45 entries, has {len(FEATURE_ORDER)}"
+assert len(set(FEATURE_ORDER)) == 45, "FEATURE_ORDER contains duplicate feature names"
 
-#: Attack-stage vocabulary. `stage_dist` on a forecast is a distribution over these.
-STAGES: list[str] = ["benign", "recon", "initial_access", "lateral", "c2", "exfil"]
+FEATURE_INDEX: dict[str, int] = {name: i for i, name in enumerate(FEATURE_ORDER)}
+
+# Features that are strictly non-negative counts/magnitudes and heavy-tailed;
+# log1p is applied to these before RobustScaler fitting (see normalize.py).
+LOG1P_FEATURES: list[str] = [
+    "bytes_total",
+    "active_flow_count",
+    "out_degree",
+    "new_peer_count",
+    "retrans_count",
+]
+for f in LOG1P_FEATURES:
+    assert f in FEATURE_INDEX, f"LOG1P_FEATURES entry {f!r} not in FEATURE_ORDER"
+
+# Windowing / rollout geometry — the other non-negotiable constants shared
+# across the data pipeline, model, training, and serving code.
+WINDOW_SECONDS: int = 30          # Delta
+CONTEXT_LENGTH: int = 30          # L windows of history (15 min)
+HORIZON_LENGTH: int = 6           # K windows of forecast (3 min)
+
+STAGE_LABELS: list[str] = [
+    "benign",
+    "recon",
+    "initial_access",
+    "lateral",
+    "c2",
+    "exfil",
+]
+STAGE_INDEX: dict[str, int] = {name: i for i, name in enumerate(STAGE_LABELS)}
+
+# Alias for the backend's own name for this list (nidra_common/schemas.py,
+# services/inference/stub_predictor.py) — both names refer to the exact
+# same six-stage taxonomy; kept as an alias rather than a rename so neither
+# side of the ML/backend boundary needed to change on integration.
+STAGES: list[str] = STAGE_LABELS
+
+SCHEMA_VERSION = "1.0"
+
+
+def validate_feature_dict(features: dict[str, float]) -> None:
+    """Fail loudly if a feature dict does not exactly match FEATURE_ORDER.
+
+    This is the check every producer (windowizer, feature service, test
+    fixtures) must run before publishing or consuming a state vector.
+    """
+    got = set(features.keys())
+    want = set(FEATURE_ORDER)
+    if got != want:
+        missing = want - got
+        extra = got - want
+        raise ValueError(
+            f"Feature dict does not match FEATURE_ORDER. "
+            f"missing={sorted(missing)} extra={sorted(extra)}"
+        )
+
+
+def validate_state_array_width(width: int) -> None:
+    """Fail loudly if a raw state array's feature axis does not equal 45."""
+    if width != len(FEATURE_ORDER):
+        raise ValueError(
+            f"State array width {width} does not match FEATURE_ORDER length "
+            f"{len(FEATURE_ORDER)}"
+        )

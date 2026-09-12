@@ -6,7 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "nidra-backend"
 version = "0.1.0"
 description = "NIDRA serving plane — ingest, streaming, inference orchestration, API, persistence"
-requires-python = ">=3.11,<3.12"
+# Widened from the backend-only <3.12 ceiling: the ML package (nidra.models/train/eval/
+# explain) has been developed and tested against 3.13, and both halves now share one
+# install.
+requires-python = ">=3.11,<3.14"
 license = { text = "MIT" }
 dependencies = [
     "fastapi",
@@ -26,6 +29,14 @@ dependencies = [
     "numpy",
     "httpx",
     "websockets",
+    # --- ML (nidra.models/train/eval/explain/serve) ---
+    "torch>=2.4",
+    "scikit-learn",
+    "shap",
+    "captum",
+    "matplotlib",
+    "tqdm",
+    "joblib",
 ]
 
 [project.optional-dependencies]
@@ -42,6 +53,16 @@ packages = [
     "nidra",
     "nidra.data",
     "nidra.serve",
+    # ML implementation: nidra.serve.predictor imports these internally, but no service
+    # or API module may import them directly — services/inference/predictor_loader.py's
+    # own docstring states the boundary: the day a service imports nidra.models, the
+    # boundary that keeps the model swappable is gone.
+    "nidra.models",
+    "nidra.train",
+    "nidra.eval",
+    "nidra.explain",
+    "nidra.scripts",
+    "nidra.utils",
     "nidra_common",
     "services",
     "services.features",

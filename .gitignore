@@ -1,3 +1,6 @@
+# Private, local-only reference doc — never commit
+NIDRA_MASTER_GUIDE.md
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -225,6 +228,15 @@ orchestration/
 artifacts/*
 !artifacts/metrics/
 
+# Raw captures and derived parquet. Anchored to the repo root (leading /) --
+# an unanchored `data/` also matched `nidra/data/`, the ML data-pipeline
+# package, silently excluding it from every commit until this was caught.
+/data/
+
+# Raw CIC-IDS2017 dataset (CSVs + PCAPs) and any tshark-extracted parquet — large,
+# not a repository deliverable. See REAL_DATA_RESULTS.md for how to obtain it.
+cicids2017/
+*.parquet
 # Raw captures and derived parquet.
 data/
 

@@ -66,8 +66,10 @@ COUNTERFACTUAL_NOTE = (
     "a statement about the model, not about the network"
 )
 
-#: Starlette renamed 422 to `HTTP_422_UNPROCESSABLE_CONTENT`; the old spelling warns.
-UNPROCESSABLE = status.HTTP_422_UNPROCESSABLE_CONTENT
+#: Starlette renamed 422 to `HTTP_422_UNPROCESSABLE_CONTENT` in a later release than the
+#: one currently pinned (0.38.6, via fastapi) has; fall back to the old name so this
+#: doesn't hard-crash on import until the dependency is actually upgraded.
+UNPROCESSABLE = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", status.HTTP_422_UNPROCESSABLE_ENTITY)
 
 BENCHMARKS_OK = "ok"
 BENCHMARKS_PENDING = "pending"
