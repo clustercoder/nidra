@@ -1,16 +1,15 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
-import { ArrowLeft, Cpu, Radar, ShieldAlert, Timer } from "lucide-react";
+import { Cpu, Radar, ShieldAlert, Timer } from "lucide-react";
 
-import { NidraMark } from "@/components/icons";
-import { ConsoleThemeToggle } from "@/components/console/theme-toggle";
 import { ForecastChart } from "@/components/console/forecast-chart";
+import { HostTable } from "@/components/console/host-table";
+import { Notables } from "@/components/console/notables";
+import { ConsoleRail, ConsoleTopBar, type ConsoleView } from "@/components/console/shell";
 import {
   AlertStrip,
   Drivers,
-  HostWatch,
   Kpi,
   LifecycleTrack,
   Panel,
@@ -78,6 +77,8 @@ export function DemoConsole({
     initial.paused ? false : null,
   );
   const playing = playingOverride ?? !reducedMotion;
+  const [view, setView] = React.useState<ConsoleView>("dashboard");
+  const [query, setQuery] = React.useState("");
 
   /* One rAF loop drives the clock: wall time scaled by the replay speed and
      converted to whole windows, so 60x advances two windows a second rather
@@ -164,206 +165,228 @@ export function DemoConsole({
   const kPoint =
     current.horizons.find((h) => h.k === selectedK) ?? current.horizons[0];
 
+  const q = query.trim().toLowerCase();
+  const tableRows = q
+    ? rows.filter(
+        (r) =>
+          r.host.toLowerCase().includes(q) ||
+          r.forecast.observed_stage.toLowerCase().includes(q),
+      )
+    : rows;
+
+  const jumpTo = (jumpHost: string, index: number) => {
+    setHost(jumpHost);
+    setT(index);
+    setPlayingOverride(false);
+    setView("dashboard");
+  };
+
   return (
-    <div className="bg-console-bg text-console-text min-h-screen">
-      <header className="border-console-line bg-console-surface/80 flex h-14 shrink-0 items-center gap-3 border-b px-5 backdrop-blur">
-        <Link href="/" className="flex items-center gap-2.5">
-          <NidraMark className="text-observed-lit size-7" />
-          <span className="font-headings text-console-text text-base font-bold tracking-wide">
-            NIDRA
-          </span>
-        </Link>
-        <span className="text-console-muted border-console-line ml-1 border-l pl-3 text-sm">
-          demo console
-        </span>
-        <span className="bg-positive-lit/15 text-positive-lit ml-2 hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium sm:inline-flex">
-          <span className="bg-positive-lit size-1.5 rounded-full" />
-          replay live
-        </span>
-        <div className="text-console-muted ml-auto flex items-center gap-4 text-xs">
-          <span className="hidden font-mono md:inline">
-            {model.impl} · {model.model_version}
-          </span>
-          <ConsoleThemeToggle />
-          <Link
-            href="/"
-            className="hover:text-console-text inline-flex items-center gap-1.5 transition-colors"
-          >
-            <ArrowLeft className="size-4" />
-            Back to site
-          </Link>
-        </div>
-      </header>
+    <div className="bg-console-bg text-console-text flex h-screen flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1">
+        <ConsoleRail view={view} onViewChange={setView} alertCount={overCount} />
 
-      <main className="space-y-4 p-4">
-        {/* the numbers first — the chart is one panel among several */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <Kpi
-            Icon={Timer}
-            label="Earliest warning"
-            value={crossing ? String(crossing.forecast.lead_time_s) : "—"}
-            unit={crossing ? "s" : undefined}
-            tone={crossing ? "alert" : "good"}
-            hint={
-              crossing
-                ? `${crossing.host} crosses ${geometry.risk_threshold} first`
-                : "No host projected to cross the threshold"
-            }
+        <div className="flex min-w-0 flex-1 flex-col">
+          <ConsoleTopBar
+            breadcrumb={view === "dashboard" ? "Dashboard" : "Search"}
+            query={query}
+            onQueryChange={setQuery}
+            modelLabel={`${model.impl} · ${model.model_version}`}
           />
-          <Kpi
-            Icon={ShieldAlert}
-            label="Above threshold"
-            value={`${overCount}`}
-            unit={`/ ${rows.length} hosts`}
-            tone={overCount > 0 ? "alert" : "good"}
-            hint={`Risk at or above ${geometry.risk_threshold} this window`}
-          />
-          <Kpi
-            Icon={Radar}
-            label="Forecast horizon"
-            value={`${(geometry.horizon_K * geometry.window_delta) / 60}`}
-            unit="min"
-            hint={`K=${geometry.horizon_K} windows of ${geometry.window_delta}s`}
-          />
-          <Kpi
-            Icon={Cpu}
-            label="State per host"
-            value={`${geometry.n_features}`}
-            unit="features"
-            hint={`Context L=${geometry.context_L} · ${model.impl} pipeline`}
-          />
-        </div>
 
-        {crossing && (
-          <AlertStrip
-            host={crossing.host}
-            leadSeconds={crossing.forecast.lead_time_s as number}
-            stage={crossing.forecast.observed_stage}
-            risk={crossing.forecast.observed_risk}
-          />
-        )}
-
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[20rem_1fr]">
-          <div className="flex flex-col gap-4">
-            <Panel title="Host watch" bodyClass="">
-              <HostWatch
-                rows={rows}
+          <main className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+            {view === "search" ? (
+              <Notables
+                byHost={byHost}
+                hosts={hosts}
                 threshold={geometry.risk_threshold}
-                selected={host}
-                onSelect={setHost}
+                query={query}
+                onJump={jumpTo}
               />
-            </Panel>
-            <Panel title="Predicted stage mix">
-              <StageMix
-                horizons={current.horizons}
-                selectedK={selectedK}
-                onSelectK={setSelectedK}
-                windowDeltaS={geometry.window_delta}
-              />
-            </Panel>
-          </div>
-
-          <div className="flex min-w-0 flex-col gap-4">
-            <Panel
-              title={`Forecast · ${current.host_id}`}
-              aside={
-                <label className="border-console-line text-console-muted hover:text-console-text flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={showReality}
-                    onChange={(e) => setShowReality(e.target.checked)}
-                    className="accent-observed-lit"
-                  />
-                  Show what actually happened
-                </label>
-              }
-            >
-              <div className="mb-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-xs">
-                {(
-                  [
-                    ["stage", current.observed_stage, false],
-                    ["risk", current.observed_risk.toFixed(3), false],
-                    ["origin", `${clockOf(current.origin_ts)} UTC`, false],
-                    [
-                      "lead time",
-                      current.lead_time_s === null
-                        ? "—"
-                        : `${current.lead_time_s} s`,
-                      current.lead_time_s !== null,
-                    ],
-                  ] as const
-                ).map(([k, v, hot]) => (
-                  <span key={k} className="text-console-muted">
-                    {k}{" "}
-                    <span
-                      className={`font-mono tabular-nums ${
-                        hot ? "text-threshold-lit font-semibold" : "text-console-text"
-                      }`}
-                    >
-                      {v}
-                    </span>
-                  </span>
-                ))}
-              </div>
-              <ForecastChart
-                forecast={current}
-                geometry={geometry}
-                observed={observed}
-                reality={reality}
-                showReality={showReality}
-              />
-              {showReality && reality && (
-                <p className="text-console-muted mt-2 text-[11px] leading-relaxed">
-                  <span
-                    className={
-                      covered === reality.length
-                        ? "text-positive-lit font-medium"
-                        : "text-negative-lit font-medium"
+            ) : (
+              <>
+                {/* the numbers first — the chart is one panel among several */}
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                  <Kpi
+                    Icon={Timer}
+                    label="Earliest warning"
+                    value={crossing ? String(crossing.forecast.lead_time_s) : "—"}
+                    unit={crossing ? "s" : undefined}
+                    tone={crossing ? "alert" : "good"}
+                    hint={
+                      crossing
+                        ? `${crossing.host} crosses ${geometry.risk_threshold} first`
+                        : "No host projected to cross the threshold"
                     }
-                  >
-                    {covered} of {reality.length} marks inside the band.
-                  </span>{" "}
-                  Crosses show the risk actually recorded at each horizon
-                  timestamp, drawn where they fell. The band is a calibration
-                  measurement, not a guarantee.
+                  />
+                  <Kpi
+                    Icon={ShieldAlert}
+                    label="Above threshold"
+                    value={`${overCount}`}
+                    unit={`/ ${rows.length} hosts`}
+                    tone={overCount > 0 ? "alert" : "good"}
+                    hint={`Risk at or above ${geometry.risk_threshold} this window`}
+                  />
+                  <Kpi
+                    Icon={Radar}
+                    label="Forecast horizon"
+                    value={`${(geometry.horizon_K * geometry.window_delta) / 60}`}
+                    unit="min"
+                    hint={`K=${geometry.horizon_K} windows of ${geometry.window_delta}s`}
+                  />
+                  <Kpi
+                    Icon={Cpu}
+                    label="State per host"
+                    value={`${geometry.n_features}`}
+                    unit="features"
+                    hint={`Context L=${geometry.context_L} · ${model.impl} pipeline`}
+                  />
+                </div>
+
+                {crossing && (
+                  <AlertStrip
+                    host={crossing.host}
+                    leadSeconds={crossing.forecast.lead_time_s as number}
+                    stage={crossing.forecast.observed_stage}
+                    risk={crossing.forecast.observed_risk}
+                  />
+                )}
+
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-[22rem_1fr]">
+                  <div className="flex flex-col gap-4">
+                    <Panel
+                      title="Host watch"
+                      bodyClass=""
+                      aside={
+                        query ? (
+                          <span className="text-console-muted font-mono text-[11px] tabular-nums">
+                            {tableRows.length}/{rows.length}
+                          </span>
+                        ) : undefined
+                      }
+                    >
+                      <HostTable
+                        rows={tableRows}
+                        threshold={geometry.risk_threshold}
+                        selected={host}
+                        onSelect={setHost}
+                      />
+                    </Panel>
+                    <Panel title="Predicted stage mix">
+                      <StageMix
+                        horizons={current.horizons}
+                        selectedK={selectedK}
+                        onSelectK={setSelectedK}
+                        windowDeltaS={geometry.window_delta}
+                      />
+                    </Panel>
+                  </div>
+
+                  <div className="flex min-w-0 flex-col gap-4">
+                    <Panel
+                      title={`Forecast · ${current.host_id}`}
+                      aside={
+                        <label className="border-console-line text-console-muted hover:text-console-text flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={showReality}
+                            onChange={(e) => setShowReality(e.target.checked)}
+                            className="accent-observed-lit"
+                          />
+                          Show what actually happened
+                        </label>
+                      }
+                    >
+                      <div className="mb-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-xs">
+                        {(
+                          [
+                            ["stage", current.observed_stage, false],
+                            ["risk", current.observed_risk.toFixed(3), false],
+                            ["origin", `${clockOf(current.origin_ts)} UTC`, false],
+                            [
+                              "lead time",
+                              current.lead_time_s === null
+                                ? "—"
+                                : `${current.lead_time_s} s`,
+                              current.lead_time_s !== null,
+                            ],
+                          ] as const
+                        ).map(([k, v, hot]) => (
+                          <span key={k} className="text-console-muted">
+                            {k}{" "}
+                            <span
+                              className={`font-mono tabular-nums ${
+                                hot ? "text-threshold-lit font-semibold" : "text-console-text"
+                              }`}
+                            >
+                              {v}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                      <ForecastChart
+                        forecast={current}
+                        geometry={geometry}
+                        observed={observed}
+                        reality={reality}
+                        showReality={showReality}
+                      />
+                      {showReality && reality && (
+                        <p className="text-console-muted mt-2 text-[11px] leading-relaxed">
+                          <span
+                            className={
+                              covered === reality.length
+                                ? "text-positive-lit font-medium"
+                                : "text-negative-lit font-medium"
+                            }
+                          >
+                            {covered} of {reality.length} marks inside the band.
+                          </span>{" "}
+                          Crosses show the risk actually recorded at each horizon
+                          timestamp, drawn where they fell. The band is a calibration
+                          measurement, not a guarantee.
+                        </p>
+                      )}
+                    </Panel>
+
+                    <ReplayBar
+                      windowCount={windowCount}
+                      windowDeltaS={geometry.window_delta}
+                      t={ti}
+                      playing={playing}
+                      speed={speed}
+                      speeds={SPEEDS}
+                      label={`${clockOf(current.origin_ts)} UTC`}
+                      onSeek={(next) => {
+                        setPlayingOverride(false);
+                        setT(next);
+                      }}
+                      onPlayingChange={setPlayingOverride}
+                      onSpeedChange={setSpeed}
+                    />
+
+                    <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+                      <Panel title="Attack lifecycle">
+                        <LifecycleTrack
+                          observedStage={current.observed_stage}
+                          predicted={kPoint}
+                        />
+                      </Panel>
+                      <Panel title="What is driving it">
+                        <Drivers signals={current.top_signals} explain={explanation} />
+                      </Panel>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-console-muted pb-2 text-center text-[11px]">
+                  {sourceSummary}
                 </p>
-              )}
-            </Panel>
-
-            <ReplayBar
-              windowCount={windowCount}
-              windowDeltaS={geometry.window_delta}
-              t={ti}
-              playing={playing}
-              speed={speed}
-              speeds={SPEEDS}
-              label={`${clockOf(current.origin_ts)} UTC`}
-              onSeek={(next) => {
-                setPlayingOverride(false);
-                setT(next);
-              }}
-              onPlayingChange={setPlayingOverride}
-              onSpeedChange={setSpeed}
-            />
-
-            <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-              <Panel title="Attack lifecycle">
-                <LifecycleTrack
-                  observedStage={current.observed_stage}
-                  predicted={kPoint}
-                />
-              </Panel>
-              <Panel title="What is driving it">
-                <Drivers signals={current.top_signals} explain={explanation} />
-              </Panel>
-            </div>
-          </div>
+              </>
+            )}
+          </main>
         </div>
-
-        <p className="text-console-muted pb-2 text-center text-[11px]">
-          {sourceSummary}
-        </p>
-      </main>
+      </div>
     </div>
   );
 }
