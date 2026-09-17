@@ -1,20 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, PanelRightOpen, Search } from "lucide-react";
 
 import { clockOf, type Forecast } from "@/lib/demo-replay";
-import { SeverityBadge, severityRank } from "./severity";
+import { messageOf } from "./insight";
+import { SEVERITY_ORDER, SeverityBadge, severityOf, severityRank } from "./severity";
+import { FilterChip, ScopePill } from "./ui";
 
-type Event = { host: string; forecast: Forecast; index: number };
+type Event = { host: string; forecast: Forecast; index: number; previousRisk?: number };
 type SortKey = "time" | "host" | "stage" | "risk" | "lead";
-
-function messageOf(f: Forecast): string {
-  if (f.lead_time_s !== null) {
-    return `risk ${f.observed_risk.toFixed(3)} · projected to cross threshold in ${f.lead_time_s}s`;
-  }
-  return `risk ${f.observed_risk.toFixed(3)} · no threshold crossing inside horizon`;
-}
 
 function Th({
   label,
@@ -35,7 +30,7 @@ function Th({
 }) {
   return (
     <th
-      className={`border-console-line bg-console-raised/60 sticky top-0 select-none border-b px-3 py-1.5 text-[10px] font-semibold tracking-[0.1em] uppercase ${
+      className={`border-console-line bg-console-surface sticky top-0 z-10 select-none border-b px-3 py-2 text-[10px] font-medium tracking-[0.08em] uppercase ${
         align === "right" ? "text-right" : "text-left"
       } ${className}`}
     >
@@ -61,42 +56,53 @@ function Th({
 }
 
 /**
- * Search / notable-event review — every window, every host, flattened into
- * one scrollable grid. This is what "Search" means in the rail: the same
- * fixture the dashboard shows one slice of, laid out the way Splunk ES lists
- * notables, so the whole replay is auditable rather than only its current
- * instant.
+ * Search / notable-event review — every window, every host, in one grid, with
+ * the filters that narrowed it shown as chips so the reader always knows what
+ * has been excluded from the count.
  */
 export function Notables({
   byHost,
   hosts,
   threshold,
   query,
-  onJump,
+  onQueryChange,
+  onlyAlerts,
+  onOnlyAlertsChange,
+  onOpen,
 }: {
   byHost: Record<string, Forecast[]>;
   hosts: string[];
   threshold: number;
   query: string;
-  onJump: (host: string, index: number) => void;
+  onQueryChange: (q: string) => void;
+  onlyAlerts: boolean;
+  onOnlyAlertsChange: (v: boolean) => void;
+  onOpen: (host: string, index: number) => void;
 }) {
   const [sortKey, setSortKey] = React.useState<SortKey>("time");
   const [dir, setDir] = React.useState<"asc" | "desc">("desc");
-  const [onlyAlerts, setOnlyAlerts] = React.useState(false);
+  const [severity, setSeverity] = React.useState("all");
 
   const onSort = (k: SortKey) => {
-    if (k === sortKey) {
-      setDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
+    if (k === sortKey) setDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
       setSortKey(k);
-      setDir(k === "time" ? "desc" : "desc");
+      setDir("desc");
     }
   };
 
   const events = React.useMemo<Event[]>(() => {
     const out: Event[] = [];
     for (const host of hosts) {
-      (byHost[host] ?? []).forEach((forecast, index) => out.push({ host, forecast, index }));
+      const list = byHost[host] ?? [];
+      list.forEach((forecast, index) =>
+        out.push({
+          host,
+          forecast,
+          index,
+          previousRisk: index > 0 ? list[index - 1].observed_risk : undefined,
+        }),
+      );
     }
     return out;
   }, [byHost, hosts]);
@@ -104,10 +110,10 @@ export function Notables({
   const q = query.trim().toLowerCase();
   const filtered = events.filter((e) => {
     if (onlyAlerts && e.forecast.observed_risk < threshold) return false;
+    if (severity !== "all" && severityOf(e.forecast.observed_stage) !== severity) return false;
     if (!q) return true;
     return (
-      e.host.toLowerCase().includes(q) ||
-      e.forecast.observed_stage.toLowerCase().includes(q)
+      e.host.toLowerCase().includes(q) || e.forecast.observed_stage.toLowerCase().includes(q)
     );
   });
 
@@ -118,7 +124,9 @@ export function Notables({
         case "host":
           return mul * a.host.localeCompare(b.host);
         case "stage":
-          return mul * (severityRank(a.forecast.observed_stage) - severityRank(b.forecast.observed_stage));
+          return (
+            mul * (severityRank(a.forecast.observed_stage) - severityRank(b.forecast.observed_stage))
+          );
         case "risk":
           return mul * (a.forecast.observed_risk - b.forecast.observed_risk);
         case "lead": {
@@ -133,79 +141,122 @@ export function Notables({
     });
   }, [filtered, sortKey, dir]);
 
+  const hasFilters = Boolean(q) || onlyAlerts || severity !== "all";
+
   return (
-    <div className="border-console-line bg-console-surface flex flex-col overflow-hidden rounded-md border">
-      <header className="border-console-line flex flex-wrap items-center gap-3 border-b px-4 py-2.5">
-        <h2 className="text-console-muted text-[11px] font-semibold tracking-[0.14em] uppercase">
-          Search results
-        </h2>
-        <span className="text-console-muted font-mono text-[11px] tabular-nums">
-          {sorted.length} of {events.length} events
-        </span>
-        <label className="border-console-line text-console-muted hover:text-console-text ml-auto flex cursor-pointer items-center gap-2 rounded border px-2 py-1 text-[11px] font-medium transition-colors">
-          <input
-            type="checkbox"
-            checked={onlyAlerts}
-            onChange={(e) => setOnlyAlerts(e.target.checked)}
-            className="accent-threshold-lit"
+    <div className="border-console-line bg-console-surface flex min-h-0 flex-col overflow-hidden rounded-2xl border">
+      <header className="flex flex-wrap items-center gap-3 px-4 pt-3.5 pb-3">
+        <div className="min-w-0">
+          <h2 className="text-console-text text-[13px] font-medium">Search results</h2>
+          <p className="text-console-muted mt-0.5 text-[11px] tabular-nums">
+            {sorted.length.toLocaleString()} of {events.length.toLocaleString()} windows across{" "}
+            {hosts.length} hosts
+          </p>
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <ScopePill
+            label="Severity"
+            value={severity}
+            onChange={setSeverity}
+            options={[
+              { value: "all", label: "All" },
+              ...SEVERITY_ORDER.map((s) => ({ value: s, label: s })),
+            ]}
           />
-          At/above threshold only
-        </label>
+          <ScopePill
+            label="Risk"
+            value={onlyAlerts ? "over" : "any"}
+            onChange={(v) => onOnlyAlertsChange(v === "over")}
+            options={[
+              { value: "any", label: "Any" },
+              { value: "over", label: `≥ ${threshold}` },
+            ]}
+          />
+        </div>
       </header>
-      <div className="max-h-[560px] overflow-x-auto overflow-y-auto">
+
+      {hasFilters && (
+        <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+          {q && <FilterChip label="Query" value={query} onClear={() => onQueryChange("")} />}
+          {severity !== "all" && (
+            <FilterChip label="Severity" value={severity} onClear={() => setSeverity("all")} />
+          )}
+          {onlyAlerts && (
+            <FilterChip
+              label="Risk"
+              value={`≥ ${threshold}`}
+              onClear={() => onOnlyAlertsChange(false)}
+            />
+          )}
+        </div>
+      )}
+
+      <div className="max-h-[calc(100vh-15rem)] min-h-0 overflow-x-auto overflow-y-auto">
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr>
               <Th label="Time" sortKey="time" active={sortKey === "time"} dir={dir} onSort={onSort} className="w-24" />
               <Th label="Host" sortKey="host" active={sortKey === "host"} dir={dir} onSort={onSort} />
               <Th label="Severity" sortKey="stage" active={sortKey === "stage"} dir={dir} onSort={onSort} />
-              <th className="border-console-line bg-console-raised/60 sticky top-0 border-b px-3 py-1.5 text-left text-[10px] font-semibold tracking-[0.1em] uppercase text-console-muted">
-                Message
+              <th className="border-console-line bg-console-surface text-console-muted sticky top-0 z-10 border-b px-3 py-2 text-left text-[10px] font-medium tracking-[0.08em] uppercase">
+                What happened
               </th>
               <Th label="Risk" sortKey="risk" active={sortKey === "risk"} dir={dir} onSort={onSort} align="right" />
               <Th label="Lead" sortKey="lead" active={sortKey === "lead"} dir={dir} onSort={onSort} align="right" />
+              <th className="border-console-line bg-console-surface sticky top-0 z-10 border-b px-2 py-2" />
             </tr>
           </thead>
-          <tbody className="divide-console-line divide-y">
+          <tbody className="divide-console-line/60 divide-y">
             {sorted.map((e) => {
               const over = e.forecast.observed_risk >= threshold;
               return (
                 <tr
                   key={`${e.host}@${e.forecast.origin_ts}`}
-                  onClick={() => onJump(e.host, e.index)}
-                  className="hover:bg-console-raised/50 cursor-pointer transition-colors"
+                  onClick={() => onOpen(e.host, e.index)}
+                  className="hover:bg-console-raised/40 group cursor-pointer transition-colors"
                 >
-                  <td className="px-3 py-1.5 font-mono text-[11px] whitespace-nowrap text-console-muted">
+                  <td className="text-console-muted px-3 py-2 font-mono text-[11px] whitespace-nowrap tabular-nums">
                     {clockOf(e.forecast.origin_ts)}
                   </td>
-                  <td className="px-3 py-1.5 font-mono text-[13px] whitespace-nowrap text-console-text">
+                  <td className="text-console-text px-3 py-2 font-mono text-[13px] whitespace-nowrap">
                     {e.host}
                   </td>
-                  <td className="px-3 py-1.5">
+                  <td className="px-3 py-2">
                     <SeverityBadge stage={e.forecast.observed_stage} />
                   </td>
-                  <td className="px-3 py-1.5 text-console-muted">{messageOf(e.forecast)}</td>
+                  <td className="text-console-muted px-3 py-2">
+                    {messageOf(e.forecast, threshold, e.previousRisk)}
+                  </td>
                   <td
-                    className={`px-3 py-1.5 text-right font-mono tabular-nums ${
-                      over ? "text-threshold-lit font-semibold" : "text-console-muted"
+                    className={`px-3 py-2 text-right font-mono tabular-nums ${
+                      over ? "text-threshold-lit font-semibold" : "text-console-text"
                     }`}
                   >
                     {e.forecast.observed_risk.toFixed(3)}
                   </td>
-                  <td className="px-3 py-1.5 text-right font-mono tabular-nums whitespace-nowrap text-console-muted">
+                  <td className="text-console-muted px-3 py-2 text-right font-mono whitespace-nowrap tabular-nums">
                     {e.forecast.lead_time_s !== null ? (
-                      <span className="text-threshold-lit font-semibold">{e.forecast.lead_time_s}s</span>
+                      <span className="text-threshold-lit font-semibold">
+                        {e.forecast.lead_time_s}s
+                      </span>
                     ) : (
                       "—"
                     )}
+                  </td>
+                  <td className="px-2 py-2 text-right">
+                    <PanelRightOpen className="text-console-muted ml-auto size-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
                   </td>
                 </tr>
               );
             })}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-console-muted px-3 py-8 text-center">
-                  No events match this search.
+                <td colSpan={7} className="px-3 py-16 text-center">
+                  <Search className="text-console-muted/50 mx-auto size-6" />
+                  <p className="text-console-text mt-3 text-sm">No events match these filters</p>
+                  <p className="text-console-muted mt-1 text-xs">
+                    Clear a filter above to widen the search.
+                  </p>
                 </td>
               </tr>
             )}

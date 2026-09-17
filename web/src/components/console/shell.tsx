@@ -73,6 +73,29 @@ export function ConsoleRail({
   );
 }
 
+/** Page header — title, one line of what this view is for, and the controls
+ * that apply to the whole view. Every reference console leads with this; the
+ * console previously dropped the reader straight into panels. */
+export function PageHeader({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="min-w-0">
+        <h1 className="font-headings text-console-text text-xl font-semibold">{title}</h1>
+        <p className="text-console-muted mt-1 text-xs">{subtitle}</p>
+      </div>
+      {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
+    </div>
+  );
+}
+
 export function ConsoleTopBar({
   breadcrumb,
   query,
@@ -94,14 +117,14 @@ export function ConsoleTopBar({
         replay live
       </span>
 
-      <div className="relative min-w-0 flex-1">
-        <Search className="text-console-muted pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
+      <div className="relative mx-auto w-full max-w-md min-w-0 flex-1">
+        <Search className="text-console-muted pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2" />
         <input
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
-          placeholder={'host="*" stage="*"'}
+          placeholder="Search hosts or stages…"
           spellCheck={false}
-          className="border-console-line bg-console-raised/60 text-console-text placeholder:text-console-muted focus:border-observed-lit/60 w-full rounded border py-1.5 pr-8 pl-8 font-mono text-xs outline-none transition-colors"
+          className="border-console-line bg-console-raised/60 text-console-text placeholder:text-console-muted focus:border-observed-lit/60 focus:bg-console-raised w-full rounded-full border py-1.5 pr-8 pl-9 text-xs outline-none transition-colors"
         />
         {query && (
           <button

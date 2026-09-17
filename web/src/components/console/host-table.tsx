@@ -1,38 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, PanelRightOpen } from "lucide-react";
 
 import type { Forecast } from "@/lib/demo-replay";
 import { SeverityBadge, severityRank } from "./severity";
+import { Sparkline } from "./ui";
 
 type Row = { host: string; forecast: Forecast; series: number[] };
 type SortKey = "host" | "risk" | "stage" | "lead";
-
-function Spark({ series, over }: { series: number[]; over: boolean }) {
-  if (series.length < 2) return <span className="block h-5 w-16" />;
-  const w = 64;
-  const h = 20;
-  const d = series
-    .map((v, i) => {
-      const x = (i / (series.length - 1)) * w;
-      const y = h - Math.max(0, Math.min(1, v)) * h;
-      return `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join(" ");
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="h-5 w-16 shrink-0" aria-hidden>
-      <path
-        d={d}
-        fill="none"
-        className={over ? "stroke-threshold-lit" : "stroke-observed-lit"}
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 
 function Th({
   label,
@@ -51,7 +27,7 @@ function Th({
 }) {
   return (
     <th
-      className={`border-console-line bg-console-raised/60 select-none border-b px-3 py-1.5 text-[10px] font-semibold tracking-[0.1em] uppercase ${
+      className={`border-console-line select-none border-b px-3 pb-2 text-[10px] font-medium tracking-[0.08em] uppercase ${
         align === "right" ? "text-right" : "text-left"
       }`}
     >
@@ -76,19 +52,21 @@ function Th({
   );
 }
 
-/** Dense, sortable event grid — the search-results-table treatment, standing
- * in for the old card list so hosts read as a scannable table, not a stack of
- * tiles. */
+/** Fleet grid. Row click selects the host the chart draws; the trailing button
+ * opens the full record, the way an incident queue splits "look at this" from
+ * "open this". */
 export function HostTable({
   rows,
   threshold,
   selected,
   onSelect,
+  onOpen,
 }: {
   rows: Row[];
   threshold: number;
   selected: string;
   onSelect: (host: string) => void;
+  onOpen: (host: string) => void;
 }) {
   const [sortKey, setSortKey] = React.useState<SortKey>("risk");
   const [dir, setDir] = React.useState<"asc" | "desc">("desc");
@@ -109,7 +87,9 @@ export function HostTable({
         case "host":
           return mul * a.host.localeCompare(b.host);
         case "stage":
-          return mul * (severityRank(a.forecast.observed_stage) - severityRank(b.forecast.observed_stage));
+          return (
+            mul * (severityRank(a.forecast.observed_stage) - severityRank(b.forecast.observed_stage))
+          );
         case "lead": {
           const av = a.forecast.lead_time_s ?? Infinity;
           const bv = b.forecast.lead_time_s ?? Infinity;
@@ -122,21 +102,28 @@ export function HostTable({
     });
   }, [rows, sortKey, dir]);
 
+  if (rows.length === 0) {
+    return (
+      <p className="text-console-muted px-4 py-8 text-center text-xs">No host matches this search.</p>
+    );
+  }
+
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto px-1 pb-1">
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr>
             <Th label="Host" sortKey="host" active={sortKey === "host"} dir={dir} onSort={onSort} />
             <Th label="Stage" sortKey="stage" active={sortKey === "stage"} dir={dir} onSort={onSort} />
-            <th className="border-console-line bg-console-raised/60 border-b px-3 py-1.5 text-left text-[10px] font-semibold tracking-[0.1em] uppercase text-console-muted">
+            <th className="border-console-line text-console-muted border-b px-3 pb-2 text-left text-[10px] font-medium tracking-[0.08em] uppercase">
               Trend
             </th>
             <Th label="Risk" sortKey="risk" active={sortKey === "risk"} dir={dir} onSort={onSort} align="right" />
             <Th label="Lead" sortKey="lead" active={sortKey === "lead"} dir={dir} onSort={onSort} align="right" />
+            <th className="border-console-line border-b px-2 pb-2" />
           </tr>
         </thead>
-        <tbody className="divide-console-line divide-y">
+        <tbody>
           {sorted.map(({ host, forecast, series }) => {
             const over = forecast.observed_risk >= threshold;
             const active = host === selected;
@@ -145,36 +132,51 @@ export function HostTable({
                 key={host}
                 onClick={() => onSelect(host)}
                 aria-current={active ? "true" : undefined}
-                className={`cursor-pointer transition-colors ${
-                  active
-                    ? "bg-console-raised border-l-2 border-l-observed-lit"
-                    : "hover:bg-console-raised/50 border-l-2 border-l-transparent"
+                className={`group cursor-pointer transition-colors ${
+                  active ? "bg-console-raised/70" : "hover:bg-console-raised/40"
                 }`}
               >
-                <td className="px-3 py-2 font-mono text-[13px] text-console-text whitespace-nowrap">
-                  {host}
+                <td className="rounded-l-lg py-2 pr-3 pl-3 whitespace-nowrap">
+                  <span className="flex items-center gap-2">
+                    <span
+                      className={`h-6 w-0.5 shrink-0 rounded-full ${
+                        active ? "bg-observed-lit" : "bg-transparent"
+                      }`}
+                    />
+                    <span className="text-console-text font-mono text-[13px]">{host}</span>
+                  </span>
                 </td>
                 <td className="px-3 py-2">
                   <SeverityBadge stage={forecast.observed_stage} />
                 </td>
                 <td className="px-3 py-2">
-                  <Spark series={series} over={over} />
+                  <Sparkline series={series} tone={over ? "alert" : "observed"} className="h-6 w-20" />
                 </td>
                 <td
                   className={`px-3 py-2 text-right font-mono tabular-nums ${
-                    over ? "text-threshold-lit font-semibold" : "text-console-muted"
+                    over ? "text-threshold-lit font-semibold" : "text-console-text"
                   }`}
                 >
                   {forecast.observed_risk.toFixed(3)}
                 </td>
-                <td className="px-3 py-2 text-right font-mono tabular-nums text-console-muted whitespace-nowrap">
+                <td className="text-console-muted px-3 py-2 text-right font-mono whitespace-nowrap tabular-nums">
                   {forecast.lead_time_s !== null ? (
-                    <span className="text-threshold-lit font-semibold">
-                      {forecast.lead_time_s}s
-                    </span>
+                    <span className="text-threshold-lit font-semibold">{forecast.lead_time_s}s</span>
                   ) : (
                     "—"
                   )}
+                </td>
+                <td className="rounded-r-lg px-2 py-2 text-right">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpen(host);
+                    }}
+                    aria-label={`Open detail for ${host}`}
+                    className="text-console-muted hover:bg-console-surface hover:text-console-text rounded-md p-1 opacity-0 transition-all group-hover:opacity-100 focus-visible:opacity-100"
+                  >
+                    <PanelRightOpen className="size-3.5" />
+                  </button>
                 </td>
               </tr>
             );
