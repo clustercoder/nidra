@@ -253,4 +253,4 @@ artifacts:
   weights_dir: "artifacts/weights"
   scaler_dir: "artifacts/scaler"
   metrics_dir: "artifacts/metrics"
-  processed_dir: "artifacts/processed"   # windowed parquet, not committed to git
+  processed_dir: "artifacts/processed"   # windowed parquet, committed so the repo runs without the raw dataset

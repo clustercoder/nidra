@@ -68,6 +68,54 @@ def load_and_label_day(flow_csv_path: str | Path, window_seconds: int, min_windo
     return labelled
 
 
+FLOW_ONLY_TAG = "flowonly"
+
+
+def declared_packets_tag(day_meta: dict) -> str:
+    """Cache-key tag for a day, derived from the config-DECLARED packet file
+    and deliberately NOT from whatever happens to sit on the local disk.
+
+    A clone of this repo carries the committed windowed parquet under
+    artifacts/processed/ but neither the ~50GB raw CIC-IDS2017 release nor
+    the tshark-extracted packet parquet. Keying on local presence there
+    would compute a `flowonly` tag, miss every committed file, and skip the
+    day — so the tag states what the cached table is supposed to contain.
+    """
+    packets = day_meta.get("packets")
+    return Path(packets).name if packets else FLOW_ONLY_TAG
+
+
+def day_cache_path(processed_dir: str | Path, day_key: str, windowing_cfg: dict,
+                    row_cap: int | None, packets_tag: str) -> Path:
+    """Cache key encodes everything that changes the resulting table: window
+    geometry, the host-count filter, packet availability (a day gains real
+    packet features the moment its PCAP is extracted — the cache must not
+    keep serving the old flow-only table), and the row cap."""
+    return Path(processed_dir) / (
+        f"{day_key}__w{windowing_cfg['window_seconds']}"
+        f"__m{windowing_cfg['min_windows_per_host']}"
+        f"__{packets_tag}__cap{row_cap}.parquet"
+    )
+
+
+def _resolve_packets_path(dataset_cfg: dict, day_meta: dict, day_key: str) -> Path | None:
+    """Locate this day's packet parquet, or None to run flow-only. `packets`
+    in config is a path relative to `packets_dir` (or the flow dir if unset);
+    an absolute path is used as-is. A day without one runs in flow-only mode,
+    logged loudly downstream in windowize.build_state_rows, never silently
+    treated as full-feature data."""
+    if not day_meta.get("packets"):
+        return None
+    packets_dir = Path(dataset_cfg.get("packets_dir") or dataset_cfg["cic2017_flow_dir"]).expanduser()
+    candidate = Path(day_meta["packets"])
+    path = candidate if candidate.is_absolute() else packets_dir / candidate
+    if not path.exists():
+        logger.warning("build_all_splits: packet parquet %s not found for day %s, running flow-only",
+                        path, day_key)
+        return None
+    return path
+
+
 def build_all_splits(cfg: dict) -> SplitResult:
     dataset_cfg = cfg["dataset"]
     windowing_cfg = cfg["windowing"]
@@ -82,39 +130,38 @@ def build_all_splits(cfg: dict) -> SplitResult:
     day_tables: dict[str, pd.DataFrame] = {}
     for day_key, day_meta in dataset_cfg["days"].items():
         csv_path = flow_dir / day_meta["file"]
-        if not csv_path.exists():
-            logger.warning("build_all_splits: %s not found, skipping day %s", csv_path, day_key)
+        # Resolution order matters. A cache written under the DECLARED packet
+        # tag is authoritative and needs no raw inputs at all — this is what
+        # lets a clone run evaluation with only the committed
+        # artifacts/processed/ tables. Only on a cache miss do we fall back
+        # to recomputing, which does require the raw CSV.
+        declared_cache = (
+            day_cache_path(processed_dir, day_key, windowing_cfg, row_cap, declared_packets_tag(day_meta))
+            if processed_dir is not None else None
+        )
+        if declared_cache is not None and declared_cache.exists():
+            day_tables[day_key] = load_and_label_day(
+                csv_path,
+                window_seconds=windowing_cfg["window_seconds"],
+                min_windows_per_host=windowing_cfg["min_windows_per_host"],
+                cache_path=declared_cache,
+            )
             continue
-        # Optional per-day packet parquet (from pcap_extract.py) — a day
-        # without one runs in flow-only mode, logged loudly downstream in
-        # windowize.build_state_rows, never silently treated as full-feature
-        # data. `packets` in config is a path relative to `packets_dir` (or
-        # `flow_dir` if `packets_dir` is unset); an absolute path is used
-        # as-is.
-        packets_parquet_path = None
-        if day_meta.get("packets"):
-            packets_dir = Path(dataset_cfg.get("packets_dir") or raw_dir).expanduser()
-            candidate = Path(day_meta["packets"])
-            packets_parquet_path = candidate if candidate.is_absolute() else packets_dir / candidate
-            if not packets_parquet_path.exists():
-                logger.warning("build_all_splits: packet parquet %s not found for day %s, running flow-only",
-                                packets_parquet_path, day_key)
-                packets_parquet_path = None
+
+        if not csv_path.exists():
+            logger.warning("build_all_splits: skipping day %s — no cached table at %s and no raw CSV at %s",
+                            day_key, declared_cache, csv_path)
+            continue
+
+        packets_parquet_path = _resolve_packets_path(dataset_cfg, day_meta, day_key)
         logger.info("processing day %s (%s)%s", day_key, csv_path.name,
                     " with packet-level features" if packets_parquet_path else " (flow-only)")
-        cache_path = None
-        if processed_dir is not None:
-            # Cache key encodes everything that changes the resulting table:
-            # window geometry, host-count filter, packet availability (a day
-            # gains real packet features the moment its PCAP is extracted —
-            # the cache must not silently keep serving the old flow-only
-            # table), and the row cap.
-            packets_tag = Path(packets_parquet_path).name if packets_parquet_path else "flowonly"
-            cache_path = processed_dir / (
-                f"{day_key}__w{windowing_cfg['window_seconds']}"
-                f"__m{windowing_cfg['min_windows_per_host']}"
-                f"__{packets_tag}__cap{row_cap}.parquet"
-            )
+        # Recompute writes under the tag actually used, which differs from
+        # the declared tag when the packet parquet is missing locally — a
+        # degraded flow-only table must never land under a full-feature key.
+        actual_tag = Path(packets_parquet_path).name if packets_parquet_path else FLOW_ONLY_TAG
+        cache_path = (day_cache_path(processed_dir, day_key, windowing_cfg, row_cap, actual_tag)
+                      if processed_dir is not None else None)
         day_tables[day_key] = load_and_label_day(
             csv_path,
             window_seconds=windowing_cfg["window_seconds"],
