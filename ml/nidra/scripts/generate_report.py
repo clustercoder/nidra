@@ -151,11 +151,45 @@ def plot_time_shuffle_ablation(ablations: dict, reports_dir: Path, split_label: 
     _savefig(fig, reports_dir, "time_shuffle_ablation.png")
 
 
-def plot_lead_time_distribution(lead_time: dict, reports_dir: Path, split_label: str) -> None:
-    dist = lead_time.get("lead_time_distribution_s")
-    if not dist:
-        logger.warning("generate_report: no lead-time distribution to plot for %s", split_label)
+# Preference order for which lead-time section to plot. `ensemble` is the
+# pooled statistic NidraPredictor actually serves and the one the published
+# lead-time figures come from, so it wins over the single-seed `raw`
+# approximation. The `_calibrated` variants are deliberately last: post-hoc
+# calibration is measured to make quantile-pooled scores worse (see
+# REAL_DATA_RESULTS.md) and is not what any headline reports.
+LEAD_TIME_SECTION_PREFERENCE = ("ensemble", "raw", "ensemble_calibrated", "calibrated")
+
+
+def select_lead_time_section(lead_time_file: dict) -> tuple[str | None, dict | None]:
+    """Pick which section of a lead_time.json to plot, as (label, section).
+
+    The file nests its numbers under `raw`/`calibrated`/`ensemble`/
+    `ensemble_calibrated` alongside scalar metadata (split, seed, run
+    params). This used to be skipped entirely: the caller passed the whole
+    file and the plot read `lead_time_distribution_s` off the top level,
+    where it never exists, so the figure was silently never produced.
+
+    Sections with an empty distribution (no episode was ever warned) have
+    nothing to plot and are passed over rather than rendered as an empty
+    histogram.
+    """
+    for label in LEAD_TIME_SECTION_PREFERENCE:
+        section = lead_time_file.get(label)
+        if isinstance(section, dict) and section.get("lead_time_distribution_s"):
+            return label, section
+    return None, None
+
+
+def plot_lead_time_distribution(lead_time_file: dict, reports_dir: Path, split_label: str,
+                                 filename: str = "lead_time_distribution.png") -> None:
+    section_label, lead_time = select_lead_time_section(lead_time_file)
+    if lead_time is None:
+        logger.warning("generate_report: no lead-time distribution to plot for %s "
+                        "(sections present: %s)", split_label,
+                        sorted(k for k, v in lead_time_file.items() if isinstance(v, dict)))
         return
+    dist = lead_time["lead_time_distribution_s"]
+    split_label = f"{split_label}, {section_label}"
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.hist(dist, bins=min(10, len(dist)), color="tab:purple", alpha=0.8)
     ax.axvline(lead_time["median_lead_time_s"], color="black", linestyle="--", label="median")
@@ -166,7 +200,7 @@ def plot_lead_time_distribution(lead_time: dict, reports_dir: Path, split_label:
         fontsize=9,
     )
     ax.legend()
-    _savefig(fig, reports_dir, "lead_time_distribution.png")
+    _savefig(fig, reports_dir, filename)
 
 
 def plot_calibration_reliability(calibration: dict, reports_dir: Path, split_label: str) -> None:
@@ -274,6 +308,14 @@ def main():
         if holdout_baselines:
             plot_baseline_comparison(holdout_baselines["baselines"], reports_dir, "infiltration_holdout.png",
                                       "holdout (Thursday/Infiltration)")
+        # The holdout split's lead time is a published headline number too, so
+        # it gets its own figure rather than sharing (and overwriting) the
+        # test split's filename.
+        holdout_lead_time = _load_json(holdout_dir / "lead_time.json")
+        if holdout_lead_time:
+            plot_lead_time_distribution(holdout_lead_time, reports_dir,
+                                         "holdout (Thursday/Infiltration)",
+                                         filename="lead_time_distribution_holdout.png")
 
     metadata_dir.mkdir(parents=True, exist_ok=True)
     dataset_meta = build_dataset_metadata(cfg)

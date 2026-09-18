@@ -8,11 +8,24 @@ examples that predate Run 3/4) is kept for provenance.
 
 ## Running it
 
+Against the shipped production model. This needs no dataset download — the
+weights, scaler and windowed tables are all committed under `artifacts/`,
+and these are the flags the published numbers were produced with:
+
 ```bash
 cd ml
-python -m nidra.eval.run_eval --config config/mvp_2017.yaml --seed 0 --split test    --n-samples 50 --max-eval-samples 4000
-python -m nidra.eval.run_eval --config config/mvp_2017.yaml --seed 0 --split holdout --n-samples 50 --max-eval-samples 4000
+python -m nidra.eval.run_eval --config config/default.yaml --seed 0 \
+    --split test    --n-samples 200 --max-eval-samples 4000 --use-ensemble
+python -m nidra.eval.run_eval --config config/default.yaml --seed 0 \
+    --split holdout --n-samples 200 --max-eval-samples 4000 --use-ensemble
 ```
+
+The harness examples further down this document use `config/mvp_2017.yaml`,
+the reduced-scale config kept for fast iteration and for provenance of Run 2.
+Its metrics are committed but **its weights are not** (see `.gitignore` — it
+is a superseded variant), so those commands require training that config's
+ensemble first. Anything you want to run against the shipped model uses
+`config/default.yaml`.
 
 Writes `baselines.json`, `ablations.json`, `calibration.json`,
 `lead_time.json` to `<metrics_dir>/<split>/` — **the split-specific
@@ -161,8 +174,8 @@ interpretation. Not used anywhere in the prediction path.
 ## Reality overlay (`nidra/scripts/reality_overlay.py`)
 
 ```bash
-python -m nidra.scripts.reality_overlay --config config/mvp_2017.yaml \
-    --weights-dir artifacts_mvp_2017/weights --scaler-dir artifacts_mvp_2017/scaler \
+python -m nidra.scripts.reality_overlay --config config/default.yaml \
+    --weights-dir artifacts/weights --scaler-dir artifacts/scaler \
     --split test --out-json reality_overlay.json --out-png reports/reality_overlay.png
 ```
 
@@ -183,10 +196,10 @@ from this).
 ## Report/artifact generation (`nidra/scripts/generate_report.py`)
 
 ```bash
-python -m nidra.scripts.generate_report --config config/mvp_2017.yaml \
-    --test-metrics-dir artifacts_mvp_2017/metrics/test \
-    --holdout-metrics-dir artifacts_mvp_2017/metrics/holdout \
-    --reports-dir reports --metadata-dir artifacts_mvp_2017/metadata
+python -m nidra.scripts.generate_report --config config/default.yaml \
+    --test-metrics-dir artifacts/metrics/test \
+    --holdout-metrics-dir artifacts/metrics/holdout \
+    --reports-dir reports --metadata-dir artifacts/metadata
 ```
 
 Reads already-computed metrics/weight-metadata JSON and renders
