@@ -32,6 +32,7 @@ RUN pip install --upgrade pip \
 COPY config/ ./config/
 COPY nidra_common/ ./nidra_common/
 COPY ml/nidra/ ./ml/nidra/
+COPY ml/config/ ./ml/config/
 COPY api/ ./api/
 COPY services/ ./services/
 COPY scripts/ ./scripts/
@@ -42,7 +43,8 @@ COPY migrations/ ./migrations/
 # deploy/model/README.md) baked in so a platform with no shared/persistent filesystem
 # (Render) needs no separate artifact-transfer step. Local docker compose still bind-
 # mounts the repo-root `artifacts/` dir over this for iterating on unreleased weights.
-COPY deploy/model/ ./deploy/model/
+COPY ml/artifacts/weights/ ./ml/artifacts/weights/
+COPY ml/artifacts/scaler/ ./ml/artifacts/scaler/
 
 # torch is already installed (above) and satisfies "torch>=2.4" below, so this does not
 # re-resolve or replace it with the CUDA build.

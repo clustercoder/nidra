@@ -96,6 +96,12 @@ STAGE_LABELS: list[str] = [
 ]
 STAGE_INDEX: dict[str, int] = {name: i for i, name in enumerate(STAGE_LABELS)}
 
+# Alias for the backend's own name for this list (nidra_common/schemas.py,
+# services/inference/stub_predictor.py) — both names refer to the exact
+# same six-stage taxonomy; kept as an alias rather than a rename so neither
+# side of the ML/backend boundary needed to change on integration.
+STAGES: list[str] = STAGE_LABELS
+
 SCHEMA_VERSION = "1.0"
 
 

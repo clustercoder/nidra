@@ -86,8 +86,9 @@ services/                 ingest, features, inference, persister
 api/                      FastAPI app
 web/                      Next.js — marketing site + console
 config/default.yaml       backend tunables (window_delta, horizon_K, predictor.impl, ...)
-config/ml_default.yaml    full-scale ML training config (5-seed ensemble, 60/30 epochs)
-config/ml_mvp_2017.yaml   MVP-scale ML config — same real dataset, fewer epochs/seeds;
+ml/config/default.yaml    full-scale ML training config (5-seed ensemble, 60/30 epochs)
+                          — also what NidraPredictor reads at serving time
+ml/config/mvp_2017.yaml   MVP-scale ML config — same real dataset, fewer epochs/seeds;
                           this is predictor.config_path's target when predictor.impl=nidra
 docs/                     PRD, implementation specs, architecture diagrams
 artifacts/                weights/ scaler/ metrics/   (gitignored, except metrics)

@@ -18,22 +18,35 @@ lead_time_m: 2          # consecutive windows above threshold before a crossing 
 episode_close_after: 4  # windows below threshold before an episode closes
 
 predictor:
-  impl: stub            # stub | nidra — NIDRA_PREDICTOR_IMPL overrides at deploy time
+  impl: nidra           # stub | nidra — NIDRA_PREDICTOR_IMPL overrides at deploy time
   # Only read when impl == nidra; the stub needs no artifacts. Relative paths resolve
-  # against the repo root, as everywhere else in this file. `deploy/model/` is the
-  # tracked copy of the trained 5-seed ensemble + scaler baked into the Docker image
-  # (see Dockerfile) so a container needs no separate artifact transfer step; local
-  # docker compose overrides this with a bind mount of the repo-root `artifacts/` dir.
-  weights_dir: deploy/model/weights
-  scaler_path: deploy/model/scaler/robust_scaler.joblib
+  # against the repo root, as everywhere else in this file.
+  #
+  # These point straight at the ML subsystem's committed artifacts. There used
+  # to be a second copy under deploy/model/, made when ml/artifacts/ lived on
+  # another branch; keeping it current was a manual step in a README, that step
+  # was missed, and all five checkpoints AND the scaler drifted out of sync
+  # with the published ensemble. A mismatched scaler is the quiet one: the
+  # model loads, inference runs, and every feature is normalised wrong.
+  # ml/artifacts/ is tracked in this repo and is the only copy.
+  weights_dir: ml/artifacts/weights
+  scaler_path: ml/artifacts/scaler/robust_scaler.joblib
   # A DIFFERENT file from this one, deliberately: NidraPredictor needs the nested
   # training/model/rollout config nidra.utils.config.load_config() reads (cfg["model"],
   # cfg["ensemble"], cfg["rollout"], ...), not this file's flat backend tunables. The two
   # configs serve two different consumers and are not meant to be merged into one schema.
-  # Must match the ensemble actually present under weights_dir — ml_default.yaml is the
-  # 5-seed ensemble config; ml_mvp_2017.yaml is single-seed and would silently only use
+  #
+  # This points at the ML subsystem's OWN config rather than a copy under
+  # config/. There used to be a copy (config/ml_default.yaml) and it drifted:
+  # it was missing the rollout.risk_pooling_* keys entirely, so NidraPredictor
+  # fell back to mean pooling and would have served F1 0.010 at the mandated
+  # 0.75 threshold instead of 0.84 — silently, since a missing key is a
+  # default, not an error. Read the file the ML side actually maintains.
+  #
+  # Must match the ensemble present under weights_dir: this is the 5-seed
+  # config. ml/config/mvp_2017.yaml is single-seed and would silently use only
   # model_seed_0.pt if paired with a multi-seed checkpoint.
-  config_path: config/ml_default.yaml
+  config_path: ml/config/default.yaml
 
 # Host-side URLs: docker compose publishes redis and postgres on the NIDRA port block
 # (DECISIONS.md D14). In-container services get NIDRA_REDIS_URL / NIDRA_POSTGRES_URL

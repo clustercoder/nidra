@@ -82,7 +82,7 @@ services:
     ports:
       - "${NIDRA_API_PORT:-8000}:8000"
     volumes:
-      - ./artifacts:/app/artifacts:ro
+      - ./ml/artifacts:/app/ml/artifacts:ro
       - uploads:/var/lib/nidra/uploads
     # `/health` is exempt from the rate limiter precisely so this can poll it. urllib
     # rather than curl: the image is python:3.11-slim and carries no HTTP client.
@@ -113,7 +113,7 @@ services:
     <<: *app
     command: ["python", "-m", "services.inference"]
     volumes:
-      - ./artifacts:/app/artifacts:ro
+      - ./ml/artifacts:/app/ml/artifacts:ro
 
   persister:
     <<: *app
