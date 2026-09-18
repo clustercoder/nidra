@@ -3,6 +3,11 @@
 Two stages, strictly ordered — never merged, never re-opened once frozen.
 See `nidra/train/losses.py`, `train_dynamics.py`, `train_heads.py`.
 
+> Retraining is the **only** workflow that needs the raw CIC-IDS2017
+> release and tshark. The trained model ships in the repo — to forecast,
+> evaluate or benchmark on a fresh clone, see "Without the raw dataset" in
+> `README.md` instead.
+
 ## Prerequisites
 
 ```bash

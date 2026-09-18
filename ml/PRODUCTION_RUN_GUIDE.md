@@ -1,10 +1,18 @@
 # Running the Full-Scale Production Training — A Beginner's Guide
 
+> **You do not need any of this to run the model.** The trained ensemble,
+> the fitted scaler and the windowed evaluation data all ship in the repo —
+> see "Without the raw dataset" in `README.md` to forecast, evaluate and
+> benchmark on a fresh clone with no dataset download. This guide is only
+> for retraining from the raw CIC-IDS2017 release.
+
 This guide walks you through running NIDRA's **full-scale** training
 (`config/default.yaml`: 5 seeds, 60 epochs for the dynamics stage, 30
-epochs for the heads stage, on the *entire* real dataset with no sample
-cap) instead of the smaller "MVP" configuration
-(`config/mvp_2017.yaml`) that's been used for development so far.
+epochs for the heads stage, on 500,000 training / 50,000 validation samples
+drawn from the ~6.9M-sample candidate pool) instead of the smaller "MVP"
+configuration (`config/mvp_2017.yaml`) that's been used for development so
+far. Those caps are not a shortcut — materializing the full pool needs
+~35GB and is OOM-killed on an ordinary machine, which §1.3 explains.
 
 **Written for someone with no machine learning background.** Every step
 tells you what it does and why, not just what to type. If you just want
@@ -109,9 +117,13 @@ raw data needs to change.
   epoch** on that machine. That's roughly 12x more training data than the
   MVP config's default cap, while staying safely inside a 16GB budget. If
   your machine has more RAM, you can raise these numbers proportionally
-  (memory scales roughly linearly with the cap); if you have 64GB+ of RAM
-  available, you can omit both flags entirely for the literal, fully
-  uncapped run the config was originally designed for.
+  (memory scales roughly linearly with the cap). These caps now live in
+  `config/default.yaml` under `training_data:`, so the documented commands
+  need no flags at all to reproduce the published run — and omitting the
+  flags gives you 500,000/50,000, **not** an uncapped run. If you have
+  64GB+ of RAM and want the literal uncapped run, set
+  `training_data.max_train_samples` to `null` in the config; a command-line
+  flag still overrides the config either way.
 
 ---
 
