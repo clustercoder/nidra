@@ -3,7 +3,7 @@ import pandas as pd
 
 from nidra.data.graph_features import safe_div, shannon_entropy
 from nidra.data.schema import FEATURE_ORDER, WINDOW_SECONDS
-from nidra.data.windowize import align_window, build_state_rows
+from nidra.data.windowize import align_window, build_state_rows, parse_cic_timestamp
 from tests.fixtures.synth import make_synthetic_flows, make_synthetic_packets
 
 
@@ -18,6 +18,20 @@ def test_align_window_is_absolute_epoch_aligned_not_relative_to_first_event():
     # floor(1000/30)*30=990, floor(1015/30)*30=990, floor(1029.9/30)*30=1020
     assert list(wa) == [990, 990, 1020]
     assert list(wb) == [990, 990]
+
+
+def test_parse_cic_timestamp_returns_correct_epoch_seconds_regardless_of_pandas_datetime_resolution():
+    # Regression test: pd.to_datetime's default resolution (ns vs. us) has
+    # varied across pandas versions, and a prior implementation of
+    # parse_cic_timestamp assumed nanoseconds when converting to an epoch
+    # int, silently producing an epoch 1000x too small (and therefore
+    # corrupting every window_ts) whenever pd.to_datetime returned
+    # microsecond resolution instead — with no exception raised anywhere.
+    ts = pd.Series(["15/06/2017 08:00:01", "15/06/2017 08:00:02", "not a date"])
+    epoch = parse_cic_timestamp(ts)
+    assert epoch.iloc[0] == 1497513601
+    assert epoch.iloc[1] == 1497513602
+    assert pd.isna(epoch.iloc[2])
 
 
 def test_align_window_exact_multiples():

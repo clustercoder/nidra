@@ -71,7 +71,15 @@ def parse_cic_timestamp(ts: pd.Series) -> pd.Series:
     parsed = pd.to_datetime(ts, errors="coerce", dayfirst=True)
     epoch = pd.Series(np.nan, index=ts.index, dtype="float64")
     valid = parsed.notna()
-    epoch.loc[valid] = parsed[valid].astype("int64") // 10**9
+    # `pd.to_datetime` does not always default to nanosecond resolution (it
+    # has returned datetime64[us] on some pandas versions) — `.astype("int64")`
+    # reinterprets the raw integer at WHATEVER resolution the array actually
+    # has, so dividing by 10**9 silently produces the wrong epoch (off by
+    # 1000x at microsecond resolution) unless the unit is pinned first. This
+    # previously corrupted every window_ts derived from a flow timestamp,
+    # collapsing all real per-host window counts far below any reasonable
+    # min_windows_per_host and dropping 100% of hosts with no error raised.
+    epoch.loc[valid] = parsed[valid].dt.as_unit("ns").astype("int64") // 10**9
     return epoch
 
 
