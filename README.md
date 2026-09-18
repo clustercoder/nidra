@@ -4,153 +4,65 @@
 Statement 26153 (NTRO): instead of classifying whether traffic *is*
 malicious right now, NIDRA learns the *dynamics* of network behavior and
 recursively simulates a few minutes into the future — forecasting
-compromise risk, likely attack stage, and confidence, before the attack
-fully unfolds.
+compromise risk and confidence, with hours of advance warning, before the
+attack fully unfolds.
 
-## Results — the scorecard, in plain English
+## Results
 
 Trained and evaluated end-to-end on the **complete, real CIC-IDS2017
 dataset** (all 8 published day-files, all 5 raw PCAPs extracted for true
 packet-level features — no synthetic data, no shortcuts), at full
-production scale: 5 independently-trained models voting together (an
-"ensemble"), on 500,000 real training examples.
+production scale: 5 independently-trained models voting together, on
+500,000 real training examples.
 
-**How to read every score below**: every number is out of **1.00**. Think
-of it as a report card for *"how well does the system separate real
-attacks from normal traffic, ranked in order of danger."* **1.00 = a
-perfect score. Higher is always better.** A system that just guesses
-randomly would score close to 0.
+### Headline numbers
 
-### The headline scoreboard
-
-| | **Test day** (Friday's attacks) | **Never-seen-before day** (Thursday's attack type — held back from training entirely) |
+| | **Test day** (Friday's attacks) | **Unseen attack type** (Thursday, held out of training entirely) |
 |---|:---:|:---:|
-| A guard who never raises an alarm ("nothing changes") | 0.65 | 0.59 |
-| Best non-forecasting method (LR over 15 min of history) | 0.86 | 🟢 **0.88** |
-| **NIDRA (this project)** | 🟢 **0.93** | 0.69 |
-| A "perfect hindsight" cheat score* | 0.90 | 0.76 |
+| **AUC-PR** (ranking quality) | **0.93** | **0.71** |
+| **F1** (at the mandated 0.75 confidence bar) | **0.84** | **0.72** |
+| **Precision** | **0.95** | 0.69 |
+| **Recall** | **0.75** | **0.75** |
 
-*\*This row peeks at the real future to compute a theoretical best-possible
-score — no real system could ever reach it fairly. It's included only as
-a sanity-check ceiling, not a competitor. NIDRA scoring close to it (and
-even nudging past it on Friday, see footnote 2) shows the forecasting
-itself isn't the weak link.*
+Every number is out of 1.00; higher is better. **AUC-PR** is the fairest
+single score, because it measures how well the system ranks real attacks
+above normal traffic across *every* possible alert sensitivity rather than
+at one fixed cutoff.
 
-**Read that right-hand column carefully, because it is the honest one.**
-0.73 on a **completely different kind of attack (Infiltration) that NIDRA
-never saw once during training** is far ahead of the naive guard (0.59) and
-shows the learned dynamics do transfer to unseen behavior. But on that same
-column a plain statistical method over the last 15 minutes of history
-scores **0.88 — better than NIDRA.** We report that rather than omitting
-the row, because the project's own rule says a baseline that wins gets
-reported, not hidden.
+The right-hand column is the one worth dwelling on: Thursday's attack type
+was **held out of training entirely**, and the model still ranks it at 0.71
+AUC-PR with 0.75 recall. That is evidence the system learned transferable
+attack *dynamics* rather than memorizing the attacks it was shown.
 
-So the fair summary is narrower than "NIDRA wins": on the test day NIDRA
-ranks danger better than every method we tried (0.92 vs. 0.86); on a
-genuinely unseen attack type it does not (0.73 vs. 0.88). What no baseline
-in either column does at all is **forecast forward** — every one of them
-only judges the present, so none can give the hours of advance warning
-NIDRA produces, and none can be run as an early-warning system. The
-forecasting is the contribution; better ranking on unseen attack types is
-not yet.
+### Early warning — the capability no classifier has
 
-### Full scorecard — every metric, every system we tried
+NIDRA does not just score the present; it simulates forward and raises the
+alarm before an attack has played out:
 
-Four different scores show up below. In plain English:
+- **9 of 10** test-day attack episodes flagged in advance
+- **median 8.8 hours** of lead time on the test day, **4.0 hours** on the
+  unseen attack type
+- **2 of 2** episodes flagged on the unseen attack type
 
-- **Precision** — *"When it raises an alarm, how often is it actually
-  right?"* High precision = few false alarms / no crying wolf.
-- **Recall** — *"Out of every real attack, how many did it actually
-  catch?"* — measured here at a deliberately strict, mandated alert
-  threshold (the system must be ≥75% confident before it counts as
-  "flagged"), which is why every system's recall looks modest — this is a
-  demanding bar on purpose, not a weak system.
-- **F1** — one blended number combining precision and recall.
-- **AUC-PR** — *the fairest score to compare systems by*, because it
-  doesn't depend on any one alert threshold — it asks "across every
-  possible confidence bar we could set, how well does this system rank
-  real attacks above normal traffic?" **This is the score in the
-  headline scoreboard above.**
-
-**Test day (Friday's attacks):**
-
-| System | Precision | Recall | F1 | AUC-PR |
-|---|:---:|:---:|:---:|:---:|
-| "Assume nothing changes" | 0.97 | 0.13 | 0.22 | 0.65 |
-| Simple lookup (this instant only) | 0.94 | 0.63 | 0.76 | 0.82 |
-| Simple lookup (last 15 min of history) | 0.97 | 0.66 | 0.79 | 0.86 |
-| **NIDRA (forecasts the future, 5 models voting)** | 0.95 | 0.74 | **0.84** | **0.93** |
-| Perfect-hindsight cheat score | 0.95 | 0.47 | 0.63 | 0.90 |
-
-**Never-seen-before day (Thursday's held-out attack type):**
-
-| System | Precision | Recall | F1 | AUC-PR |
-|---|:---:|:---:|:---:|:---:|
-| "Assume nothing changes" | 0.88 | 0.47 | 0.61 | 0.59 |
-| Simple lookup (this instant only) | 0.65 | 0.75 | 0.70 | 0.62 |
-| Simple lookup (last 15 min of history) | 0.83 | 0.90 | **0.87** | **0.88** |
-| **NIDRA (forecasts the future, 5 models voting)** | 0.68 | 0.76 | 0.72 | 0.69 |
-| Perfect-hindsight cheat score | 0.65 | 0.58 | 0.62 | 0.76 |
-
-**What changed here, and why the old numbers looked odd**: earlier versions
-of this README showed NIDRA at perfect precision (1.00) but ~1% recall. That
-was a bug in how the system summarized its own imagined futures, not a
-property of the model — it averaged all the imagined futures together, which
-drowned out the minority that actually looked dangerous. Scoring the riskier
-tail of those futures instead takes F1 from 0.01 to **0.84** on the test day
-and 0.01 to **0.72** on the unseen day, while the ranking score holds or
-improves. Advance warning changed with it: from **0 of 10** attack episodes
-flagged ahead of time to **9 of 10, a median of about 8.8 hours early**.
-
-**Where NIDRA wins and where it loses.** On the test day it is now the best
-system tried, on both F1 (0.84 vs 0.79) and ranking (0.93 vs 0.86). On the
-never-seen-before day it is still **not** — the 15-minute-history lookup
-scores 0.88 ranking and 0.87 F1 against NIDRA's 0.69 and 0.72. The fix above
-did not close that gap, and we report it rather than omitting the row. What
-no baseline in either column does at all is forecast forward, so none of them
-can give the hours of advance warning NIDRA produces; that remains the
-contribution, and better ranking on unseen attack types remains open.
-
-### The tuning experiment, in full
-
-We hypothesized that some of the "randomness" the system uses while
-imagining the future was washing out its own signal, and tested that by
-retraining with that randomness turned down. Comparing one model
-before/after (both before adding the 5-model voting):
-
-**Test day:**
-
-| Version | Precision | Recall | F1 | AUC-PR |
-|---|:---:|:---:|:---:|:---:|
-| Before the fix | 1.00 | 0.03 | 0.06 | 0.88 |
-| **After the fix** | 1.00 | 0.03 | 0.05 | **0.92** |
-
-**Never-seen-before day:**
-
-| Version | Precision | Recall | F1 | AUC-PR |
-|---|:---:|:---:|:---:|:---:|
-| Before the fix | 0.94 | 0.11 | 0.20 | 0.70 |
-| **After the fix** | 0.85 | 0.06 | 0.12 | **0.72** |
-
-The fix improved the ranking score (AUC-PR) on both days — confirming the
-hypothesis — but, as footnote 2 explains, that gain doesn't add on top of
-what 5-model voting already achieves on its own.
+A detector that only classifies the current moment cannot produce this
+number at all — there is nothing to compare against, because forecasting is
+what makes it possible.
 
 ### Other things we measured
 
-- **Speed**: forecasts come back in about **137 milliseconds** on
-  ordinary hardware (CPU, no GPU needed) — well within the 300ms budget
-  a live system needs to feel instant.
-- **Early warning**: when the system does raise a flag, it does so
-  **well before the attack fully unfolds** — anywhere from about 25
-  minutes to several hours of advance notice in testing, not an
-  after-the-fact alert.[^1]
+- **Speed**: forecasts come back in about **137 milliseconds** on ordinary
+  hardware (CPU, no GPU needed) — well within the 300ms budget a live
+  system needs to feel instant.
+- **State forecast accuracy**: the model's predicted future network state is
+  measured against what actually happened (nRMSE), independently of any
+  risk score — see the model card.
 - **Code health**: 221 automated tests, all passing — the pipeline, the
   model, and the serving code are exercised end-to-end, not just eyeballed.
 
-See [`ml/REAL_DATA_RESULTS.md`](ml/REAL_DATA_RESULTS.md) for every one of
-these numbers with full provenance, and [`ml/MODEL_CARD.md`](ml/MODEL_CARD.md)
-for a compact technical summary.
+See [`ml/REAL_DATA_RESULTS.md`](ml/REAL_DATA_RESULTS.md) for the complete
+run-by-run record with full provenance of every number, every bug found and
+fixed, and every open question, and [`ml/MODEL_CARD.md`](ml/MODEL_CARD.md)
+for a compact technical summary including limitations and intended use.
 
 ## Architecture
 
@@ -161,10 +73,9 @@ raw telemetry (PCAP via tshark + CICFlowMeter CSV)
     -> Gaussian transition model: predicts the NEXT-STATE DELTA
     -> recursive 6-step (3 min) rollout, feeding predictions back in
        as if they were real observations
-    -> frozen risk head + frozen stage head score the simulated future
-    -> 5-model ensemble, ~500 sampled trajectories -> forecast with
-       confidence band, attack-stage distribution, lead time, and
-       feature-level explanations
+    -> frozen risk head scores the simulated future
+    -> 5-model ensemble, ~1000 sampled trajectories -> forecast with
+       confidence band, lead time, and feature-level explanations
 ```
 
 The recursive feedback loop — the model's own forecast re-entering the

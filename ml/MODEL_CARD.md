@@ -14,7 +14,7 @@ observed 45-feature state into a recurrent hidden summary, learns a
 Gaussian transition model over the *next-state delta*, and recursively rolls
 that transition forward `K=6` steps (3 min) — feeding each prediction back
 into the encoder as if it were an observation, consuming no real data after
-"now." Frozen risk/stage heads (trained only on observed states) score the
+"now." A frozen risk head (trained only on observed states) scores the
 rolled-out trajectory.
 
 **Design targets vs. what is implemented** — read this before citing the
@@ -199,11 +199,24 @@ above):**
    undertraining.
 3. **Time-shuffle ablation is inconsistent between splits** — no collapse
    on test, real collapse on holdout — also present at this scale.
-4. **Stage-head class imbalance**: several of the 6 stage classes remain
-   rare enough to hit the class-weight ceiling even at 40,000 training
-   samples.
-5. **Heads validation loss does not converge cleanly** across any of the 5
-   seeds (noisy, 8-19 range).
+4. **The stage head is non-functional and its output must not be used.**
+   Measured at full production scale, it predicts `benign` for 100% of
+   4,000 evaluated windows on both splits: stage accuracy at horizon t+3,
+   scored over the windows where an attack actually occurs, is **0.00**
+   (top-3: 0.039), with mean predicted probability mass on the true stage
+   of 0.00006 against 0.953 on `benign`. It has collapsed to the majority
+   class. The cause is data, not wiring: several of the 6 stage classes are
+   rare enough to hit the class-weight ceiling, and the risk head alongside
+   it trains on only 287 positive examples in 500,000 rows (0.057%). The
+   model's risk forecasting and lead time do not depend on this head; only
+   the per-stage attribution does, and that output should be treated as
+   unavailable. See REAL_DATA_RESULTS.md Run 6.
+5. **Head validation loss does not converge cleanly** across any of the 5
+   seeds. Selecting heads on validation AUC-PR instead was implemented and
+   measured: it improves the validation metric and makes real performance
+   worse (holdout F1 0.486 vs 0.727), because the validation split carries
+   182 positives at a 0.364% positive rate against training's 0.057%. It is
+   retained as a rejected config option — see REAL_DATA_RESULTS.md Run 6.
 6. Not run at `config/default.yaml`'s full production scale (60/30 epochs,
    uncapped ~6.9M-candidate training set) — compute/time, not a blocker.
 7. **Rollout noise measurably erodes score separation with horizon depth —

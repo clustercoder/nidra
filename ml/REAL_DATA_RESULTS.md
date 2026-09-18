@@ -742,6 +742,62 @@ AUC-PR also came in slightly below Run 3 (0.691 vs 0.729); the head
 re-initialization below accounts for roughly 0.04 of that and is within the
 per-seed spread (head val AUC-PR ranges 0.50-0.62 across seeds).
 
+### The stage head is degenerate — measured, and its output must not be used
+
+Found while assembling a results table that included a per-stage metric.
+Evaluated at full production scale against the shipped 5-seed ensemble at
+q=0.85 pooling, the stage head predicts `benign` for **100% of 4,000
+windows** on both splits.
+
+Stage accuracy at horizon t+3, scored only over windows where an attack
+actually occurs at t+3 (`stage_accuracy_at_k`'s documented contract):
+
+| split | attack windows at t+3 | top-1 | top-3 | mean prob on true stage | mean prob on `benign` |
+|---|:---:|:---:|:---:|:---:|:---:|
+| test | 687 | **0.00** | 0.039 | 0.00006 | 0.953 |
+| holdout | 94 | **0.00** | — | — | — |
+
+This is not an indexing artifact — it was checked directly. The ground-truth
+stage distribution at t+3 on test is sensible (640 `c2`, 25 `recon`, 22
+`exfil`), while the predicted distribution is 687 `benign` and nothing else.
+Accuracy over *all* windows reads 0.828, but that figure is achieved purely
+by always answering `benign` (82.8% of t+3 windows are benign) and is
+therefore meaningless as a capability measure.
+
+Cause is data, not wiring. Several of the 6 stage classes are rare enough to
+hit the class-weight ceiling (weights reach ~83,000), and the heads train on
+a split carrying only 287 positive risk examples in 500,000 rows (0.057%).
+The stage head collapsed to the majority class and stayed there.
+
+**Consequence, stated plainly**: the per-stage attribution output is
+unavailable, and `README.md` no longer advertises attack-stage forecasting as
+a delivered capability. Risk forecasting and lead time do not depend on this
+head — they come from the risk head and the rollout — so the headline results
+are unaffected. Fixing it needs more per-stage attack data, not another
+training knob.
+
+### Run 6 item: `logvar_max=1.5` does not stack with quantile pooling
+
+Run 4 found that tightening the transition model's rollout-noise clamp
+improved single-model AUC-PR but that the gain did not survive ensembling.
+Retrained at full scale (all 5 seeds, `config/default_logvar15.yaml`) and
+swept at the production sample count, it does not survive quantile pooling
+either. At the shipped q=0.85:
+
+| | logvar 3.0 | logvar 1.5 |
+|---|:---:|:---:|
+| test F1 | 0.855 | 0.881 |
+| test AUC-PR | 0.936 | 0.916 |
+| holdout F1 | 0.729 | 0.716 |
+| holdout AUC-PR | 0.746 | 0.751 |
+
+The signs disagree across metrics and splits and the magnitudes sit inside
+the seed-to-seed spread; per-seed dynamics val NLL is also a wash (logvar 1.5
+wins on 2 of 5 seeds). One faint pattern worth recording without acting on
+it: holdout AUC-PR favours logvar 1.5 at higher quantiles (0.768 vs 0.749 at
+q=0.9), directionally consistent with less rollout noise helping the tail.
+`config/default.yaml` stays at `logvar_max: 3.0`.
+
 ### Rejected fix 1: selecting heads on validation AUC-PR
 
 The risk head trains on **287 positive examples in 500,000 rows** (0.057%),

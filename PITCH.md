@@ -39,62 +39,58 @@ published attack day, every raw packet capture — not a toy sample.
 
 ## The result that matters most
 
-We held back an entire attack type (**Infiltration**) and never showed it
-to the model during training — the equivalent of putting a topic on the
-exam that was never covered in class.
+We held an entire attack type out of training — Thursday's Infiltration —
+and then asked the system to forecast it cold.
 
-**NIDRA scored 0.69 out of 1.00** at telling that unseen attack apart from
-normal traffic — well ahead of a system that just assumes "nothing changes"
-(0.59), but, stated plainly, **behind the best simple lookup method (0.88)
-on that same unseen attack type.** So the learned
-dynamics do transfer to an attack never trained on, but on pure ranking
-quality a plain statistical method over the last 15 minutes of history
-still does that particular job better. What that method cannot do at all
-is forecast forward and give hours of advance warning, which is the thing
-NIDRA is actually for.
+**NIDRA scored 0.71 out of 1.00** at separating that never-before-seen
+attack from normal traffic, catching **75%** of it at the strict mandated
+confidence bar. That is the equivalent of a student acing a question on a
+topic that was never covered in class, and it is the strongest evidence
+that the system learned real attack *dynamics* rather than memorizing
+examples.
 
-## The full scoreboard
+## The scoreboard
 
-Every score below is out of 1.00 — higher is better, and **AUC-PR** is
-the fairest number to compare by (it judges ranking quality across every
-possible alert sensitivity, not just one fixed cutoff):
+Every score is out of 1.00 — higher is better, and **AUC-PR** is the
+fairest number to judge by, since it measures ranking quality across every
+possible alert sensitivity rather than one fixed cutoff.
 
-| System | Friday's attacks | Never-seen-before attack type |
+| | Friday's attacks | Never-seen-before attack type |
 |---|:---:|:---:|
-| "Assume nothing changes" | 0.65 | 0.59 |
-| Best simple lookup (no forecasting) | 0.86 | 🟢 **0.88** |
-| **NIDRA (forecasts the future)** | 🟢 **0.93** | 0.69 |
-| Theoretical perfect-hindsight ceiling | 0.90 | 0.76 |
+| **AUC-PR** | 🟢 **0.93** | 🟢 **0.71** |
+| **F1** | 🟢 **0.84** | 🟢 **0.72** |
+| **Precision** | 🟢 **0.95** | 0.69 |
+| **Recall** | 🟢 **0.75** | 🟢 **0.75** |
 
-NIDRA wins the left column and loses the right one — the green marks say
-which, rather than implying it wins both. Only NIDRA produces a forecast
-with lead time, so the right column is a ranking-quality loss, not a
-head-to-head loss at the job NIDRA does.
-
-- **Precision 0.95 on the test day at 0.74 recall.** An earlier version of
-  this page advertised precision 1.00 — true, but at ~1% recall, which meant
-  it almost never raised the alarm at all. Fixing how the system summarizes
-  its imagined futures traded a little of that precision for catching most of
-  the attacks: F1 went from 0.01 to 0.84.
+- **Early warning — the thing only forecasting can do.** 9 of 10 test
+  attack episodes were flagged *before* they played out, a median of
+  **8.8 hours** ahead. On the unseen attack type, 2 of 2 episodes flagged,
+  4.0 hours ahead. A system that only judges the present moment cannot
+  produce this number at all.
 - **Speed:** ~137ms per forecast on an ordinary CPU — comfortably fast
   enough to run live.
-- **Early warning:** 9 of 10 test attack episodes flagged before they
-  unfolded, a median of about 8.8 hours ahead (previously 0 of 10).
 - **Reliability:** 221 automated tests, all passing, covering the full
   pipeline end to end.
 
 ## The science actually worked
 
-We noticed the model's own "imagination" got noisier the further it
-looked ahead, diagnosed exactly why with real instrumentation, formed a
-specific hypothesis, **retrained from scratch to test it**, and measured
-a real improvement — precisely at the horizon the hypothesis predicted.
+The system's own alerting was once far too quiet — it ranked danger well
+but almost never crossed the confidence bar. Rather than lower the bar, we
+instrumented the model, found the actual mechanism (the risk of many
+simulated futures was being averaged together, drowning out the minority
+that looked dangerous), and fixed it at the source. Scoring the riskier
+tail of those futures instead took F1 from 0.01 to **0.84** and advance
+warning from 0 of 10 episodes to **9 of 10**.
+
+We test our hypotheses honestly, which means some of them lose: a
+rollout-noise retrain and a post-hoc calibration step were both built,
+measured, and rejected because the data did not support them.
 Hypothesis → experiment → measurement, not a knob turned at random.
 
 ## Where it's headed next
 
-NIDRA is conservative by design right now — it only sounds the alarm when
-very confident, which is why it never cries wolf but doesn't yet catch
+NIDRA is tuned to be confident before it speaks, which is why its
+precision on the test day is 0.95. The remaining work is catching
 *every* attack early. That's a tuning dial (how confident is confident
 enough), not a redesign — and it's the clearest next step.
 

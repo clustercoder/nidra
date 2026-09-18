@@ -227,3 +227,6 @@ __marimo__/
 # machine-local; the real, tracked artifacts live under ml/artifacts*)
 /cicids2017/
 /artifacts/
+
+# Private internal notes — never commit
+INTERNAL_NOTES.md
