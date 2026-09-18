@@ -27,6 +27,7 @@ import pandas as pd
 from nidra.data.schema import CONTEXT_LENGTH, FEATURE_ORDER
 from nidra.serve.predictor import NidraPredictor
 from nidra.utils.config import load_config, resolve_path
+from nidra.utils.seed import set_seed
 
 logger = logging.getLogger(__name__)
 
@@ -136,9 +137,17 @@ def main() -> None:
     parser.add_argument("--threshold", type=float, default=0.75,
                         help="alert threshold used only for the printed ALERT markers")
     parser.add_argument("--json", action="store_true", help="print the raw forecast dict as JSON")
+    parser.add_argument("--seed", type=int, default=0,
+                        help="seed for the rollout sampler; the forecast is a Monte Carlo "
+                             "estimate over sampled trajectories, so this is what makes two "
+                             "runs of the demo agree")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
+    # The risk curve is pooled over sampled rollout trajectories. Unseeded,
+    # a reviewer running this twice sees different numbers for the same
+    # window and has no way to tell sampling noise from a real difference.
+    set_seed(args.seed)
     cfg = load_config(args.config)
     artifacts = cfg["artifacts"]
 
