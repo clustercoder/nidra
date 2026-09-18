@@ -230,3 +230,19 @@ __marimo__/
 
 # Private internal notes — never commit
 INTERNAL_NOTES.md
+
+# Local environment files at ANY level — never commit. The bare `.env` rule
+# above does not match `.env.local` / `.env.production`, which left
+# web/.env.local committable.
+.env.*
+!.env.example
+
+# Web-app runtime upload store — machine-local user data, not part of the repo
+/data/
+
+# Frontend dependencies (the web app is not part of this ML repo's history;
+# its source is deliberately left untracked rather than force-ignored)
+/web/node_modules/
+/web/.next/
+/web/.vercel/
+/web/next-env.d.ts

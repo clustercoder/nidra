@@ -71,7 +71,7 @@ possible alert sensitivity rather than one fixed cutoff.
   produce this number at all.
 - **Speed:** ~137ms per forecast on an ordinary CPU — comfortably fast
   enough to run live.
-- **Reliability:** 221 automated tests, all passing, covering the full
+- **Reliability:** 235 automated tests, all passing, covering the full
   pipeline end to end.
 
 ## The constraints these numbers were achieved under

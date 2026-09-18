@@ -70,7 +70,8 @@ nidra/
     serve/                  predictor.py (NidraPredictor — the ONLY backend import),
                              benchmark.py
     utils/                  config loading, seeding
-  artifacts/                weights/ scaler/ metrics/  (gitignored except .gitkeep)
+  artifacts/                the shipped model, committed: weights/ (5 checkpoints)
+                             scaler/ processed/ metrics/ metadata/
   tests/                    unit + integration tests, synthetic fixtures
 ```
 
@@ -277,10 +278,51 @@ over target, cut samples toward 100 before cutting ensemble size.
 
 ## Reproducing this
 
+### Without the raw dataset (what a fresh clone can do)
+
+The repo ships the trained ensemble, the fitted scaler, and the windowed
+per-day tables under `artifacts/`, so everything below runs offline on a
+CPU with no CIC-IDS2017 download. `build_all_splits` resolves each day from
+its committed table first and only falls back to the raw CSV on a miss (see
+`nidra/train/pipeline.py`), so a machine without the dataset is a cache hit,
+not a failure.
+
 ```bash
 cd ml
 pip install -e .
-pytest tests/ -q                                    # 221 tests, synthetic fixtures, seconds
+pytest tests/ -q                 # 235 tests, synthetic fixtures, seconds
+
+# Forecast one real window with the shipped ensemble
+python -m nidra.scripts.demo_forecast                 # precedes a real attack
+python -m nidra.scripts.demo_forecast --want-risk 0   # benign, for contrast
+python -m nidra.scripts.demo_forecast --json          # the full Forecast dict
+
+# Reproduce the published numbers. These are the exact flags behind them,
+# and every metrics file records its own parameters, so a cheaper run is
+# visibly a cheaper run rather than a silent mismatch.
+python -m nidra.eval.run_eval --config config/default.yaml --seed 0 \
+    --split test    --n-samples 200 --max-eval-samples 4000 --use-ensemble
+python -m nidra.eval.run_eval --config config/default.yaml --seed 0 \
+    --split holdout --n-samples 200 --max-eval-samples 4000 --use-ensemble
+
+# Serving latency on your own hardware
+python -m nidra.serve.benchmark --weights-dir artifacts/weights \
+    --scaler-path artifacts/scaler/robust_scaler.joblib --config config/default.yaml
+```
+
+Note that `run_eval` rewrites `artifacts/metrics/<split>/` in place. The
+committed contents are the published run, so `git diff` after your own run
+is the comparison.
+
+### Retraining from the raw dataset
+
+Everything below needs the ~50GB CIC-IDS2017 release in place — see
+`PRODUCTION_RUN_GUIDE.md` for acquiring and pointing at it.
+
+```bash
+cd ml
+pip install -e .
+pytest tests/ -q                                    # 235 tests, synthetic fixtures, seconds
 
 # MVP scale, full 5-seed ensemble (what REAL_DATA_RESULTS.md §Run 2 reports):
 for seed in 0 1 2 3 4; do

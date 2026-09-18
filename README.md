@@ -114,7 +114,7 @@ unrunnable.
 - **State forecast accuracy**: the model's predicted future network state is
   measured against what actually happened (nRMSE), independently of any
   risk score — see the model card.
-- **Code health**: 221 automated tests, all passing — the pipeline, the
+- **Code health**: 235 automated tests, all passing — the pipeline, the
   model, and the serving code are exercised end-to-end, not just eyeballed.
 
 See [`ml/REAL_DATA_RESULTS.md`](ml/REAL_DATA_RESULTS.md) for the complete
@@ -148,25 +148,77 @@ ml/                     the ML subsystem — data pipeline, world model,
                          training, evaluation, explainability, serving
   nidra/                 source (data/, models/, train/, eval/, explain/, serve/)
   config/                default.yaml (production) / mvp_2017.yaml (fast iteration)
-  tests/                 221 tests, synthetic fixtures, runs in seconds
+  artifacts/             the shipped model: weights, scaler, windowed data,
+                          metrics, provenance — everything needed to run
+  tests/                 235 tests, synthetic fixtures, runs in seconds
   README.md              full technical documentation, start here for details
   MODEL_CARD.md          compact model card: claims, deviations, limitations
   REAL_DATA_RESULTS.md   single source of truth for every measured number
-docs/                    problem-statement PRD and build specs
+  PRODUCTION_RUN_GUIDE.md  retraining from the raw dataset, start to finish
+docs/                    problem-statement PRD and the build specs the code
+                         docstrings cross-reference (IMPLEMENTATION-ML.md et al.)
 ```
 
 ## Quickstart
 
+**No dataset download is required.** The repo ships the trained model and
+the windowed evaluation data, so a fresh clone runs end-to-end, offline, on
+a CPU.
+
 ```bash
 cd ml
-pip install -e .
-pytest tests/ -q                     # 221 tests, synthetic fixtures — seconds
+pip install -e .                 # Python 3.11+; CPU-only is fine
 
-# Reproduce the full-scale production result (requires the real
-# CIC-IDS2017 dataset — see ml/PRODUCTION_RUN_GUIDE.md):
-python -m nidra.train.train_dynamics --config config/default.yaml --max-train-samples 500000 --max-val-samples 50000
-python -m nidra.train.train_heads    --config config/default.yaml --max-train-samples 500000 --max-val-samples 50000
-python -m nidra.eval.run_eval        --config config/default.yaml --seed 0 --split test --use-ensemble
+pytest tests/ -q                 # 235 tests, synthetic fixtures — seconds
+
+# 1. Forecast a real CIC-IDS2017 window with the shipped ensemble
+python -m nidra.scripts.demo_forecast                 # a window preceding a real attack
+python -m nidra.scripts.demo_forecast --want-risk 0   # a benign window, for contrast
+
+# 2. Reproduce the published evaluation numbers (~tens of minutes per split)
+python -m nidra.eval.run_eval --config config/default.yaml --seed 0 \
+    --split test    --n-samples 200 --max-eval-samples 4000 --use-ensemble
+python -m nidra.eval.run_eval --config config/default.yaml --seed 0 \
+    --split holdout --n-samples 200 --max-eval-samples 4000 --use-ensemble
+
+# 3. Measure serving latency on your own machine
+python -m nidra.serve.benchmark --weights-dir artifacts/weights \
+    --scaler-path artifacts/scaler/robust_scaler.joblib --config config/default.yaml
+```
+
+Step 1 prints the forecast risk curve for horizons t+1..t+6 with confidence
+intervals, the lead time, and the SHAP signals driving the call. The
+attack-preceding window alerts; the benign window stays near zero.
+
+Step 2 rewrites `ml/artifacts/metrics/` in place, so `git diff` afterwards
+shows your run against the committed one. The flags above are the ones the
+published numbers were produced with, and each metrics file records its own
+parameters — lowering `--n-samples` or `--max-eval-samples` is much faster
+but will not reproduce the headline figures.
+
+### What ships in the repo
+
+| Path | What it is |
+|---|---|
+| `ml/artifacts/weights/` | the 5 ensemble checkpoints behind every number above, plus per-seed metadata and the calibration artifact |
+| `ml/artifacts/scaler/` | the fitted `RobustScaler` and SHAP background — inference must normalize with the exact scaler the model was trained against, so weights alone would be unusable |
+| `ml/artifacts/processed/` | the windowed, labelled per-day tables (~28MB) that evaluation runs on |
+| `ml/artifacts/metrics/` | the published test and holdout metrics, as written by `run_eval` |
+| `ml/artifacts/metadata/` | dataset, model and experiment provenance (config hash, git commit) |
+
+The raw CIC-IDS2017 release (~50GB) is **not** redistributed here, and none
+of the three steps above need it. It is required only to re-derive the
+windowed tables from scratch or to retrain from zero.
+`nidra/train/pipeline.py` resolves each day from its committed table first
+and falls back to the raw CSV only on a miss, so nothing reaches for a
+dataset that isn't there.
+
+Retraining, for completeness — this is the only path that needs the raw
+dataset (see [`ml/PRODUCTION_RUN_GUIDE.md`](ml/PRODUCTION_RUN_GUIDE.md)):
+
+```bash
+python -m nidra.train.train_dynamics --config config/default.yaml
+python -m nidra.train.train_heads    --config config/default.yaml
 ```
 
 See [`ml/README.md`](ml/README.md) for the full technical writeup
