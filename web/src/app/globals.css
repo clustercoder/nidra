@@ -188,12 +188,14 @@
    light values wash out on near-black, and the dark ones glare on white. */
 :root,
 [data-console-theme="dark"] {
-  --console-bg: rgb(9 14 26);
-  --console-surface: rgb(16 24 42);
-  --console-raised: rgb(23 33 56);
-  --console-line: rgb(38 51 79);
-  --console-text: rgb(226 232 245);
-  --console-muted: rgb(140 155 183);
+  /* Near-black ground, the way shipped SOC tooling runs it — the signal
+     colours below only read as signal against something this dark. */
+  --console-bg: rgb(8 11 17);
+  --console-surface: rgb(15 19 28);
+  --console-raised: rgb(23 29 41);
+  --console-line: rgb(35 43 58);
+  --console-text: rgb(228 233 243);
+  --console-muted: rgb(139 150 171);
   --observed-lit: rgb(96 165 250);
   --projected-lit: rgb(167 139 250);
   --threshold-lit: rgb(251 176 64);

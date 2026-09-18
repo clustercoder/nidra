@@ -18,13 +18,48 @@ import { clockOf } from "@/lib/demo-replay";
  */
 
 const W = 900;
-const H = 320;
+const H = 280;
 const L = 52;
 const R = W - 18;
-const T = 22;
-const B = 250;
+const T = 18;
+const B = 212;
 
 const y = (risk: number) => B - Math.max(0, Math.min(1, risk)) * (B - T);
+
+/** Discrete legend. Observed and projected differ by dash as well as hue, so
+ * the pair survives a colour-blind reader and a greyscale print. */
+export function ChartLegend({ showReality }: { showReality: boolean }) {
+  const items = [
+    { label: "Observed", swatch: <span className="bg-observed-lit block h-0.5 w-4 rounded-full" /> },
+    {
+      label: "Projected",
+      swatch: (
+        <span className="flex w-4 items-center gap-[2px]">
+          <span className="bg-projected-lit block h-0.5 w-1.5 rounded-full" />
+          <span className="bg-projected-lit block h-0.5 w-1.5 rounded-full" />
+        </span>
+      ),
+    },
+    { label: "Band", swatch: <span className="bg-projected-lit/25 block h-2.5 w-4 rounded-sm" /> },
+    {
+      label: "Threshold",
+      swatch: <span className="bg-threshold-lit block h-0.5 w-4 rounded-full opacity-80" />,
+    },
+    ...(showReality
+      ? [{ label: "Outcome", swatch: <span className="text-positive-lit text-[13px] leading-none">×</span> }]
+      : []),
+  ];
+  return (
+    <ul className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+      {items.map(({ label, swatch }) => (
+        <li key={label} className="text-console-muted flex items-center gap-1.5 text-[11px]">
+          {swatch}
+          {label}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export function ForecastChart({
   forecast,
@@ -61,6 +96,15 @@ export function ForecastChart({
         `${i === 0 ? "M" : "L"}${x(firstI + i).toFixed(1)} ${y(p.risk).toFixed(1)}`,
     )
     .join(" ");
+
+  /* The observed line is filled to the floor. At fleet-typical risk of 0.06 a
+     bare stroke on a [0,1] axis reads as an empty panel; the fill gives the
+     low-risk state a shape without rescaling the axis, which must stay pinned
+     so hosts remain comparable. */
+  const obsArea =
+    shown.length > 1
+      ? `${obsPath} L${x(NOW_I).toFixed(1)} ${B} L${x(firstI).toFixed(1)} ${B} Z`
+      : "";
 
   const meanPath = [
     `M${NOW_X.toFixed(1)} ${y(anchor).toFixed(1)}`,
@@ -102,6 +146,25 @@ export function ForecastChart({
             : `The projected mean crosses ${thr} with ${lead} seconds of lead time.`
         }`}
       >
+        <defs>
+          <linearGradient id="nidra-observed-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" className="text-observed-lit" stopColor="currentColor" stopOpacity="0.32" />
+            <stop offset="100%" className="text-observed-lit" stopColor="currentColor" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* The band above the threshold is tinted rather than left blank: on a
+            [0,1] axis a nominal host leaves most of the plot empty, and the
+            empty part is exactly the part that matters. */}
+        <rect
+          x={L}
+          y={T}
+          width={R - L}
+          height={y(thr) - T}
+          className="fill-threshold-lit"
+          opacity="0.045"
+        />
+
         {/* grid + y labels */}
         <g className="stroke-console-line" strokeWidth="1">
           {[0, 0.25, 0.5, 0.75, 1].map((v) => (
@@ -134,6 +197,7 @@ export function ForecastChart({
         />
 
         {/* observed history */}
+        {obsArea && <path d={obsArea} fill="url(#nidra-observed-fill)" />}
         <path
           d={obsPath}
           fill="none"
