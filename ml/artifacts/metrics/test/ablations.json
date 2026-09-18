@@ -1,37 +1,57 @@
 {
   "split": "test",
   "seed": 0,
+  "n_samples": 200,
+  "n_trajectories": 1000,
+  "max_eval_samples": 4000,
+  "n_eval_rows": 4000,
+  "ensemble_seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "risk_pooling": {
+    "method": "quantile",
+    "quantile": 0.85,
+    "head_reduction": "before_pooling"
+  },
+  "risk_threshold": 0.75,
+  "forecast_chunk_size": 500,
+  "config_hash": "5f50ab5570322547",
+  "git_commit": "c938537cebae69d0f46628df9079932ba0594265",
   "ablations": {
     "persistence": {
       "auc_pr_persistence": 0.5482004097311163,
-      "auc_pr_world_model": 0.9071237504199486,
-      "auc_collapse": 0.35892334068883236,
+      "auc_pr_world_model": 0.9028021167162563,
+      "auc_collapse": 0.35460170698514004,
       "nrmse_persistence_mean": 6.338448616257436,
-      "nrmse_world_model_mean": 5.782796691445605,
+      "nrmse_world_model_mean": 5.780771866583207,
       "interpretation": "world model beats persistence"
     },
     "time_shuffle": {
-      "auc_pr_normal_order": 0.9085182580461542,
-      "auc_pr_shuffled_order": 0.9051761438001048,
-      "collapse": 0.0033421142460493547,
+      "auc_pr_normal_order": 0.9023457417504798,
+      "auc_pr_shuffled_order": 0.9115054103175184,
+      "collapse": -0.009159668567038648,
       "interpretation": "NO COLLAPSE under shuffling \u2014 the model may be using per-window features only, not real temporal structure; this is a reportable negative result, not a bug to hide"
     },
     "horizon_curve": {
       "auc_pr_by_k": [
-        0.26653820629881303,
-        0.16615471987879787,
-        0.27817081058593546,
-        0.2312361390452145,
-        0.30179293897028775,
-        0.2677724540339755
+        0.29999813355891014,
+        0.17104775701839486,
+        0.30670967459316767,
+        0.241228739387432,
+        0.3404025150181108,
+        0.2818545429213949
       ],
       "nrmse_by_k": [
-        6.229794806426314,
-        4.742204843925025,
-        6.548364634077467,
-        5.5245962615939925,
-        6.863327944459092,
-        6.226378371747854
+        6.099202847858228,
+        4.431621235991229,
+        6.221918695698916,
+        5.065139964187894,
+        6.427391281608522,
+        5.6903210554673045
       ],
       "flat_curve_leakage_warning": false
     },
