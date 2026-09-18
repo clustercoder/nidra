@@ -78,6 +78,42 @@ def _warn_if_single_class(y_true: np.ndarray, split_name: str, max_eval_samples:
         )
 
 
+def build_run_params(cfg: dict, seed: int, split_name: str, n_samples: int,
+                      max_eval_samples: int | None, ensemble_seeds: list[int] | None,
+                      n_eval_rows: int) -> dict:
+    """The provenance block stamped into every metrics file this run writes.
+
+    Bare numbers are not reproducible: a committed F1 of 0.835 from a cheap
+    20-rollout smoke run and 0.837 from the published 200-per-member run look
+    identical to two decimal places but are different experiments, and the
+    published headline once disagreed with the committed artifacts for
+    exactly that reason. `n_trajectories` is the count the served statistic
+    actually pools — n_samples per ensemble member, times the members.
+    """
+    pooling = {
+        "method": cfg.get("risk_pooling_method", "mean"),
+        "quantile": cfg.get("risk_pooling_quantile"),
+        "head_reduction": cfg.get("risk_pooling_head_reduction", "before_pooling"),
+    }
+    eval_cfg = cfg.get("eval", {})
+    seeds = [int(s) for s in ensemble_seeds] if ensemble_seeds is not None else None
+    n_members = len(seeds) if seeds else 1
+    return {
+        "split": split_name,
+        "seed": int(seed),
+        "n_samples": int(n_samples),
+        "n_trajectories": int(n_samples) * n_members,
+        "max_eval_samples": None if max_eval_samples is None else int(max_eval_samples),
+        "n_eval_rows": int(n_eval_rows),
+        "ensemble_seeds": seeds,
+        "risk_pooling": pooling,
+        "risk_threshold": eval_cfg.get("risk_threshold"),
+        "forecast_chunk_size": eval_cfg.get("forecast_chunk_size"),
+        "config_hash": cfg.get("_config_hash"),
+        "git_commit": cfg.get("_git_commit"),
+    }
+
+
 def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples: int | None = 5000,
         ensemble_seeds: list[int] | None = None) -> dict:
     """`ensemble_seeds`, if given, additionally loads every listed seed's
@@ -221,7 +257,10 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
     # orders of magnitude for reasons unrelated to forecast quality.
     feature_scale = scaler.reference_std_
 
-    results: dict = {"split": split_name, "seed": seed, "n_samples": int(len(eval_arrays.X))}
+    run_params = build_run_params(cfg, seed=seed, split_name=split_name, n_samples=n_samples,
+                                   max_eval_samples=max_eval_samples, ensemble_seeds=ensemble_seeds,
+                                   n_eval_rows=len(eval_arrays.X))
+    results: dict = {**run_params}
 
     # --- Baselines ---
     logger.info("running baselines on split=%s (n=%d)", split_name, len(eval_arrays.X))
@@ -295,7 +334,7 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
                 y_true, probs_ensemble_world_model_calibrated, threshold=cfg["eval"]["risk_threshold"]
             )
     with open(metrics_dir / "baselines.json", "w") as f:
-        json.dump({"split": split_name, "seed": seed, "baselines": baselines}, f, indent=2)
+        json.dump({**run_params, "baselines": baselines}, f, indent=2)
     results["baselines"] = baselines
 
     # --- Ablations ---
@@ -327,13 +366,13 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
             "low_variance_features_floored": low_variance,
         }
     with open(metrics_dir / "ablations.json", "w") as f:
-        json.dump({"split": split_name, "seed": seed, "ablations": ablations}, f, indent=2)
+        json.dump({**run_params, "ablations": ablations}, f, indent=2)
     results["ablations"] = ablations
 
     # --- Calibration (Brier/reliability) ---
     logger.info("running calibration")
     calibration = calibration_by_horizon(X_eval, eval_arrays.future_is_attack, model, n_samples=n_samples)
-    calibration_out = {"split": split_name, "seed": seed, "calibration": calibration}
+    calibration_out = {**run_params, "calibration": calibration}
     if calibration_params is not None:
         from nidra.eval.metrics import brier_score, reliability_diagram
         calibrated_risk_mean_k = apply_platt_by_horizon(world["risk_mean_k"], calibration_params)
@@ -363,7 +402,7 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
         risk_pooling_method=risk_pooling_method, risk_pooling_quantile=risk_pooling_quantile,
         risk_pooling_head_reduction=risk_pooling_head_reduction,
     )
-    lead_time_out = {"split": split_name, "seed": seed, "raw": lead_time_report.to_dict()}
+    lead_time_out = {**run_params, "raw": lead_time_report.to_dict()}
     if calibration_params is not None:
         lead_time_report_calibrated = compute_lead_time_report(
             full_eval_arrays, eval_split_df, model, scaler,
