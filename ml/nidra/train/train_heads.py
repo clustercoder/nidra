@@ -19,12 +19,13 @@ import time
 
 import numpy as np
 import torch
+from sklearn.metrics import average_precision_score
 from torch.utils.data import DataLoader
 
 from nidra.data.dataset import WorldModelDataset
 from nidra.data.normalize import FeatureScaler
 from nidra.data.schema import STAGE_INDEX, STAGE_LABELS
-from nidra.models.world_model import WorldModel
+from nidra.models.world_model import RiskHead, StageHead, WorldModel
 from nidra.train.losses import risk_head_loss, stage_head_loss
 from nidra.train.pipeline import build_all_splits, build_windowed_splits, scale_arrays
 from nidra.utils.config import load_config, resolve_path
@@ -35,6 +36,33 @@ logger = logging.getLogger(__name__)
 
 def _stage_indices(stage_labels: np.ndarray) -> np.ndarray:
     return np.array([STAGE_INDEX[s] for s in stage_labels], dtype="int64")
+
+
+VALID_SELECTION_METRICS = ("val_auc_pr", "weighted_val_loss")
+
+
+def head_selection_score(val_loss: float, val_auc_pr: float, metric: str) -> float:
+    """Score for "is this epoch's head better?", where LOWER is better.
+
+    `"weighted_val_loss"` is the original criterion: risk BCE at
+    pos_weight (~1741 at production scale) plus stage CE with class weights
+    reaching ~83,000. Both are dominated by a handful of ultra-rare examples,
+    and measurement showed that criterion does not track ranking quality —
+    across 20 epochs on seed 0 it picked epoch 0 (val AUC-PR 0.523) while
+    epoch 4 reached 0.576 at a *worse* weighted loss (43.9 vs 37.7). The head
+    produces p_compromise, which every downstream metric depends on, so
+    selecting it by a proxy that diverges from ranking quality leaves real
+    performance unused.
+
+    `"val_auc_pr"` selects on the risk head's validation AUC-PR directly —
+    the threshold-independent ranking metric this project reports — negated
+    so that lower is better for the caller's comparison.
+    """
+    if metric == "val_auc_pr":
+        return -val_auc_pr if np.isfinite(val_auc_pr) else float("inf")
+    if metric == "weighted_val_loss":
+        return val_loss
+    raise ValueError(f"unknown head selection metric {metric!r}, expected one of {VALID_SELECTION_METRICS}")
 
 
 def compute_pos_weight(risk_labels: np.ndarray) -> torch.Tensor:
@@ -73,6 +101,17 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
         state_clamp=mcfg["transition"]["state_clamp"],
     ).to(device)
     model.load_state_dict(torch.load(weights_path, map_location=device))
+    # Stage 2 always starts from FRESHLY INITIALIZED heads. The checkpoint at
+    # this path may already carry trained heads (it does whenever this script
+    # is re-run against a completed pipeline), and continuing from those would
+    # make the result depend on how many times the script had been run rather
+    # than on (dynamics weights, data, seed) alone. Re-initializing keeps
+    # stage 2 reproducible and matches what a clean sequential run produces,
+    # where the heads are untrained when this stage begins.
+    model.risk_head = RiskHead(mcfg["n_features"], mcfg["risk_head"]["hidden"]).to(device)
+    model.stage_head = StageHead(
+        mcfg["n_features"], mcfg["stage_head"]["hidden"], mcfg["stage_head"]["n_stages"]
+    ).to(device)
     model.freeze_dynamics()
 
     X_train, _ = scale_arrays(windowed["train"], scaler)
@@ -103,7 +142,14 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
     head_params = list(model.risk_head.parameters()) + list(model.stage_head.parameters())
     optimizer = torch.optim.AdamW(head_params, lr=hcfg["lr"], weight_decay=hcfg["weight_decay"])
 
+    selection_metric = hcfg.get("selection_metric", "weighted_val_loss")
+    if selection_metric not in VALID_SELECTION_METRICS:
+        raise ValueError(f"unknown train_heads.selection_metric {selection_metric!r}")
+    logger.info("seed=%d heads: selecting on %s", seed, selection_metric)
+
+    best_score = float("inf")
     best_val = float("inf")
+    best_auc = float("nan")
     patience_left = hcfg["patience"]
     best_state = None
     history = []
@@ -130,13 +176,25 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
             val_stage_logits = model.stage_head(s_val_t)
             val_loss = (risk_head_loss(val_risk_logits, risk_val_t, pos_weight)
                         + stage_head_loss(val_stage_logits, stage_val_t, class_weights)).item()
+            val_probs = torch.sigmoid(val_risk_logits.squeeze(-1)).cpu().numpy()
+
+        # Ranking quality of the risk head on validation. Undefined when the
+        # val split carries a single class, in which case selection falls back
+        # to the loss for that epoch (score_head returns inf for a nan AUC).
+        val_auc_pr = (float(average_precision_score(risk_val, val_probs))
+                      if len(np.unique(risk_val)) > 1 else float("nan"))
 
         train_mean = float(np.mean(epoch_losses)) if epoch_losses else float("nan")
-        history.append({"epoch": epoch, "train_loss": train_mean, "val_loss": val_loss})
-        logger.info("seed=%d heads epoch=%d train_loss=%.4f val_loss=%.4f", seed, epoch, train_mean, val_loss)
+        history.append({"epoch": epoch, "train_loss": train_mean, "val_loss": val_loss,
+                        "val_auc_pr": val_auc_pr})
+        logger.info("seed=%d heads epoch=%d train_loss=%.4f val_loss=%.4f val_auc_pr=%.4f",
+                    seed, epoch, train_mean, val_loss, val_auc_pr)
 
-        if val_loss < best_val - 1e-5:
+        score = head_selection_score(val_loss, val_auc_pr, selection_metric)
+        if score < best_score - 1e-5:
+            best_score = score
             best_val = val_loss
+            best_auc = val_auc_pr
             patience_left = hcfg["patience"]
             best_state = {k: v.clone() for k, v in model.state_dict().items()}
         else:
@@ -156,6 +214,8 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
     metadata.update({
         "stage": "dynamics_and_frozen_heads",
         "heads_best_val_loss": best_val,
+        "heads_best_val_auc_pr": best_auc,
+        "heads_selection_metric": selection_metric,
         "heads_pos_weight": pos_weight.item(),
         "heads_class_weights": class_weights.tolist(),
         "heads_trained_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
