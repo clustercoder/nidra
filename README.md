@@ -153,6 +153,7 @@ ml/                     the ML subsystem — data pipeline, world model,
                           metrics, provenance — everything needed to run
   tests/                 235 tests, synthetic fixtures, runs in seconds
   README.md              full technical documentation, start here for details
+  ARCHITECTURE.md        how the ML subsystem is built and why (2-page overview)
   MODEL_CARD.md          compact model card: claims, deviations, limitations
   REAL_DATA_RESULTS.md   single source of truth for every measured number
   PRODUCTION_RUN_GUIDE.md  retraining from the raw dataset, start to finish
