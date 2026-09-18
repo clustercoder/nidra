@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 
-/* This route reads the committed fixture and nothing else — no API client, no
-   websocket. /demo must render with every container stopped. */
+/* This route reads the committed replay and nothing else — no API client, no
+   websocket. /demo must render with every container stopped. The replay is
+   generated offline by scripts/make_demo_replay.py: real CIC-IDS2017 windows
+   scored by the real ensemble, through the same predictor the inference worker
+   loads. Static, but not fabricated. */
 import { forecastsByHost, replay } from "@/lib/demo-replay";
 
 import { DemoConsole } from "./demo-console";
@@ -9,7 +12,7 @@ import { DemoConsole } from "./demo-console";
 export const metadata: Metadata = {
   title: "Demo console — NIDRA",
   description:
-    "Public replay console. A synthesised CIC-IDS2017-Wednesday-shaped capture driven through the stub pipeline; values are illustrative.",
+    "Public replay console. Real CIC-IDS2017 Friday-morning traffic scored by the trained 5-seed NIDRA ensemble — every value is the model's own output.",
 };
 
 function first(v: string | string[] | undefined) {

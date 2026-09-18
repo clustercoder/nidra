@@ -142,7 +142,7 @@ export function DemoConsole({
   if (!current) {
     return (
       <p className="bg-console-bg text-console-muted min-h-screen p-6">
-        The replay fixture is empty — regenerate it with scripts/make_demo_fixture.py.
+        The replay fixture is empty — regenerate it with scripts/make_demo_replay.py.
       </p>
     );
   }
@@ -275,7 +275,7 @@ export function DemoConsole({
               <>
                 <PageHeader
                   title="Forecast console"
-                  subtitle="Replay of a synthesised capture — risk, projected stage, and lead time per host."
+                  subtitle="Replay of real CIC-IDS2017 traffic scored by the trained ensemble — risk, projected stage, and lead time per host."
                 >
                   <span className="border-console-line bg-console-surface text-console-muted inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs">
                     <span
