@@ -23,6 +23,8 @@ production scale: 5 independently-trained models voting together, on
 | **F1** (at the mandated 0.75 confidence bar) | **0.84** | **0.72** |
 | **Precision** | **0.95** | 0.69 |
 | **Recall** | **0.75** | **0.75** |
+| **Median lead time** (advance warning) | **8.8 hours** | **4.0 hours** |
+| **Attack episodes warned in advance** | **9 of 10** | **2 of 2** |
 
 Every number is out of 1.00; higher is better. **AUC-PR** is the fairest
 single score, because it measures how well the system ranks real attacks
@@ -47,6 +49,62 @@ alarm before an attack has played out:
 A detector that only classifies the current moment cannot produce this
 number at all — there is nothing to compare against, because forecasting is
 what makes it possible.
+
+
+### What these numbers were produced on
+
+Every result above was trained and measured on a **MacBook Air (Apple M1,
+8 cores, 16 GB RAM)** — no GPU, no cluster, no cloud. That single fact sets
+the ceiling on several of the numbers, and it is worth being explicit about
+which ones:
+
+- **Training set capped at 500,000 windows of a ~6.9M-window candidate
+  pool.** Materializing the full pool as float32 tensors needs roughly
+  **35 GB** — more than twice the available RAM, and it OOM-kills the
+  process outright. So the model is trained on about **7%** of the windows
+  the dataset can actually produce. The cap is applied by a stratified draw
+  that keeps *every* attack-positive window, so none of the (already scarce)
+  attack signal is thrown away — but the benign context is heavily
+  subsampled.
+- **Rollout sampling is bounded by memory too.** Each forecast simulates
+  1,000 future trajectories across the 5-model ensemble; the evaluation
+  runs in memory-bounded chunks specifically so a 16 GB machine can finish
+  them.
+- **Attack data is extremely scarce, and that is the dataset, not the
+  machine.** Across all 8 CIC-IDS2017 day-files there are roughly **1,006
+  attack-labelled windows out of 11.4 million** — about **0.009%**. The
+  risk model therefore learns from a few hundred positive examples. Three of
+  the five attack stages appear *only* in the held-out evaluation days, so
+  the model is asked to forecast attack types for which it has, by
+  construction, zero training examples.
+
+Given that, the honest framing of the unseen-attack column is that 0.71
+AUC-PR and 75% recall come from a model trained on a few hundred attack
+examples, on 7% of the available windows, on a laptop. More compute and more
+attack-labelled data are the two most obvious levers, and neither has been
+pulled yet.
+
+### What we tried along the way
+
+The results above are the surviving end of a series of measured experiments,
+not a single lucky configuration. Documented in full, with numbers, in
+[`ml/REAL_DATA_RESULTS.md`](ml/REAL_DATA_RESULTS.md):
+
+| Experiment | Outcome |
+|---|---|
+| **How sampled futures are pooled into one risk score** | **Adopted.** The original mean over simulated futures drowned out the dangerous minority; scoring the riskier tail instead took F1 from 0.01 to 0.84 and advance warning from 0 of 10 episodes to 9 of 10. The single largest improvement in the project. |
+| 5-model ensemble vs. single model | **Adopted.** Independent seeds voting together beat any individual model. |
+| Post-hoc probability calibration (Platt scaling) | Built, measured, **rejected** — it re-compressed the very probabilities the pooling fix had lifted. |
+| Tightening rollout noise (`logvar_max` 3.0 → 1.5) | Retrained from scratch at full scale, **rejected** — the gain seen at smaller scale did not survive either ensembling or pooling. |
+| Selecting model heads on validation ranking instead of loss | Built, measured, **rejected** — it improved the validation metric and made real performance worse, a textbook small-validation-set overfit. |
+| Pooling quantile tuned at reduced scale | **Rejected after re-measurement** — the setting that won at small scale was the *worst* at full scale. Re-measured rather than assumed. |
+| Ensemble vote ordering (before vs. after tail pooling) | Implemented and measured as a **no-op** — the ensemble members agree too closely for the order to matter. |
+
+Several of those are negative results, and they are reported as such. The
+pipeline also surfaced and fixed three real correctness bugs along the way —
+a silent timestamp-precision bug that corrupted every window on newer pandas,
+and two memory faults that made the documented full-scale commands
+unrunnable.
 
 ### Other things we measured
 

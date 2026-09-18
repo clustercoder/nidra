@@ -61,6 +61,8 @@ possible alert sensitivity rather than one fixed cutoff.
 | **F1** | 🟢 **0.84** | 🟢 **0.72** |
 | **Precision** | 🟢 **0.95** | 0.69 |
 | **Recall** | 🟢 **0.75** | 🟢 **0.75** |
+| **Median advance warning** | 🟢 **8.8 hours** | 🟢 **4.0 hours** |
+| **Episodes caught before they unfolded** | 🟢 **9 of 10** | 🟢 **2 of 2** |
 
 - **Early warning — the thing only forecasting can do.** 9 of 10 test
   attack episodes were flagged *before* they played out, a median of
@@ -72,27 +74,68 @@ possible alert sensitivity rather than one fixed cutoff.
 - **Reliability:** 221 automated tests, all passing, covering the full
   pipeline end to end.
 
-## The science actually worked
+## The constraints these numbers were achieved under
 
-The system's own alerting was once far too quiet — it ranked danger well
-but almost never crossed the confidence bar. Rather than lower the bar, we
-instrumented the model, found the actual mechanism (the risk of many
-simulated futures was being averaged together, drowning out the minority
-that looked dangerous), and fixed it at the source. Scoring the riskier
-tail of those futures instead took F1 from 0.01 to **0.84** and advance
-warning from 0 of 10 episodes to **9 of 10**.
+Worth knowing before judging them, because two of the three are hard limits
+rather than tuning choices:
 
-We test our hypotheses honestly, which means some of them lose: a
-rollout-noise retrain and a post-hoc calibration step were both built,
-measured, and rejected because the data did not support them.
-Hypothesis → experiment → measurement, not a knob turned at random.
+- **Trained entirely on a MacBook Air (Apple M1, 16 GB RAM).** No GPU, no
+  cluster, no cloud budget. The full candidate training set needs ~35 GB to
+  hold in memory, so the model is trained on **500,000 windows out of a
+  ~6.9M pool — about 7%**. The sampling keeps every single attack-positive
+  window, so no attack signal was discarded; the benign context is what got
+  thinned.
+- **Attack data is vanishingly rare in the source dataset.** Across all 8
+  published CIC-IDS2017 day-files there are about **1,006 attack-labelled
+  windows in 11.4 million — 0.009%**. The risk model learns from a few
+  hundred positive examples.
+- **Three of the five attack stages appear only in the evaluation days.**
+  The model is asked to forecast categories of attack for which it has, by
+  construction, zero training examples.
+
+So the unseen-attack result — 0.71 AUC-PR, 75% recall, 4 hours of advance
+warning — comes from a model trained on a few hundred attack examples, on 7%
+of the available data, on a laptop. More compute and more attack-labelled
+telemetry are the two clear levers, and neither has been pulled.
+
+## What we tried, including what failed
+
+Seven experiments, measured and recorded with full numbers:
+
+| Experiment | Outcome |
+|---|---|
+| **Pooling the riskier tail of simulated futures** | **Adopted** — F1 0.01 → **0.84**, advance warning 0 of 10 → **9 of 10**. The biggest win in the project. |
+| 5-model ensemble voting | **Adopted** — beats any single model. |
+| Post-hoc probability calibration | **Rejected** — undid the pooling gain. |
+| Tightening rollout noise, retrained from scratch | **Rejected** — small-scale gain vanished at full scale. |
+| Selecting heads on validation ranking | **Rejected** — improved the validation score, hurt real performance. |
+| Pooling setting tuned at reduced scale | **Rejected on re-measurement** — the small-scale winner was the worst setting at full scale. |
+| Ensemble vote ordering | **Measured as a no-op** — members agree too closely to matter. |
+
+Four of seven were rejected on the evidence, and that is the point: each one
+was built, measured against held-out data, and dropped when the numbers said
+so. Three genuine correctness bugs were also found and fixed along the way,
+including a silent timestamp bug that was corrupting every training window on
+current library versions.
+
+### The one that mattered most, in detail
+
+The system's alerting was once far too quiet — it ranked danger well but
+almost never crossed the confidence bar. Rather than lower the bar, we
+instrumented the model and found the actual mechanism: the risk scores of a
+thousand simulated futures were being averaged together, drowning out the
+dangerous minority. Scoring the riskier *tail* of those futures instead is
+the change behind F1 0.01 → **0.84** and advance warning 0 of 10 → **9 of
+10**. Diagnosis, then a targeted fix — not a knob turned at random.
 
 ## Where it's headed next
 
-NIDRA is tuned to be confident before it speaks, which is why its
-precision on the test day is 0.95. The remaining work is catching
-*every* attack early. That's a tuning dial (how confident is confident
-enough), not a redesign — and it's the clearest next step.
+NIDRA is tuned to be confident before it speaks — precision 0.95 on the
+test day. The two clearest levers from here are the ones the constraints
+section names: **more compute** (the model currently sees 7% of the
+available training windows) and **more attack-labelled telemetry** (it
+learns from a few hundred positive examples). Both are resource limits
+rather than design problems, which is the good kind of bottleneck to have.
 
 ## Learn more
 
