@@ -169,6 +169,45 @@ rollout:
   stochastic: true
   ci_low_quantile: 0.05
   ci_high_quantile: 0.95
+  # Pooling method for the sampled-trajectory dimension when reducing
+  # to a point risk estimate (nidra.models.risk_pooling). Kept at "mean"
+  # here (unlike config/mvp_2017.yaml) because the quantile=0.5 finding
+  # in REAL_DATA_RESULTS.md's risk-pooling section was only measured
+  # against the MVP-scale single-seed checkpoint, not this full-scale
+  # 5-seed ensemble config — the mechanism (mean-pooling across sampled
+  # rollout trajectories washes out true positives) is scale-independent,
+  # but the optimal quantile value has not been re-measured against a
+  # full-scale checkpoint (which also pools across ensemble members).
+  # Re-run the sweep against a full-scale checkpoint before flipping this.
+  risk_pooling_method: mean
+  risk_pooling_quantile: 0.9
+  # Order of the two reductions in the POOLED-ENSEMBLE forecast
+  # (nidra.models.risk_pooling.pool_ensemble_risk). The five heads' opinions
+  # on the same trajectory are always soft-voted by a plain mean; this only
+  # chooses whether that mean happens before trajectory pooling
+  # ("before_pooling", the original behavior — head disagreement smooths the
+  # tail the quantile then selects from) or after it ("after_pooling" — each
+  # head pools its own trajectory distribution, then the tail estimates are
+  # soft-voted). Identical under risk_pooling_method: mean.
+  risk_pooling_head_reduction: before_pooling
+
+# ---------------------------------------------------------------------------
+# Training-data sample caps (shared by train_dynamics and train_heads)
+# ---------------------------------------------------------------------------
+# Applied DURING windowing, not after (see
+# nidra.data.dataset.build_windowed_arrays' two-pass design): the full
+# uncapped train split is ~6.9M [L,F] float32 windows at production scale,
+# which needs ~35GB to materialize and silently OOM-kills the training
+# process before the first epoch — no traceback, no error. These are the
+# caps the published Run 3 checkpoints were actually trained under
+# (artifacts/weights/model_seed_*_metadata.json records 500000/50000), so
+# leaving them in the config is what makes the documented reproduction
+# command reproduce those numbers. --max-train-samples/--max-val-samples
+# still override them; set either to null for a genuinely uncapped run, and
+# expect to need ~35GB of RAM.
+training_data:
+  max_train_samples: 500000
+  max_val_samples: 50000
 
 serving:
   torch_num_threads: 2
@@ -180,6 +219,13 @@ serving:
 eval:
   risk_threshold: 0.75
   lead_time_persistence_windows: 2   # m consecutive windows above threshold
+  # Eval rows rolled out per pass in eval.baselines.world_model_forecast /
+  # ensemble_world_model_forecast. Those tile the whole batch by n_samples in
+  # one allocation, so a large split at a high sample count can be OOM-killed
+  # by the OS with no Python traceback (observed at n_samples=100,
+  # max_eval_samples=4000 — see REAL_DATA_RESULTS.md). Chunking is an exact
+  # refactor (every reduction is per-row); null means one single pass.
+  forecast_chunk_size: 500
   window_seconds: 30
 
 # ---------------------------------------------------------------------------

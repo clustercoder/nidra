@@ -17,8 +17,9 @@ import logging
 import numpy as np
 import torch
 
-from nidra.data.dataset import subsample_stratified_by_risk
+from nidra.data.dataset import build_windowed_arrays, subsample_stratified_by_risk
 from nidra.data.normalize import FeatureScaler
+from nidra.data.schema import CONTEXT_LENGTH, HORIZON_LENGTH
 from nidra.eval.ablations import horizon_curve, persistence_ablation, surprise_signal, time_shuffle_ablation
 from nidra.eval.baselines import (
     baseline_lr_current_state,
@@ -30,12 +31,12 @@ from nidra.eval.baselines import (
     ensemble_world_model_forecast,
     world_model_forecast,
 )
-from nidra.eval.calibrate import apply_platt_by_horizon, load_calibration
+from nidra.eval.calibrate import apply_platt_by_horizon, calibration_pooling_mismatch, load_calibration
 from nidra.eval.calibration import calibration_by_horizon
 from nidra.eval.lead_time_runner import compute_lead_time_report
 from nidra.eval.metrics import standard_metrics
 from nidra.models.world_model import WorldModel
-from nidra.train.pipeline import build_all_splits, build_windowed_splits, scale_arrays
+from nidra.train.pipeline import build_all_splits, scale_arrays
 from nidra.utils.config import load_config, resolve_path
 
 logger = logging.getLogger(__name__)
@@ -101,6 +102,19 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
     metrics_dir = resolve_path(cfg, cfg["artifacts"]["metrics_dir"]) / split_name
     metrics_dir.mkdir(parents=True, exist_ok=True)
 
+    risk_pooling_method = cfg["rollout"].get("risk_pooling_method", "mean")
+    risk_pooling_quantile = cfg["rollout"].get("risk_pooling_quantile", 0.9)
+    risk_pooling_head_reduction = cfg["rollout"].get("risk_pooling_head_reduction", "before_pooling")
+    # Bounds peak memory in the forecast functions, which tile the whole batch
+    # by n_samples in one allocation — an unchunked large split at a high
+    # sample count gets OOM-killed by the OS with no Python traceback.
+    forecast_chunk_size = cfg["eval"].get("forecast_chunk_size")
+    logger.info(
+        "run_eval: risk_pooling_method=%s risk_pooling_quantile=%.2f "
+        "risk_pooling_head_reduction=%s forecast_chunk_size=%s",
+        risk_pooling_method, risk_pooling_quantile, risk_pooling_head_reduction, forecast_chunk_size,
+    )
+
     scaler = FeatureScaler.load(scaler_dir / "robust_scaler.joblib", scaler_dir / "scaler_metadata.json")
     model = _build_model(cfg)
     model.load_state_dict(torch.load(weights_dir / f"model_seed_{seed}.pt", map_location="cpu"))
@@ -127,29 +141,57 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
     calibration_loaded = load_calibration(weights_dir / "risk_calibration.json")
     calibration_params = calibration_loaded[0] if calibration_loaded else None
     calibration_meta = calibration_loaded[1] if calibration_loaded else None
+    # A Platt fit only describes the pooled statistic it was fit against. An
+    # artifact fit under different pooling is not a weaker refinement, it is
+    # the wrong function applied to the wrong numbers — measured to make
+    # quantile-pooled scores slightly WORSE than raw (see REAL_DATA_RESULTS.md).
+    # Dropping it is the honest fallback; the run then reports raw scores and
+    # says why, rather than publishing a silently mismatched "_calibrated" row.
     if calibration_params is not None:
-        logger.info("run_eval: applying post-hoc calibration from %s", weights_dir / "risk_calibration.json")
+        mismatch = calibration_pooling_mismatch(calibration_meta or {}, cfg)
+        if mismatch is not None:
+            logger.warning(
+                "run_eval: IGNORING stale calibration at %s — %s. Every '_calibrated' metric is omitted "
+                "from this run. Re-run nidra.scripts.fit_calibration against this config to restore it.",
+                weights_dir / "risk_calibration.json", mismatch,
+            )
+            calibration_params = None
+            calibration_meta = {**(calibration_meta or {}), "ignored_reason": mismatch}
+        else:
+            logger.info("run_eval: applying post-hoc calibration from %s", weights_dir / "risk_calibration.json")
 
     splits = build_all_splits(cfg)
-    windowed_all = build_windowed_splits(splits)
     eval_split_df = getattr(splits, split_name)
-    full_eval_arrays = windowed_all[split_name]
 
-    if len(full_eval_arrays.X) == 0:
-        logger.warning("run_eval: split %s is empty, nothing to evaluate", split_name)
-        return {}
-
+    # Only two splits are needed here: train (to fit the LR baselines) and the
+    # split under evaluation. This used to call build_windowed_splits, which
+    # windowizes all four — including val, which is never used, and the
+    # UNCAPPED train split, ~6.9M candidate origins at full production scale.
+    # Materializing those as float32 [L=30,F=45] slices needs ~35GB and is
+    # OOM-killed with no traceback before anything is evaluated, which made
+    # full-scale eval unrunnable on an ordinary machine. build_windowed_arrays
+    # applies the identical stratified-by-risk cap BEFORE building any slice
+    # (see its docstring), so this is the same selection, just affordable.
+    #
     # The flattened-history LR baseline fits on [n_train, L*F] — 1350 cols
     # for L=30 — and a real day's train split can carry hundreds of
     # thousands of rows (confirmed against real CIC-IDS2017 data: ~1M rows
     # for a single day slice), which is both slow and memory-heavy to fit
     # on directly. Cap it the same stratified way eval samples are capped.
-    train_arrays = subsample_stratified_by_risk(windowed_all["train"], max_eval_samples, seed=seed)
-    if len(train_arrays.X) < len(windowed_all["train"].X):
-        logger.info(
-            "run_eval: capped train split from %d to %d samples for baseline fitting",
-            len(windowed_all["train"].X), len(train_arrays.X),
-        )
+    train_arrays = build_windowed_arrays(
+        splits.train, L=CONTEXT_LENGTH, K=HORIZON_LENGTH, max_samples=max_eval_samples, seed=seed
+    )
+    logger.info("run_eval: train split windowed to %d samples for baseline fitting (cap=%s)",
+                len(train_arrays.X), max_eval_samples)
+
+    # The split under evaluation stays UNCAPPED: lead time needs each attacked
+    # host's complete chronological sequence, not a random subset of windows.
+    # The capped copy used for baselines/ablations is derived below.
+    full_eval_arrays = build_windowed_arrays(eval_split_df, L=CONTEXT_LENGTH, K=HORIZON_LENGTH)
+
+    if len(full_eval_arrays.X) == 0:
+        logger.warning("run_eval: split %s is empty, nothing to evaluate", split_name)
+        return {}
 
     # Rollout sampling is the expensive step and it runs once per
     # baseline/ablation/calibration sample, so cap the evaluation set size
@@ -187,7 +229,9 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
     _, probs_lr2 = baseline_lr_flattened_history(X_train, train_arrays.risk_label, X_eval)
     probs_persistence = baseline_persistence(X_eval_last, model)
     probs_oracle, _, _ = baseline_oracle(Y_eval, model)
-    world = world_model_forecast(X_eval, model, K=Y_eval.shape[1], n_samples=n_samples)
+    world = world_model_forecast(X_eval, model, K=Y_eval.shape[1], n_samples=n_samples,
+                                  risk_pooling_method=risk_pooling_method, risk_pooling_quantile=risk_pooling_quantile,
+                                  chunk_size=forecast_chunk_size)
     probs_world_model = world["risk_over_horizon"]
 
     y_true = eval_arrays.risk_label
@@ -226,7 +270,11 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
         probs_ensemble_persistence = ensemble_baseline_persistence(X_eval_last, ensemble_models)
         probs_ensemble_oracle, _, _ = ensemble_baseline_oracle(Y_eval, ensemble_models)
         ensemble_world = ensemble_world_model_forecast(X_eval, ensemble_models, K=Y_eval.shape[1],
-                                                        n_samples_per_member=n_samples)
+                                                        n_samples_per_member=n_samples,
+                                                        risk_pooling_method=risk_pooling_method,
+                                                        risk_pooling_quantile=risk_pooling_quantile,
+                                                        head_reduction=risk_pooling_head_reduction,
+                                                        chunk_size=forecast_chunk_size)
         probs_ensemble_world_model = ensemble_world["risk_mean_k"].max(axis=1)
         baselines["ensemble_persistence"] = standard_metrics(
             y_true, probs_ensemble_persistence, threshold=cfg["eval"]["risk_threshold"]
@@ -304,6 +352,8 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
     lead_time_report = compute_lead_time_report(
         full_eval_arrays, eval_split_df, model, scaler,
         threshold=cfg["eval"]["risk_threshold"], m=cfg["eval"]["lead_time_persistence_windows"], n_samples=n_samples,
+        risk_pooling_method=risk_pooling_method, risk_pooling_quantile=risk_pooling_quantile,
+        risk_pooling_head_reduction=risk_pooling_head_reduction,
     )
     lead_time_out = {"split": split_name, "seed": seed, "raw": lead_time_report.to_dict()}
     if calibration_params is not None:
@@ -311,6 +361,8 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
             full_eval_arrays, eval_split_df, model, scaler,
             threshold=cfg["eval"]["risk_threshold"], m=cfg["eval"]["lead_time_persistence_windows"],
             n_samples=n_samples, calibration=calibration_params,
+            risk_pooling_method=risk_pooling_method, risk_pooling_quantile=risk_pooling_quantile,
+            risk_pooling_head_reduction=risk_pooling_head_reduction,
         )
         lead_time_out["calibrated"] = lead_time_report_calibrated.to_dict()
     if ensemble_models is not None:
@@ -319,6 +371,8 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
             full_eval_arrays, eval_split_df, ensemble_models, scaler,
             threshold=cfg["eval"]["risk_threshold"], m=cfg["eval"]["lead_time_persistence_windows"],
             n_samples=n_samples,
+            risk_pooling_method=risk_pooling_method, risk_pooling_quantile=risk_pooling_quantile,
+            risk_pooling_head_reduction=risk_pooling_head_reduction,
         )
         lead_time_out["ensemble"] = ensemble_lead_time_report.to_dict()
         if calibration_params is not None:
@@ -326,6 +380,8 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
                 full_eval_arrays, eval_split_df, ensemble_models, scaler,
                 threshold=cfg["eval"]["risk_threshold"], m=cfg["eval"]["lead_time_persistence_windows"],
                 n_samples=n_samples, calibration=calibration_params,
+                risk_pooling_method=risk_pooling_method, risk_pooling_quantile=risk_pooling_quantile,
+                risk_pooling_head_reduction=risk_pooling_head_reduction,
             )
             lead_time_out["ensemble_calibrated"] = ensemble_lead_time_report_calibrated.to_dict()
     with open(metrics_dir / "lead_time.json", "w") as f:

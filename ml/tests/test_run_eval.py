@@ -232,3 +232,75 @@ def test_run_eval_does_not_clobber_metrics_across_splits(eval_ready_artifacts):
 
     test_baselines_after = json.loads((tmp_path / "metrics" / "test" / "baselines.json").read_text())
     assert test_baselines == test_baselines_after
+
+
+def test_run_eval_ignores_a_calibration_artifact_fit_under_different_pooling(eval_ready_artifacts, caplog):
+    """A Platt fit only describes the pooled statistic it was fit against.
+    An artifact fit under mean pooling applied to a quantile-pooled run is
+    the wrong remap for the wrong numbers — measured to score slightly BELOW
+    raw scores (see REAL_DATA_RESULTS.md) — so run_eval must drop it and say
+    so, rather than publishing a silently mismatched "_calibrated" row."""
+    cfg, tmp_path = eval_ready_artifacts
+    cfg = {**cfg, "rollout": {**cfg["rollout"], "risk_pooling_method": "quantile",
+                              "risk_pooling_quantile": 0.5}}
+    params_by_k = [{"a": 2.0, "b": 0.0, "n": 100, "degenerate": False} for _ in range(6)]
+    save_calibration(
+        tmp_path / "weights" / "risk_calibration.json", params_by_k,
+        {"fit_split": "val", "n_val_samples": 100, "risk_pooling_method": "mean"},
+    )
+
+    with caplog.at_level(logging.WARNING):
+        results = run_eval_mod.run(cfg, seed=0, split_name="test", n_samples=10)
+
+    assert "world_model" in results["baselines"]
+    assert "world_model_calibrated" not in results["baselines"]
+    lead_time_json = json.loads((tmp_path / "metrics" / "test" / "lead_time.json").read_text())
+    assert "calibrated" not in lead_time_json
+    assert any("IGNORING stale calibration" in r.message for r in caplog.records)
+
+
+def test_run_eval_applies_a_calibration_artifact_fit_under_matching_pooling(eval_ready_artifacts):
+    """The flip side of the guard above: a fit that records the same pooling
+    the run uses is still applied, so quantile-pooled configs are not left
+    permanently uncalibrated."""
+    cfg, tmp_path = eval_ready_artifacts
+    cfg = {**cfg, "rollout": {**cfg["rollout"], "risk_pooling_method": "quantile",
+                              "risk_pooling_quantile": 0.5}}
+    params_by_k = [{"a": 2.0, "b": 0.0, "n": 100, "degenerate": False} for _ in range(6)]
+    save_calibration(
+        tmp_path / "weights" / "risk_calibration.json", params_by_k,
+        {"fit_split": "val", "n_val_samples": 100, "risk_pooling_method": "quantile",
+         "risk_pooling_quantile": 0.5, "risk_pooling_head_reduction": "before_pooling"},
+    )
+
+    results = run_eval_mod.run(cfg, seed=0, split_name="test", n_samples=10)
+
+    assert "world_model_calibrated" in results["baselines"]
+
+
+def test_run_eval_caps_the_train_split_during_windowing_and_skips_val(eval_ready_artifacts, monkeypatch):
+    """run_eval used to call build_windowed_splits, which windowizes all four
+    splits — including val (never used here) and the UNCAPPED train split,
+    ~6.9M candidate origins at full production scale. Materializing those as
+    float32 [30,45] slices needs ~35GB and is OOM-killed with no traceback
+    before anything is evaluated, which made full-scale eval unrunnable. The
+    cap must be applied during windowing, not after."""
+    cfg, tmp_path = eval_ready_artifacts
+    calls: list[tuple[int, int | None]] = []
+    real_build = run_eval_mod.build_windowed_arrays
+
+    def recording_build(df, *args, **kwargs):
+        calls.append((len(df), kwargs.get("max_samples")))
+        return real_build(df, *args, **kwargs)
+
+    monkeypatch.setattr(run_eval_mod, "build_windowed_arrays", recording_build)
+    run_eval_mod.run(cfg, seed=0, split_name="test", n_samples=10, max_eval_samples=50)
+
+    # Exactly two splits windowized: train (capped) and the split under eval
+    # (uncapped, because lead time needs complete per-host sequences).
+    assert len(calls) == 2, calls
+    assert calls[0][1] == 50, "train split must be windowized with the cap applied"
+    assert calls[1][1] is None, "the evaluated split must stay uncapped for lead time"
+    assert not hasattr(run_eval_mod, "build_windowed_splits"), (
+        "build_windowed_splits windowizes all four splits uncapped — it must not be reachable here"
+    )

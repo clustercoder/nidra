@@ -24,7 +24,7 @@ from nidra.data.dataset import build_windowed_arrays, subsample_stratified_by_ri
 from nidra.data.normalize import FeatureScaler
 from nidra.data.schema import CONTEXT_LENGTH, HORIZON_LENGTH
 from nidra.eval.baselines import ensemble_world_model_forecast
-from nidra.eval.calibrate import fit_platt_by_horizon, save_calibration
+from nidra.eval.calibrate import fit_platt_by_horizon, pooling_signature, save_calibration
 from nidra.eval.run_eval import _build_model
 from nidra.train.pipeline import build_all_splits, scale_arrays
 from nidra.utils.config import load_config, resolve_path
@@ -74,9 +74,19 @@ def fit_and_save(
     X_val, _ = scale_arrays(val, scaler)
     K = val.future_is_attack.shape[1]
 
+    # A Platt fit is a per-horizon remap of ONE specific pooled statistic, so
+    # it MUST be fit against the pooling this config actually evaluates and
+    # serves with. This used to call ensemble_world_model_forecast with its
+    # defaults, which silently fit against mean pooling no matter what the
+    # config said — producing an artifact that made quantile-pooled scores
+    # slightly worse rather than better (see REAL_DATA_RESULTS.md).
+    pooling = pooling_signature(cfg)
     logger.info(
-        "fit_calibration: pooling %d ensemble member(s) x %d samples/member over %d val windows (batch_size=%d)",
+        "fit_calibration: pooling %d ensemble member(s) x %d samples/member over %d val windows "
+        "(batch_size=%d, method=%s, quantile=%.2f, head_reduction=%s)",
         len(models), n_samples_per_member, len(X_val), batch_size,
+        pooling["risk_pooling_method"], pooling["risk_pooling_quantile"],
+        pooling["risk_pooling_head_reduction"],
     )
     # Batched, not one giant forward pass: the pooled rollout tensor is
     # [n_in_batch * n_ensemble_members * n_samples_per_member, L or K, F] —
@@ -86,7 +96,12 @@ def fit_and_save(
     risk_mean_k_parts = []
     for i in range(0, len(X_val), batch_size):
         batch = X_val[i : i + batch_size]
-        out = ensemble_world_model_forecast(batch, models, K=K, n_samples_per_member=n_samples_per_member)
+        out = ensemble_world_model_forecast(
+            batch, models, K=K, n_samples_per_member=n_samples_per_member,
+            risk_pooling_method=pooling["risk_pooling_method"],
+            risk_pooling_quantile=pooling["risk_pooling_quantile"],
+            head_reduction=pooling["risk_pooling_head_reduction"],
+        )
         risk_mean_k_parts.append(out["risk_mean_k"])
     risk_mean_k = np.concatenate(risk_mean_k_parts, axis=0)
 
@@ -100,11 +115,16 @@ def fit_and_save(
         "n_samples_per_member": n_samples_per_member,
         "fitted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "method": "platt_scaling_per_horizon",
+        **pooling,
         "note": (
             "Fit on the validation split only, using the same pooled-ensemble "
             "rollout statistic (`ensemble_world_model_forecast`) that "
-            "NidraPredictor serves at inference time. Does not retrain or "
-            "modify the frozen risk head in any way — see eval/calibrate.py."
+            "NidraPredictor serves at inference time, under the risk_pooling_* "
+            "settings recorded above. Does not retrain or modify the frozen "
+            "risk head in any way — see eval/calibrate.py. The recorded "
+            "pooling settings are load-bearing, not informational: "
+            "eval/calibrate.calibration_pooling_mismatch refuses to apply this "
+            "fit to a run that pools differently."
         ),
     }
     out_path = weights_dir / "risk_calibration.json"
