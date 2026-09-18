@@ -30,10 +30,11 @@ from nidra.data.schema import (
     WINDOW_SECONDS,
     validate_state_array_width,
 )
-from nidra.eval.calibrate import apply_platt_by_horizon, load_calibration
+from nidra.eval.calibrate import apply_platt_by_horizon, calibration_pooling_mismatch, load_calibration
 from nidra.explain.counterfactual import COUNTERFACTUAL_LABEL, counterfactual_rollout
 from nidra.explain.saliency import temporal_saliency
 from nidra.explain.shap_runner import explain_current_risk, explain_predicted_stage, load_background, top_signals
+from nidra.models.risk_pooling import pool_ensemble_risk
 from nidra.models.world_model import WorldModel
 from nidra.utils.config import load_config
 
@@ -94,6 +95,20 @@ class NidraPredictor:
         self.K = self.cfg["windowing"]["horizon_length"]
         self.L = self.cfg["windowing"]["context_length"]
         self.risk_threshold = self.cfg["eval"]["risk_threshold"]
+        # See nidra.models.risk_pooling: how the sampled-trajectory dimension
+        # is reduced to a point estimate — "mean" is the historical default,
+        # "quantile" trades some precision for materially better recall at
+        # the mandated risk_threshold (see REAL_DATA_RESULTS.md). Must match
+        # whatever eval/run_eval.py used to measure the numbers this
+        # checkpoint is trusted against.
+        self.risk_pooling_method = self.cfg["rollout"].get("risk_pooling_method", "mean")
+        self.risk_pooling_quantile = self.cfg["rollout"].get("risk_pooling_quantile", 0.9)
+        # Order of the head-mean vs. trajectory-pooling reductions — kept in
+        # parity with eval.baselines.ensemble_world_model_forecast so the
+        # served statistic is the one that was measured. No-op under "mean".
+        self.risk_pooling_head_reduction = self.cfg["rollout"].get(
+            "risk_pooling_head_reduction", "before_pooling"
+        )
 
         # Post-hoc calibration (nidra.scripts.fit_calibration) is OFF BY
         # DEFAULT — pass apply_calibration=True to opt in. This is a
@@ -118,7 +133,22 @@ class NidraPredictor:
         if apply_calibration:
             calibration_loaded = load_calibration(weights_dir / "risk_calibration.json")
             self._calibration = calibration_loaded[0] if calibration_loaded else None
-            if self._calibration is not None:
+            # Serving must refuse a calibration fit against different pooling
+            # for the same reason run_eval does — it is the wrong remap for the
+            # statistic this predictor produces. Kept in parity with
+            # run_eval.py deliberately (the standing eval/serving-parity rule).
+            mismatch = (
+                calibration_pooling_mismatch(calibration_loaded[1] or {}, self.cfg)
+                if calibration_loaded else None
+            )
+            if self._calibration is not None and mismatch is not None:
+                logger.warning(
+                    "NidraPredictor: IGNORING stale calibration at %s — %s. Serving raw, uncalibrated "
+                    "p_compromise. Re-run nidra.scripts.fit_calibration against this config.",
+                    weights_dir / "risk_calibration.json", mismatch,
+                )
+                self._calibration = None
+            elif self._calibration is not None:
                 logger.warning(
                     "NidraPredictor: apply_calibration=True — applying post-hoc risk calibration from %s. "
                     "Whether this helps or hurts recall at threshold=0.75 is checkpoint-dependent — see "
@@ -181,13 +211,17 @@ class NidraPredictor:
             r, s = model.score_states(pooled_states.reshape(-1, self.K, pooled_states.shape[-1]))
             risk_list.append(r.reshape(1, pooled_states.shape[1], self.K))
             stage_list.append(s.reshape(1, pooled_states.shape[1], self.K, -1))
+        per_head_risk = torch.stack(risk_list, dim=0)        # [M, 1, S_total, K]
         # average head outputs across ensemble members too, not just samples
-        risk = torch.stack(risk_list, dim=0).mean(dim=0)     # [1, S_total, K]
+        risk = per_head_risk.mean(dim=0)                     # [1, S_total, K]
         stage = torch.stack(stage_list, dim=0).mean(dim=0)   # [1, S_total, K, n_stages]
 
         q_low = self.cfg["rollout"]["ci_low_quantile"]
         q_high = self.cfg["rollout"]["ci_high_quantile"]
-        risk_mean_k = risk.mean(dim=1)[0].numpy()
+        risk_mean_k = pool_ensemble_risk(
+            per_head_risk, sample_dim=2, head_dim=0, method=self.risk_pooling_method,
+            quantile=self.risk_pooling_quantile, head_reduction=self.risk_pooling_head_reduction,
+        )[0].numpy()
         risk_ci_low_k = risk.quantile(q_low, dim=1)[0].numpy()
         risk_ci_high_k = risk.quantile(q_high, dim=1)[0].numpy()
         if self._calibration is not None:

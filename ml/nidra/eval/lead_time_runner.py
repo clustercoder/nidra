@@ -20,15 +20,26 @@ from nidra.models.world_model import WorldModel
 
 
 def _forecast(batch: np.ndarray, model: WorldModel | list[WorldModel], K: int, n_samples: int,
-              calibration: list[dict] | None) -> dict:
+              calibration: list[dict] | None, risk_pooling_method: str = "mean",
+              risk_pooling_quantile: float = 0.9,
+              risk_pooling_head_reduction: str = "before_pooling") -> dict:
     """Dispatches to the single-model or pooled-ensemble forecast statistic
     depending on whether `model` is one WorldModel or a list of them — the
     same distinction as `world_model_forecast` vs `ensemble_world_model_forecast`
-    in baselines.py, kept in one place so callers don't need to branch."""
+    in baselines.py, kept in one place so callers don't need to branch.
+
+    `risk_pooling_head_reduction` applies only to the ensemble branch (there
+    is no head dimension to reduce for a single model) — see
+    `nidra.models.risk_pooling.pool_ensemble_risk`. This function is already
+    called on `build_episode_risk_curves`'s `batch_size` slices, so it needs
+    no `chunk_size` of its own."""
     if isinstance(model, list):
         return ensemble_world_model_forecast(batch, model, K=K, n_samples_per_member=n_samples,
-                                              calibration=calibration)
-    return world_model_forecast(batch, model, K=K, n_samples=n_samples, calibration=calibration)
+                                              calibration=calibration, risk_pooling_method=risk_pooling_method,
+                                              risk_pooling_quantile=risk_pooling_quantile,
+                                              head_reduction=risk_pooling_head_reduction)
+    return world_model_forecast(batch, model, K=K, n_samples=n_samples, calibration=calibration,
+                                 risk_pooling_method=risk_pooling_method, risk_pooling_quantile=risk_pooling_quantile)
 
 
 def _host_onset_ts(labelled_state_table: pd.DataFrame) -> dict[str, int]:
@@ -44,6 +55,9 @@ def build_episode_risk_curves(
     n_samples: int = 50,
     batch_size: int = 64,
     calibration: list[dict] | None = None,
+    risk_pooling_method: str = "mean",
+    risk_pooling_quantile: float = 0.9,
+    risk_pooling_head_reduction: str = "before_pooling",
 ) -> list[tuple[list[tuple[int, float]], int]]:
     """Returns [(risk_curve, onset_ts), ...] — one entry per host that has
     at least one attack window in `labelled_state_table`, restricted to
@@ -79,7 +93,9 @@ def build_episode_risk_curves(
         risks = []
         for i in range(0, len(X_pre), batch_size):
             batch = X_pre[i : i + batch_size]
-            out = _forecast(batch, model, K=windowed.Y.shape[1], n_samples=n_samples, calibration=calibration)
+            out = _forecast(batch, model, K=windowed.Y.shape[1], n_samples=n_samples, calibration=calibration,
+                             risk_pooling_method=risk_pooling_method, risk_pooling_quantile=risk_pooling_quantile,
+                             risk_pooling_head_reduction=risk_pooling_head_reduction)
             risks.append(out["risk_over_horizon"])
         risks = np.concatenate(risks) if risks else np.array([])
 
@@ -98,6 +114,9 @@ def compute_lead_time_report(
     m: int = 2,
     n_samples: int = 50,
     calibration: list[dict] | None = None,
+    risk_pooling_method: str = "mean",
+    risk_pooling_quantile: float = 0.9,
+    risk_pooling_head_reduction: str = "before_pooling",
 ) -> LeadTimeReport:
     """`n_samples` means rollout trajectories total when `model` is a single
     WorldModel, or trajectories PER ENSEMBLE MEMBER when `model` is a list
@@ -105,6 +124,8 @@ def compute_lead_time_report(
     `world_model_forecast`'s `n_samples` vs. `ensemble_world_model_forecast`'s
     `n_samples_per_member`."""
     episodes = build_episode_risk_curves(
-        windowed, labelled_state_table, model, scaler, n_samples=n_samples, calibration=calibration
+        windowed, labelled_state_table, model, scaler, n_samples=n_samples, calibration=calibration,
+        risk_pooling_method=risk_pooling_method, risk_pooling_quantile=risk_pooling_quantile,
+        risk_pooling_head_reduction=risk_pooling_head_reduction,
     )
     return lead_time_distribution(episodes, threshold=threshold, m=m)

@@ -106,3 +106,17 @@ def test_world_model_forecast_shapes_and_bounds():
     assert out["risk_over_horizon"].shape == (4,)
     assert out["predicted_states_mean"].shape == (4, 6, 45)
     assert (out["risk_ci_low_k"] <= out["risk_ci_high_k"] + 1e-6).all()
+
+
+def test_world_model_forecast_quantile_pooling_within_ci_band():
+    model = _tiny_model()
+    X = np.random.randn(4, 30, 45).astype("float32")
+    mean_out = world_model_forecast(X, model, K=6, n_samples=30, risk_pooling_method="mean")
+    quantile_out = world_model_forecast(X, model, K=6, n_samples=30, risk_pooling_method="quantile",
+                                         risk_pooling_quantile=0.9)
+    # Same rollout statistic, different reduction — the quantile point
+    # estimate must land inside the (mean-independent) 5th/95th CI band, and
+    # a 90th-percentile reduction should never sit below the mean.
+    assert (quantile_out["risk_mean_k"] >= mean_out["risk_ci_low_k"] - 1e-6).all()
+    assert (quantile_out["risk_mean_k"] <= quantile_out["risk_ci_high_k"] + 1e-6).all()
+    assert (quantile_out["risk_mean_k"] >= mean_out["risk_mean_k"] - 1e-6).all()

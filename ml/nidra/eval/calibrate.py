@@ -143,3 +143,58 @@ def load_calibration(path: str | Path) -> tuple[list[dict], dict] | None:
         return None
     data = json.loads(path.read_text())
     return data["params_by_k"], data["metadata"]
+
+
+# Pooling settings a calibration artifact was fit against. A Platt fit is a
+# per-horizon remap of ONE specific scalar statistic; change how that statistic
+# is pooled out of the sampled trajectories and the fitted (a, b) no longer
+# describes the numbers it is being applied to.
+POOLING_METADATA_KEYS = ("risk_pooling_method", "risk_pooling_quantile", "risk_pooling_head_reduction")
+
+
+def pooling_signature(cfg: dict) -> dict:
+    """The pooling settings that a calibration fit is only valid for."""
+    rollout = cfg["rollout"]
+    return {
+        "risk_pooling_method": rollout.get("risk_pooling_method", "mean"),
+        "risk_pooling_quantile": float(rollout.get("risk_pooling_quantile", 0.9)),
+        "risk_pooling_head_reduction": rollout.get("risk_pooling_head_reduction", "before_pooling"),
+    }
+
+
+def calibration_pooling_mismatch(metadata: dict, cfg: dict) -> str | None:
+    """Returns a human-readable reason this calibration artifact does not
+    apply to `cfg`'s pooling, or None if it does.
+
+    Artifacts fit before pooling was configurable carry no pooling keys at
+    all; those were necessarily fit against mean pooling, so they are treated
+    as such rather than silently trusted. `risk_pooling_quantile` is only
+    compared when the method actually is `"quantile"` (it is ignored under
+    mean pooling), and `risk_pooling_head_reduction` only matters when
+    pooling is not itself a mean, since the two reduction orders are
+    identical under mean pooling.
+    """
+    current = pooling_signature(cfg)
+    fitted = {
+        "risk_pooling_method": metadata.get("risk_pooling_method", "mean"),
+        "risk_pooling_quantile": float(metadata.get("risk_pooling_quantile", 0.9)),
+        "risk_pooling_head_reduction": metadata.get("risk_pooling_head_reduction", "before_pooling"),
+    }
+    if fitted["risk_pooling_method"] != current["risk_pooling_method"]:
+        return (
+            f"fit against risk_pooling_method={fitted['risk_pooling_method']!r} "
+            f"but this run pools with {current['risk_pooling_method']!r}"
+        )
+    if current["risk_pooling_method"] == "mean":
+        return None
+    if abs(fitted["risk_pooling_quantile"] - current["risk_pooling_quantile"]) > 1e-9:
+        return (
+            f"fit against risk_pooling_quantile={fitted['risk_pooling_quantile']} "
+            f"but this run pools at {current['risk_pooling_quantile']}"
+        )
+    if fitted["risk_pooling_head_reduction"] != current["risk_pooling_head_reduction"]:
+        return (
+            f"fit against risk_pooling_head_reduction={fitted['risk_pooling_head_reduction']!r} "
+            f"but this run reduces heads {current['risk_pooling_head_reduction']!r}"
+        )
+    return None

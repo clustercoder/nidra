@@ -24,6 +24,7 @@ import numpy as np
 import torch
 from sklearn.linear_model import LogisticRegression
 
+from nidra.models.risk_pooling import pool_ensemble_risk, pool_risk_over_samples
 from nidra.models.world_model import WorldModel
 
 
@@ -111,13 +112,82 @@ def ensemble_baseline_oracle(Y_true: np.ndarray, models: list[WorldModel]) -> tu
     return risk_over_horizon, risk_k.numpy(), stage_k.numpy()
 
 
+def _chunk_bounds(n_rows: int, chunk_size: int | None) -> list[tuple[int, int]]:
+    """Row ranges to evaluate the rollout over, one pass each.
+
+    `chunk_size` of `None` (or any value >= `n_rows`) yields exactly one
+    full-width range, so the single-pass code path below is byte-for-byte the
+    original behavior — chunking is opt-in, never silently on.
+    """
+    if chunk_size is None or chunk_size >= n_rows:
+        return [(0, n_rows)]
+    if chunk_size < 1:
+        raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
+    return [(i, min(i + chunk_size, n_rows)) for i in range(0, n_rows, chunk_size)]
+
+
+def _finalize_forecast(
+    risk_mean_k: np.ndarray,
+    risk_ci_low_k: np.ndarray,
+    risk_ci_high_k: np.ndarray,
+    stage_mean_k: np.ndarray,
+    predicted_states_mean: np.ndarray,
+    calibration: list[dict] | None,
+) -> dict:
+    """Applies calibration and derives `risk_over_horizon` on the FULL
+    concatenated arrays, never per chunk.
+
+    Platt scaling is elementwise per horizon and `risk_over_horizon` is a
+    per-row max over horizons, so both are row-independent — doing them here
+    rather than inside the chunk loop is what makes a chunked run produce
+    identical numbers to an unchunked one.
+    """
+    if calibration is not None:
+        from nidra.eval.calibrate import apply_platt_by_horizon
+        risk_mean_k = apply_platt_by_horizon(risk_mean_k, calibration)
+        risk_ci_low_k = apply_platt_by_horizon(risk_ci_low_k, calibration)
+        risk_ci_high_k = apply_platt_by_horizon(risk_ci_high_k, calibration)
+    return {
+        "risk_mean_k": risk_mean_k,
+        "risk_ci_low_k": risk_ci_low_k,
+        "risk_ci_high_k": risk_ci_high_k,
+        "stage_mean_k": stage_mean_k,
+        "risk_over_horizon": risk_mean_k.max(axis=1),
+        "predicted_states_mean": predicted_states_mean,
+    }
+
+
 @torch.no_grad()
 def world_model_forecast(X: np.ndarray, model: WorldModel, K: int, n_samples: int = 200,
-                          stochastic: bool = True, calibration: list[dict] | None = None) -> dict:
+                          stochastic: bool = True, calibration: list[dict] | None = None,
+                          risk_pooling_method: str = "mean", risk_pooling_quantile: float = 0.9,
+                          chunk_size: int | None = None) -> dict:
     """The system under test: recursive rollout -> frozen heads -> quantiles
-    across sampled trajectories. Returns per-k mean risk, per-k confidence
-    band, the composite risk-over-horizon score (max_k mean risk), and
+    across sampled trajectories. Returns per-k pooled risk, per-k confidence
+    band, the composite risk-over-horizon score (max_k pooled risk), and
     per-k mean stage distribution.
+
+    `risk_pooling_method`/`risk_pooling_quantile` control how the sampled
+    trajectories' per-k risk is reduced to a single point estimate (still
+    named `risk_mean_k` for backward compatibility) — see
+    `nidra.models.risk_pooling` for why `"quantile"` exists: mean-pooling
+    across a stochastic rollout systematically washes out true positives,
+    independently of calibration. Default `"mean"` reproduces the original
+    behavior exactly.
+
+    `chunk_size` bounds peak memory by rolling out at most that many eval
+    rows per pass. `model.rollout` tiles its whole input batch by `n_samples`
+    in one allocation ([B*S, K, F] intermediates), so peak memory grows as
+    `B * n_samples` and a large split at a high sample count could be
+    OOM-killed by the OS with no Python traceback (observed at
+    `n_samples=100`, `max_eval_samples=4000` — see REAL_DATA_RESULTS.md).
+    Every reduction here is per-row, so chunking is an exact refactor, not an
+    approximation: with a deterministic rollout (`stochastic=False`) a chunked
+    run is numerically identical to an unchunked one. With `stochastic=True`
+    the sampled trajectories necessarily differ (each pass draws its own
+    noise from the global RNG), the same way any reseeded rollout would —
+    identical in distribution, not element-for-element. `None` means one
+    single pass, i.e. the original behavior.
 
     `calibration`, if given (a length-K list from
     `nidra.eval.calibrate.fit_platt_by_horizon`/`load_calibration`), is
@@ -129,40 +199,40 @@ def world_model_forecast(X: np.ndarray, model: WorldModel, K: int, n_samples: in
     """
     model.eval()
     x_t = torch.from_numpy(X).float()
-    out = model.rollout(x_t, K=K, n_samples=n_samples, stochastic=stochastic)  # states: [B,S,K,F]
-    B, S, K_, F = out.states.shape
-    flat_states = out.states.reshape(B * S, K_, F)
-    risk, stage = model.score_states(flat_states)          # [B*S, K], [B*S, K, n_stages]
-    risk = risk.reshape(B, S, K_)
-    stage = stage.reshape(B, S, K_, -1)
+    pooled, ci_low, ci_high, stage_means, state_means = [], [], [], [], []
 
-    risk_mean_k = risk.mean(dim=1).numpy()                  # [B, K]
-    risk_ci_low_k = risk.quantile(0.05, dim=1).numpy()
-    risk_ci_high_k = risk.quantile(0.95, dim=1).numpy()
-    stage_mean_k = stage.mean(dim=1).numpy()                # [B, K, n_stages]
+    for lo, hi in _chunk_bounds(x_t.shape[0], chunk_size):
+        out = model.rollout(x_t[lo:hi], K=K, n_samples=n_samples, stochastic=stochastic)
+        B, S, K_, F = out.states.shape                     # states: [B,S,K,F]
+        risk, stage = model.score_states(out.states.reshape(B * S, K_, F))
+        risk = risk.reshape(B, S, K_)                      # [B,S,K]
+        stage = stage.reshape(B, S, K_, -1)                # [B,S,K,n_stages]
 
-    if calibration is not None:
-        from nidra.eval.calibrate import apply_platt_by_horizon
-        risk_mean_k = apply_platt_by_horizon(risk_mean_k, calibration)
-        risk_ci_low_k = apply_platt_by_horizon(risk_ci_low_k, calibration)
-        risk_ci_high_k = apply_platt_by_horizon(risk_ci_high_k, calibration)
+        pooled.append(pool_risk_over_samples(
+            risk, dim=1, method=risk_pooling_method, quantile=risk_pooling_quantile
+        ).numpy())                                         # [B,K]
+        ci_low.append(risk.quantile(0.05, dim=1).numpy())
+        ci_high.append(risk.quantile(0.95, dim=1).numpy())
+        stage_means.append(stage.mean(dim=1).numpy())      # [B,K,n_stages]
+        state_means.append(out.states.mean(dim=1).numpy())  # [B,K,F] for state_nrmse
 
-    risk_over_horizon = risk_mean_k.max(axis=1)
-
-    return {
-        "risk_mean_k": risk_mean_k,
-        "risk_ci_low_k": risk_ci_low_k,
-        "risk_ci_high_k": risk_ci_high_k,
-        "stage_mean_k": stage_mean_k,
-        "risk_over_horizon": risk_over_horizon,
-        "predicted_states_mean": out.states.mean(dim=1).numpy(),  # [B, K, F] for state_nrmse
-    }
+    return _finalize_forecast(
+        np.concatenate(pooled, axis=0),
+        np.concatenate(ci_low, axis=0),
+        np.concatenate(ci_high, axis=0),
+        np.concatenate(stage_means, axis=0),
+        np.concatenate(state_means, axis=0),
+        calibration,
+    )
 
 
 @torch.no_grad()
 def ensemble_world_model_forecast(X: np.ndarray, models: list[WorldModel], K: int,
                                    n_samples_per_member: int = 100, stochastic: bool = True,
-                                   calibration: list[dict] | None = None) -> dict:
+                                   calibration: list[dict] | None = None,
+                                   risk_pooling_method: str = "mean", risk_pooling_quantile: float = 0.9,
+                                   head_reduction: str = "before_pooling",
+                                   chunk_size: int | None = None) -> dict:
     """Same contract as `world_model_forecast`, but pools rollout
     trajectories AND head scores across every ensemble member first —
     mirrors `NidraPredictor._ensemble_rollout` exactly, so calibration fit
@@ -170,41 +240,65 @@ def ensemble_world_model_forecast(X: np.ndarray, models: list[WorldModel], K: in
     (a per-seed fit against a single model's own `world_model_forecast`
     would not, since the pooled ensemble mean is a different statistic than
     any one seed's own mean).
+
+    `risk_pooling_method`/`risk_pooling_quantile` (see
+    `nidra.models.risk_pooling`) apply to the trajectory-pooling step (every
+    member's sampled futures concatenated along one axis). The head
+    dimension (five heads' opinions on the same trajectory) is always
+    reduced by a plain mean — standard ensemble soft-voting, not the
+    tail-washing rollout-sampling effect this option targets — but
+    `head_reduction` chooses WHEN that mean happens relative to trajectory
+    pooling, which is not a neutral choice under quantile pooling:
+    `"before_pooling"` (the default, and the original behavior) averages
+    heads per trajectory first, which partially re-smooths the tail the
+    quantile is meant to select; `"after_pooling"` pools each head's own
+    trajectory distribution first and soft-votes over those. Under
+    `risk_pooling_method="mean"` the two are identical. See
+    `nidra.models.risk_pooling.pool_ensemble_risk`.
+
+    `chunk_size` bounds peak memory the same way as in
+    `world_model_forecast`, and matters more here: this function holds every
+    member's trajectories at once ([B, S_total, K, F] with
+    `S_total = len(models) * n_samples_per_member`) and scores that whole
+    tensor once per member.
     """
     x_t = torch.from_numpy(X).float()
-    all_states = []
-    for model in models:
-        model.eval()
-        out = model.rollout(x_t, K=K, n_samples=n_samples_per_member, stochastic=stochastic)
-        all_states.append(out.states)  # [B, S, K, F]
-    pooled_states = torch.cat(all_states, dim=1)  # [B, S_total, K, F]
-    B, S, K_, F = pooled_states.shape
-    flat_states = pooled_states.reshape(B * S, K_, F)
+    pooled, ci_low, ci_high, stage_means, state_means = [], [], [], [], []
 
-    risk_list, stage_list = [], []
-    for model in models:
-        r, s = model.score_states(flat_states)
-        risk_list.append(r.reshape(B, S, K_))
-        stage_list.append(s.reshape(B, S, K_, -1))
-    risk = torch.stack(risk_list, dim=0).mean(dim=0)     # average head outputs across members too
-    stage = torch.stack(stage_list, dim=0).mean(dim=0)
+    for lo, hi in _chunk_bounds(x_t.shape[0], chunk_size):
+        x_chunk = x_t[lo:hi]
+        all_states = []
+        for model in models:
+            model.eval()
+            out = model.rollout(x_chunk, K=K, n_samples=n_samples_per_member, stochastic=stochastic)
+            all_states.append(out.states)                  # [B,S,K,F]
+        pooled_states = torch.cat(all_states, dim=1)       # [B,S_total,K,F]
+        B, S, K_, F = pooled_states.shape
+        flat_states = pooled_states.reshape(B * S, K_, F)
 
-    risk_mean_k = risk.mean(dim=1).numpy()
-    risk_ci_low_k = risk.quantile(0.05, dim=1).numpy()
-    risk_ci_high_k = risk.quantile(0.95, dim=1).numpy()
-    stage_mean_k = stage.mean(dim=1).numpy()
+        risk_list, stage_list = [], []
+        for model in models:
+            r, s = model.score_states(flat_states)
+            risk_list.append(r.reshape(B, S, K_))
+            stage_list.append(s.reshape(B, S, K_, -1))
+        per_head_risk = torch.stack(risk_list, dim=0)      # [M,B,S,K]
+        stage = torch.stack(stage_list, dim=0).mean(dim=0)
 
-    if calibration is not None:
-        from nidra.eval.calibrate import apply_platt_by_horizon
-        risk_mean_k = apply_platt_by_horizon(risk_mean_k, calibration)
-        risk_ci_low_k = apply_platt_by_horizon(risk_ci_low_k, calibration)
-        risk_ci_high_k = apply_platt_by_horizon(risk_ci_high_k, calibration)
+        pooled.append(pool_ensemble_risk(
+            per_head_risk, sample_dim=2, head_dim=0, method=risk_pooling_method,
+            quantile=risk_pooling_quantile, head_reduction=head_reduction,
+        ).numpy())                                         # [B,K]
+        head_mean_risk = per_head_risk.mean(dim=0)         # [B,S,K], for the CI band
+        ci_low.append(head_mean_risk.quantile(0.05, dim=1).numpy())
+        ci_high.append(head_mean_risk.quantile(0.95, dim=1).numpy())
+        stage_means.append(stage.mean(dim=1).numpy())
+        state_means.append(pooled_states.mean(dim=1).numpy())
 
-    return {
-        "risk_mean_k": risk_mean_k,
-        "risk_ci_low_k": risk_ci_low_k,
-        "risk_ci_high_k": risk_ci_high_k,
-        "stage_mean_k": stage_mean_k,
-        "risk_over_horizon": risk_mean_k.max(axis=1),
-        "predicted_states_mean": pooled_states.mean(dim=1).numpy(),
-    }
+    return _finalize_forecast(
+        np.concatenate(pooled, axis=0),
+        np.concatenate(ci_low, axis=0),
+        np.concatenate(ci_high, axis=0),
+        np.concatenate(stage_means, axis=0),
+        np.concatenate(state_means, axis=0),
+        calibration,
+    )
