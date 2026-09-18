@@ -108,10 +108,16 @@ serves):
 perfect (1.000 — zero false positives at the mandated threshold, on both
 splits) but its recall at that same strict 75%-confidence bar is low —
 it's conservative, not indiscriminate. AUC-PR (threshold-independent) is
-the fairer summary of its actual ranking quality, and is comfortably
-ahead of every baseline on both splits, most notably on the never-trained-
-on holdout split, the strongest evidence in this project that the learned
-dynamics generalize rather than memorize.
+the fairer summary of its actual ranking quality: ahead of every baseline
+on the test split (0.920 vs. 0.863 for the strongest), but **behind the
+flattened-history baseline on the holdout split** (0.729 vs. 0.883). An
+earlier version of this card claimed it was ahead on both splits and called
+holdout the strongest evidence of generalization; the tables above say
+otherwise and take precedence. On an attack type it never trained on, LR
+over 15 minutes of flattened history ranks risk better than the world
+model. The world model's distinct contribution on that split is lead time
+(hours of advance warning, which no baseline produces) and zero false
+positives at the mandated threshold — not ranking quality.
 
 A dedicated retrain experiment (`logvar_max=1.5`, tightening the transition
 model's rollout-noise clamp) independently **validated and improved**
@@ -237,6 +243,38 @@ above):**
    one. Caveats: single-seed evaluation (seed 0 of 5) at Run 3-matched
    sample caps, no calibration fit for this checkpoint — natural next
    steps, not blockers to the single-seed finding.
+8. **The mandated-0.75-threshold recall problem (limitation 1) was largely
+   a risk-pooling problem, not (only) a calibration problem — found and
+   fixed, but only re-measured at MVP scale.** Limitation 1's calibration
+   work treated the low absolute recall as a magnitude-remapping problem;
+   `nidra/eval/calibrate.py`'s own docstring had already noted that
+   ~98-100% of true-positive windows have at least one sampled rollout
+   trajectory that crosses 0.75, but `world_model_forecast`/
+   `ensemble_world_model_forecast` reduced the sampled-trajectory
+   dimension with a plain mean before calibration (a monotonic, per-sample
+   remap) ever saw that signal — calibration cannot recover information
+   the mean already destroyed. Replacing that reduction with a
+   configurable quantile (`nidra/models/risk_pooling.py`, wired through
+   `eval/baselines.py`, `eval/lead_time_runner.py`, and
+   `serve/predictor.py` for eval/serving parity) and measuring the median
+   (q=0.5) against a freshly retrained MVP-scale single-seed checkpoint:
+   test-split F1 0.096→0.676 (AUC-PR 0.787→0.743) and holdout F1
+   0.358→0.595 (AUC-PR 0.573→0.583) — a real, large gain on **both**
+   splits, with AUC-PR essentially held rather than traded away. Also
+   surfaced and fixed in the same session: a silent, version-dependent
+   data-corruption bug in `parse_cic_timestamp` that produced **zero
+   usable training windows on every real day-file** under newer pandas
+   (see `REAL_DATA_RESULTS.md` Run 5, Finding 1) — unrelated to pooling,
+   but discovered while reproducing this project's own pipeline to test
+   the pooling fix. **Caveats, unchanged from every other single-seed
+   finding in this document**: measured at MVP scale (single seed, 40k/8k
+   samples) only, not re-validated against the full 5-seed ensemble —
+   `config/default.yaml`/`config/default_logvar15.yaml` are deliberately
+   left at the old `"mean"` pooling pending that re-validation, while
+   `config/mvp_2017.yaml` now defaults to the measured `quantile`/`0.5`
+   setting. See `REAL_DATA_RESULTS.md`'s "Run 5" section for the full
+   sweep table (mean vs. quantile at 0.5/0.7/0.75/0.85/0.9/0.95/0.99) and
+   lead-time numbers.
 
 ## Claims discipline
 

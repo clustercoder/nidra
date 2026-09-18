@@ -2,19 +2,23 @@
   "split": "holdout",
   "seed": 0,
   "raw": {
-    "median_lead_time_s": 17160.0,
+    "median_lead_time_s": 15750.0,
     "lead_time_distribution_s": [
-      17160.0
+      27750.0,
+      3750.0
     ],
     "n_episodes": 2,
-    "n_no_warning": 1,
-    "fraction_no_warning": 0.5
+    "n_no_warning": 0,
+    "fraction_no_warning": 0.0
   },
   "calibrated": {
-    "median_lead_time_s": null,
-    "lead_time_distribution_s": [],
+    "median_lead_time_s": 15810.0,
+    "lead_time_distribution_s": [
+      27990.0,
+      3630.0
+    ],
     "n_episodes": 2,
-    "n_no_warning": 2,
-    "fraction_no_warning": 1.0
+    "n_no_warning": 0,
+    "fraction_no_warning": 0.0
   }
 }

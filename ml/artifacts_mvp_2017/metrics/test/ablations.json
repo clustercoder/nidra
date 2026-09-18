@@ -3,42 +3,42 @@
   "seed": 0,
   "ablations": {
     "persistence": {
-      "auc_pr_persistence": 0.6938115138281136,
-      "auc_pr_world_model": 0.7980571820309105,
-      "auc_collapse": 0.1042456682027969,
-      "nrmse_persistence_mean": 5.714239267625871,
-      "nrmse_world_model_mean": 6.5322107146548,
+      "auc_pr_persistence": 0.9526520261028375,
+      "auc_pr_world_model": 0.9755854599719925,
+      "auc_collapse": 0.02293343386915503,
+      "nrmse_persistence_mean": 7.821590520092487,
+      "nrmse_world_model_mean": 9.350222330962223,
       "interpretation": "world model beats persistence"
     },
     "time_shuffle": {
-      "auc_pr_normal_order": 0.804352284673969,
-      "auc_pr_shuffled_order": 0.7998038470911261,
-      "collapse": 0.004548437582842957,
+      "auc_pr_normal_order": 0.9750772361357337,
+      "auc_pr_shuffled_order": 0.9778409385582678,
+      "collapse": -0.002763702422534098,
       "interpretation": "NO COLLAPSE under shuffling \u2014 the model may be using per-window features only, not real temporal structure; this is a reportable negative result, not a bug to hide"
     },
     "horizon_curve": {
       "auc_pr_by_k": [
-        0.5324230205523668,
-        0.17212783065381704,
-        0.5478415616780268,
-        0.15671003781631299,
-        0.4926066297122817,
-        0.15518233933002512
+        0.5808373181061321,
+        0.2457089423958299,
+        0.623252649662426,
+        0.23301753779695183,
+        0.6225146164682599,
+        0.23992069385335368
       ],
       "nrmse_by_k": [
-        7.381786254342584,
-        4.6017032713775015,
-        7.457241573406266,
-        5.546571098643832,
-        7.7598172520286175,
-        6.399329442401542
+        10.593973149698416,
+        6.807067646660941,
+        11.101897134195086,
+        8.30591109749808,
+        11.72705352604526,
+        9.602243319312244
       ],
       "flat_curve_leakage_warning": false
     },
     "surprise_signal": {
-      "mean_error_benign": 0.3096652306593531,
-      "mean_error_pre_attack": 5.259131745835626,
-      "n_benign": 2150,
+      "mean_error_benign": 0.3517557141560353,
+      "mean_error_pre_attack": 5.275026500787322,
+      "n_benign": 150,
       "n_pre_attack": 1850,
       "error_rises_before_onset": true
     },

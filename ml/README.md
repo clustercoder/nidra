@@ -280,7 +280,7 @@ over target, cut samples toward 100 before cutting ensemble size.
 ```bash
 cd ml
 pip install -e .
-pytest tests/ -q                                    # 166 tests, synthetic fixtures, seconds
+pytest tests/ -q                                    # 212 tests, synthetic fixtures, seconds
 
 # MVP scale, full 5-seed ensemble (what REAL_DATA_RESULTS.md §Run 2 reports):
 for seed in 0 1 2 3 4; do
@@ -291,7 +291,14 @@ python -m nidra.eval.run_eval        --config config/mvp_2017.yaml --seed 0 --sp
 python -m nidra.eval.run_eval        --config config/mvp_2017.yaml --seed 0 --split holdout --n-samples 50 --max-eval-samples 4000   # Infiltration
 python -m nidra.serve.benchmark --weights-dir artifacts_mvp_2017/weights --scaler-path artifacts_mvp_2017/scaler/robust_scaler.joblib --config config/mvp_2017.yaml
 
-# Full-scale (60/30 epochs, uncapped ~6.9M-candidate train set, same real dataset/paths):
+# Full-scale (60/30 epochs, 500k/50k stratified samples drawn from the
+# ~6.9M-window candidate train split, same real dataset/paths). Those caps
+# live in config/default.yaml's `training_data:` section, so the commands
+# below need no flags to reproduce the published Run 3 scale. Do NOT run this
+# uncapped (training_data.max_train_samples: null): materializing all ~6.9M
+# [30,45] float32 windows needs ~35GB and is OOM-killed with no traceback on
+# an ordinary machine — this README previously described the run as
+# "uncapped", which contradicted the checkpoints' own recorded 500000/50000.
 python -m nidra.train.train_dynamics --config config/default.yaml
 python -m nidra.train.train_heads    --config config/default.yaml
 python -m nidra.eval.run_eval        --config config/default.yaml --seed 0 --split test

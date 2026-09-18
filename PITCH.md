@@ -44,8 +44,14 @@ to the model during training — the equivalent of putting a topic on the
 exam that was never covered in class.
 
 **NIDRA still scored 0.73 out of 1.00** at telling that unseen attack
-apart from normal traffic, comfortably beating a system that just assumes
-"nothing changes" (0.59). That's real generalization, not memorization.
+apart from normal traffic — well ahead of a system that just assumes
+"nothing changes" (0.59), but, stated plainly, **behind the best simple
+lookup method (0.88) on that same unseen attack type.** So the learned
+dynamics do transfer to an attack never trained on, but on pure ranking
+quality a plain statistical method over the last 15 minutes of history
+still does that particular job better. What that method cannot do at all
+is forecast forward and give hours of advance warning, which is the thing
+NIDRA is actually for.
 
 ## The full scoreboard
 
@@ -56,9 +62,14 @@ possible alert sensitivity, not just one fixed cutoff):
 | System | Friday's attacks | Never-seen-before attack type |
 |---|:---:|:---:|
 | "Assume nothing changes" | 0.67 | 0.59 |
-| Best simple lookup (no forecasting) | 0.86 | 0.88 |
-| **NIDRA (forecasts the future)** | 🟢 **0.92** | 🟢 **0.73** |
+| Best simple lookup (no forecasting) | 0.86 | 🟢 **0.88** |
+| **NIDRA (forecasts the future)** | 🟢 **0.92** | 0.73 |
 | Theoretical perfect-hindsight ceiling | 0.90 | 0.76 |
+
+NIDRA wins the left column and loses the right one — the green marks say
+which, rather than implying it wins both. Only NIDRA produces a forecast
+with lead time, so the right column is a ranking-quality loss, not a
+head-to-head loss at the job NIDRA does.
 
 - **Precision: 1.00 on both days.** When NIDRA raises a strict-confidence
   alarm, it is never wrong — zero false alarms across thousands of test
@@ -68,7 +79,7 @@ possible alert sensitivity, not just one fixed cutoff):
 - **Early warning:** when it does flag an attack, it gives real advance
   notice — minutes to hours before the attack fully plays out, not an
   after-the-fact alert.
-- **Reliability:** 166 automated tests, all passing, covering the full
+- **Reliability:** 212 automated tests, all passing, covering the full
   pipeline end to end.
 
 ## The science actually worked

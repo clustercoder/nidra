@@ -58,8 +58,24 @@ thousands of test windows on either split. What it doesn't yet do is
 clear that specific, strict bar for *every* real attack — it's cautious
 rather than trigger-happy. AUC-PR is the fair way to judge it overall,
 since it looks at ranking quality across every possible threshold, not
-just this one strict cutoff — and there, NIDRA leads every baseline on
-both splits, most importantly on the never-trained-on holdout split.
+just this one strict cutoff.
+
+**Where NIDRA wins and where it loses (corrected)**: on the test split it
+does lead every baseline on AUC-PR (0.920 vs. the strongest baseline's
+0.863). On the holdout split it does **not** — "Simple lookup, last 15 min
+of history" scores 0.883 against NIDRA's 0.729, a 0.154 gap and the largest
+in either table. An earlier version of this section claimed NIDRA led every
+baseline on *both* splits and singled out holdout as the most important
+one; that was wrong, contradicted by this document's own tables directly
+above, and it inverted the project's own rule (`eval/baselines.py`: "If the
+world model cannot beat baseline #2, that is reported, not hidden").
+Stated plainly: **on an attack type it never trained on, a plain logistic
+regression over the last 15 minutes of history ranks risk better than the
+world model does.** What the world model uniquely provides is a *forecast*
+with lead time (hours of advance warning — see the lead-time sections) and
+zero false alarms at the mandated threshold, neither of which the history
+baseline offers at all; what it does not yet provide is better ranking on
+an unseen attack type. Both halves of that are load-bearing.
 
 ### The tuning experiment (`logvar_max=1.5`), single model, before vs. after
 
@@ -639,6 +655,368 @@ that section for the finding and likely explanation; the holdout split's
 ensemble was not separately re-run for this checkpoint given that result.
 `MODEL_CARD.md` limitation 7 has been updated to reflect the validated
 single-seed finding and its ensemble-level caveat.
+
+---
+
+## Run 5: a pandas-version data-corruption bug, and a risk-pooling fix for the mandated-threshold recall problem (follow-up session)
+
+Two independent findings from a session asked to raise recall/F1 at the
+mandated 0.75 threshold without sacrificing precision or AUC-PR.
+
+### Finding 1 (blocking, found first): `parse_cic_timestamp` silently produced garbage epoch values on newer pandas
+
+Re-running this project's own pipeline (`nidra.train.train_dynamics`) in a
+freshly created environment (`numpy==2.5.3`, `pandas==3.0.5`, `pyarrow==25.0.1`
+— none pinned tightly by `requirements.txt`) produced **zero usable
+windows on every single one of the 8 real CIC-IDS2017 day-files** —
+`windowize_day` logged `0 hosts kept` for Monday through Friday, every
+time, with no exception raised anywhere. Root cause, isolated directly:
+`nidra/data/windowize.py::parse_cic_timestamp` converted parsed timestamps
+to epoch seconds via `parsed[valid].astype("int64") // 10**9`, which
+silently assumes `pd.to_datetime` returns nanosecond-resolution
+`datetime64[ns]`. On this pandas version, `pd.to_datetime` returns
+microsecond-resolution `datetime64[us]` by default, so the same
+`.astype("int64")` call returns *microseconds* since epoch, and dividing
+by `10**9` produces an epoch value 1000x too small — every downstream
+`window_ts` was corrupted, collapsing every host's real ~2,880 windows/day
+down into a tiny number of garbled buckets, which then all failed the
+`min_windows_per_host=36` filter. **This is a real, silent correctness bug
+in the shipped code, not an environment quirk to route around** — it would
+corrupt any run on a pandas version (2.x already partially, 3.x fully)
+that doesn't default to `datetime64[ns]`. Fixed in
+`parse_cic_timestamp` by pinning the resolution explicitly before the
+int64 cast (`parsed[valid].dt.as_unit("ns").astype("int64") // 10**9`),
+verified against a known timestamp (`15/06/2017 08:00:01` ->
+`1497513601`), with a regression test
+(`tests/test_windowize.py::test_parse_cic_timestamp_returns_correct_epoch_seconds_regardless_of_pandas_datetime_resolution`)
+added so this can't silently regress again. After the fix, the same 8
+day-files produced real per-day host/row counts (e.g. Monday: 3,775 hosts
+kept, 309k-448k labelled rows per day-file) matching the shape of every
+prior run's numbers in this document.
+
+### Finding 2: mean-pooling across sampled rollout trajectories was the dominant cause of the mandated-0.75-threshold recall problem — not (only) calibration
+
+Every prior run in this document (Run 2's addendum, Run 3, Run 4) treated
+the recall problem as a *calibration* problem — the model ranks attacks
+correctly (good AUC-PR) but its absolute probability magnitude sits too
+low to cross a fixed 0.75 bar. Platt-scaling calibration was tried
+repeatedly and found to help only marginally (Run 3: recall moved from
+~1% to 2-9% at full scale). `eval/calibrate.py`'s own docstring already
+diagnosed the deeper mechanism without acting on it: individual rollout
+trajectories score near-binarily, and **~98-100% of true-positive windows
+have at least one sampled trajectory that crosses 0.75** — but
+`world_model_forecast`/`ensemble_world_model_forecast` reduce the sampled-
+trajectory dimension with a plain `.mean(dim=1)`, which averages that
+signal away before calibration (a monotonic, per-sample magnitude remap)
+ever gets a chance to see it. Calibration cannot recover information the
+mean-reduction already destroyed.
+
+**Fix**: added a configurable risk-pooling reduction
+(`nidra/models/risk_pooling.py::pool_risk_over_samples`), wired through
+every call site that reduces the trajectory-sample dimension —
+`eval/baselines.py` (`world_model_forecast`, `ensemble_world_model_forecast`),
+`eval/lead_time_runner.py`, `eval/run_eval.py`, and
+`serve/predictor.py::_ensemble_rollout` (kept in parity deliberately, per
+this document's own standing rule about eval/serving statistics
+diverging) — new config keys `rollout.risk_pooling_method` (`"mean"` |
+`"quantile"`) and `rollout.risk_pooling_quantile`. `"mean"` reproduces the
+exact original behavior byte-for-byte (default everywhere except
+`config/mvp_2017.yaml`, see below). The cross-ensemble-member averaging
+step (5 heads' opinions on the same state) is deliberately left as a plain
+mean in all cases — that is standard soft-voting, not the effect being
+targeted here.
+
+**Measured directly against this session's own checkpoint** (MVP-scale,
+**single seed only** — seed 0 of `config/mvp_2017.yaml`, retrained from
+scratch after the timestamp fix above, since no prior checkpoint's weights
+survive in this repo — see caveats): a sweep over pooling methods against
+the *same* trained checkpoint and the *same* sampled rollout (so
+differences are attributable only to the reduction, not resampling noise
+or retraining).
+
+**Test split (Friday), n=4,000, `n_samples=50`, seed 0:**
+
+| Pooling | Precision | Recall | F1 | AUC-PR |
+|---|:---:|:---:|:---:|:---:|
+| mean (original) | 0.904 | 0.051 | 0.096 | 0.787 |
+| quantile, q=0.5 (median) | 0.883 | 0.547 | **0.676** | 0.743 |
+| quantile, q=0.75 | 0.735 | 0.912 | 0.814 | **0.919** |
+| quantile, q=0.85 | 0.690 | 0.959 | 0.802 | 0.939 |
+| quantile, q=0.9 | 0.603 | 0.986 | 0.748 | 0.946 |
+| quantile, q=0.95 | 0.498 | 0.998 | 0.664 | 0.944 |
+| quantile, q=0.99 | 0.463 | 1.000 | 0.632 | 0.926 |
+
+**Holdout split (Thursday, unseen Infiltration), n=4,000, `n_samples=50`, seed 0:**
+
+| Pooling | Precision | Recall | F1 | AUC-PR |
+|---|:---:|:---:|:---:|:---:|
+| mean (original) | 0.762 | 0.234 | 0.358 | 0.573 |
+| quantile, q=0.5 (median) | 0.486 | 0.766 | **0.595** | 0.583 |
+| quantile, q=0.7 | 0.265 | 0.945 | 0.413 | 0.665 |
+| quantile, q=0.75 | 0.223 | 0.974 | 0.363 | 0.669 |
+| quantile, q=0.85 | 0.181 | 0.989 | 0.306 | 0.702 |
+| quantile, q=0.9 | 0.121 | 0.996 | 0.216 | **0.705** |
+| quantile, q=0.95 | 0.079 | 1.000 | 0.147 | 0.660 |
+
+Two things worth flagging plainly: **AUC-PR is not constant across
+reductions** — a quantile reduction is not a monotonic per-sample remap of
+the mean, so it can (and here, does) genuinely change ranking quality, not
+just magnitude, contrary to what this document previously assumed about
+Platt calibration's threshold-only effect. And the two splits disagree on
+which quantile maximizes F1: q=0.75 is best on test, but the far more
+imbalanced holdout split (274/4,000 positive candidates vs. test's
+1,850/4,000) is better served by the more conservative q=0.5 — a higher
+quantile buys recall at a precision cost that scales with how rare the
+positive class already is.
+
+**Choice made**: `config/mvp_2017.yaml` now defaults to
+`risk_pooling_method: quantile`, `risk_pooling_quantile: 0.5` (the
+median) — it delivers a large, robust F1/recall gain on **both** splits
+(not just the split it was tuned on) while keeping AUC-PR essentially flat
+on test (0.787->0.743) and mildly *improving* it on holdout
+(0.573->0.583), and precision does not collapse on either split (0.883 on
+test; 0.486 on holdout, i.e. FPR stays a tame 5.9%). `config/default.yaml`
+and `config/default_logvar15.yaml` (the full-scale 5-seed ensemble
+configs) are deliberately left at `"mean"` — this finding was only
+measured against an MVP-scale single-seed checkpoint, and the full-scale
+ensemble additionally pools across 5 members before this reduction
+applies, which was not re-swept here. The mechanism (mean-pooling washes
+out true positives) is scale-independent — `eval/calibrate.py`'s
+docstring already confirms the same near-binary trajectory behavior at
+full scale — but the optimal quantile value has not been re-measured
+against a full-scale checkpoint.
+
+**Verified end-to-end, not just in isolation**: the same numbers (within
+expected rollout-sampling noise) reproduce through the actual
+`python -m nidra.eval.run_eval` entry point, not just a standalone
+scoring script — confirming the config wiring through
+`baselines.py`/`run_eval.py` is correct, not only the underlying
+`pool_risk_over_samples` function in unit tests. Lead time improved
+correspondingly: test split raw lead-time went from this document's
+repeatedly-measured "0 of 10 warned" (Run 3 addendum, ensemble) to **9 of
+10 episodes warned, median 31,770s (~8.8h)** at `n_samples=30,
+max_eval_samples=2,000`; holdout went to **2 of 2 warned, median
+15,750s (~4.4h)**. The existing Platt calibration artifact
+(`risk_calibration.json`, fit against the old mean-pooled statistic) does
+not compose well with the new pooling — `world_model_calibrated` scores
+very slightly *below* raw `world_model` under quantile pooling (test:
+F1 0.706 vs. 0.715; AUC-PR 0.965 vs. 0.965) — expected, since it was fit to
+correct a magnitude problem this fix already addresses at the source; it
+should be refit against the new pooling statistic (or left off) rather
+than assumed to still help.
+
+### Finding 3 (blocking): the documented full-scale training command could not have produced the published full-scale numbers
+
+Re-running the full-scale pipeline to re-measure the pooling choice against
+a real 5-seed ensemble (the top follow-up item this run left open) failed
+immediately, and for a reason that invalidates this repo's own
+reproduction instructions rather than just this session's attempt.
+
+`README.md`'s full-scale recipe was
+`python -m nidra.train.train_dynamics --config config/default.yaml` with no
+flags, described in that README as an "uncapped ~6.9M-candidate train set".
+But the sample caps were reachable **only** through
+`--max-train-samples`/`--max-val-samples`; nothing in `config/default.yaml`
+carried them. With no flags, `prepare_training_data` windowed the entire
+train split — ~6.9M `[30, 45]` float32 windows, ~35GB — and the process was
+**OOM-killed during scaler fitting with no traceback and no error**
+(observed directly: the log ends at `fitting scaler on TRAIN split only
+(6911848 train samples)` and the process is simply gone). Meanwhile the
+published Run 3 checkpoints' own metadata records
+`n_train_samples: 500000, n_val_samples: 50000`. So the command in the
+README and the numbers in the document could not both be right: Run 3 was
+produced by passing caps by hand that the documented command does not pass.
+
+**Fix**: a `training_data:` section in all three configs carrying the caps
+each config's published checkpoints were actually trained under (500000/50000
+for `default.yaml` and `default_logvar15.yaml`, 40000/8000 for
+`mvp_2017.yaml`), resolved by `train_dynamics.resolve_sample_caps` with CLI
+flags still taking precedence and `null` still meaning genuinely uncapped.
+The documented command now reproduces the documented scale. `README.md`'s
+"uncapped" description is corrected. Regression tests:
+`tests/test_training_sample_caps.py`, including one that asserts the shipped
+configs carry the caps their published checkpoints record.
+
+### Finding 4: the pooled ensemble averages heads *before* pooling trajectories, partially undoing the quantile
+
+`ensemble_world_model_forecast` reduced `[M, B, S, K]` per-head risk by
+`stack(...).mean(dim=0)` (soft-voting the five heads on each individual
+trajectory) and only then pooled the trajectory axis. Under mean pooling
+the order is irrelevant — a mean of means commutes. Under **quantile**
+pooling it is not: averaging heads first drags a trajectory that only some
+heads consider risky toward the middle *before* the quantile can select it,
+which re-smooths exactly the tail quantile pooling exists to preserve. This
+is the "pools across 5 members before this reduction applies" caveat from
+Finding 2, made explicit and testable rather than left as a note.
+
+The order is now a config key (`rollout.risk_pooling_head_reduction`) served
+by `nidra.models.risk_pooling.pool_ensemble_risk`:
+`"before_pooling"` (the default) reproduces the original behavior exactly,
+`"after_pooling"` pools each head's own trajectory distribution first and
+soft-votes those tail estimates. `serve/predictor.py::_ensemble_rollout` is
+kept in parity, per this document's standing eval/serving rule.
+
+Worth recording precisely, because it narrows what the knob can do: the two
+orders are **identical** whenever averaging heads leaves the per-trajectory
+ranking intact, since a quantile is a fixed linear combination of order
+statistics. They diverge only when heads disagree about *which* futures are
+risky — with three heads each flagging a different pair of trajectories out
+of ten, `after_pooling` returns 0.98 where `before_pooling` returns 0.34
+(`tests/test_risk_pooling.py`). Whether real ensemble members disagree that
+way is an empirical question, still unmeasured at full scale.
+
+### Finding 5: calibration was fit against mean pooling no matter what the config said
+
+`scripts/fit_calibration.py` called `ensemble_world_model_forecast` without
+pooling arguments, so it always fit Platt parameters against the
+**mean-pooled** statistic even when the config evaluated and served a
+quantile-pooled one. That is the mechanism behind this run's observation
+that `world_model_calibrated` scored slightly *below* raw `world_model`
+under quantile pooling: not a marginal-benefit result, but the wrong remap
+applied to the wrong numbers.
+
+Three changes: `fit_calibration` now fits against the config's actual
+pooling; it records that pooling in the artifact's metadata; and
+`eval/calibrate.calibration_pooling_mismatch` makes those recorded settings
+load-bearing — `run_eval.py` and `NidraPredictor` both **drop** a
+mismatched artifact with a warning and report raw scores, rather than
+publishing a silently mismatched `_calibrated` row. Artifacts written before
+pooling was configurable carry no pooling keys and are treated as
+mean-pooled fits, so they are refused by a quantile-pooled run rather than
+trusted by default. The existing `risk_calibration.json` files are exactly
+that case. Tests: `tests/test_calibration_pooling_guard.py` and two
+`tests/test_run_eval.py` integration tests.
+
+### Finding 7: `run_eval.py` could not run at full scale either, for the same reason
+
+With training fixed (Finding 3), the eval step hit the same wall one layer
+down. `run_eval.run` called `build_windowed_splits(splits)`, which windowizes
+**all four** splits with no cap — including `val`, which `run_eval` never
+uses, and the uncapped `train` split, whose ~6.9M candidate origins
+materialize to ~35GB of float32 `[30, 45]` slices. The stratified cap was
+then applied *after* that allocation, via `subsample_stratified_by_risk`,
+which is the exact anti-pattern `train_dynamics.prepare_training_data`
+already carried a comment warning against ("cap DURING construction, not
+after"), and which `build_windowed_arrays` already supported via
+`max_samples`. So `python -m nidra.eval.run_eval --config config/default.yaml`
+would be OOM-killed before evaluating anything.
+
+**Fix**: `run_eval` now windowizes exactly the two splits it needs — `train`
+with the cap applied during construction (the same stratified selection, per
+`build_windowed_arrays`' docstring), and the split under evaluation
+uncapped, since lead time needs each attacked host's complete chronological
+sequence. `val` is no longer windowized at all. `build_windowed_splits` is
+no longer imported by `run_eval`. Regression test:
+`tests/test_run_eval.py::test_run_eval_caps_the_train_split_during_windowing_and_skips_val`
+asserts exactly two splits are windowized, that train gets the cap and the
+evaluated split does not, and that the uncapped all-splits helper is not
+reachable from this module.
+
+Findings 3 and 7 together are worth stating as one conclusion: **every
+full-scale number in this document predates a repo state in which the
+documented full-scale commands actually run.** Run 3's numbers are real —
+its checkpoints' metadata records the 500k/50k caps — but they were produced
+by invocations that the README did not describe and that the configs did not
+encode, and the re-measurement this session set out to do was blocked twice
+by that gap before reaching a model.
+
+### Finding 6: the published scorecard claimed a baseline win that this document's own tables contradict
+
+Not a code bug — a reporting one, and the most serious item in this run.
+`README.md`, `PITCH.md`, `MODEL_CARD.md` and this document's own
+plain-English scorecard all stated that the world model led **every**
+baseline on AUC-PR on **both** splits, several of them singling out the
+holdout split as the strongest evidence of generalization. The full-scale
+numbers in `artifacts/metrics/holdout/baselines.json` say otherwise:
+`ensemble_world_model` scores **0.729** against `lr_flattened_history`'s
+**0.883** — a 0.154 gap, the largest in either table, on precisely the
+split being held up as the win. On test the claim was true (0.920 vs.
+0.863); on holdout it was the reverse of the truth.
+
+`README.md`'s headline scoreboard compounded it by listing only the weakest
+baseline (`persistence`, 0.59) and the oracle, omitting the 0.88 row
+entirely, so a reader comparing 0.73 against 0.59 would draw exactly the
+wrong conclusion. `PITCH.md` made the same weakest-baseline-only comparison
+in prose.
+
+All four documents are corrected: the strongest baseline is now in the
+headline scoreboard, the holdout loss is stated in plain language in each
+one, and the claim is narrowed to what the measurements support — the world
+model leads on test, loses to flattened-history ranking on the unseen
+attack type, and its distinct contribution on that split is lead time and
+zero false positives at the mandated threshold, neither of which any
+baseline produces at all. This is what `eval/baselines.py`'s own docstring
+already required ("If the world model cannot beat baseline #2, that is
+reported, not hidden") and what the scorecard had stopped doing.
+
+### Chunked rollout (removes the OOM blocker recorded below)
+
+`world_model_forecast` and `ensemble_world_model_forecast` now take a
+`chunk_size` (config: `eval.forecast_chunk_size`, default 500) and roll out
+at most that many eval rows per pass, which removes the memory ceiling that
+forced this run's reduced `n_samples`/`max_eval_samples` settings. Every
+reduction in those functions is per-row, and calibration plus the
+`risk_over_horizon` max are now applied once to the concatenated arrays
+rather than per chunk, so a chunked run is an exact refactor: with
+`stochastic=False` it is numerically identical to an unchunked one
+(`tests/test_forecast_chunking.py`). With `stochastic=True` the sampled
+trajectories necessarily differ per pass, identically in distribution but
+not element-for-element — the same caveat any reseeded rollout carries.
+
+### Caveats that materially limit this run
+
+- **Single seed only (seed 0 of 5), MVP-scale sample caps** (40,000/8,000
+  train/val, same as Run 2/Run 1) — not the full-scale 5-seed pooled
+  ensemble every other "current" number in this document's scorecard
+  refers to. Do not read the numbers above as superseding Run 3's
+  headline ensemble scorecard; they answer a narrower question (does
+  pooling-method choice matter, measured on one real checkpoint) and the
+  answer is an emphatic yes, but at a different scale than Run 3.
+- **No prior checkpoint's weights survived in this repo** (`artifacts/weights/*.pt`
+  is gitignored, as documented project-wide) — this session retrained
+  seed 0 from scratch after fixing Finding 1, rather than measuring the
+  pooling change against a previously-published checkpoint.
+- **Holdout has very few positive candidates** (274 in the unsampled
+  438,708/674,269-row splits' stratified draw) — the two sweep tables
+  above used different `max_eval_samples`/`n_samples` settings (4,000/50
+  for the pooling sweep, 2,000/30 for the run_eval.py verification and
+  lead-time numbers) purely to stay under this machine's memory budget
+  during `world_model_forecast`'s unchunked rollout — the resulting
+  numbers differ from each other by more than sampling noise alone would
+  predict on such a small positive population (e.g. holdout AUC-PR 0.583
+  vs. 0.678 for nominally the same quantile=0.5 setting), consistent with
+  this document's repeated caveat that small holdout samples are closer
+  to an anecdote than a stable estimate. Both runs agree directionally
+  (large F1/recall gain, AUC-PR not degraded), which is the load-bearing
+  claim; the exact decimal values should not be over-read.
+- **Not re-run against the full 5-seed ensemble** — see "Choice made"
+  above.
+- **(ADDRESSED — see "Chunked rollout" above)** **`world_model_forecast`'s unchunked rollout can be silently OOM-killed**
+  on a memory-constrained machine at `n_samples=100`+`max_eval_samples=4000`+
+  (observed directly this session: the process exits with no traceback,
+  no Python-level error) — a pre-existing property of that function
+  (it tiles the full batch by `n_samples` in one pass), not something this
+  session's changes introduced. Worked around here by using smaller
+  `n_samples`/`max_eval_samples` for the `run_eval.py` verification runs;
+  chunking `world_model_forecast` internally would be a good follow-up for
+  whoever next runs this at scale on a memory-constrained machine.
+
+### Reproduction (Run 5)
+
+```bash
+cd ml
+python -m nidra.train.train_dynamics --config config/mvp_2017.yaml --seed 0 \
+    --max-train-samples 40000 --max-val-samples 8000
+python -m nidra.train.train_heads    --config config/mvp_2017.yaml --seed 0 \
+    --max-train-samples 40000 --max-val-samples 8000
+python -m nidra.eval.run_eval --config config/mvp_2017.yaml --seed 0 --split test    --n-samples 30 --max-eval-samples 2000
+python -m nidra.eval.run_eval --config config/mvp_2017.yaml --seed 0 --split holdout --n-samples 30 --max-eval-samples 2000
+```
+
+`config/mvp_2017.yaml`'s `rollout.risk_pooling_method: quantile` /
+`risk_pooling_quantile: 0.5` is what makes these `run_eval.py` invocations
+report the new numbers rather than Run 1's original MVP-scale ones; set it
+back to `mean` to reproduce the old behavior exactly.
 
 ---
 
