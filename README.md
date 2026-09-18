@@ -19,10 +19,10 @@ production scale: 5 independently-trained models voting together, on
 
 | | **Test day** (Friday's attacks) | **Unseen attack type** (Thursday, held out of training entirely) |
 |---|:---:|:---:|
-| **AUC-PR** (ranking quality) | **0.93** | **0.71** |
-| **F1** (at the mandated 0.75 confidence bar) | **0.84** | **0.72** |
-| **Precision** | **0.95** | 0.69 |
-| **Recall** | **0.75** | **0.75** |
+| **AUC-PR** (ranking quality) | **0.93** | **0.70** |
+| **F1** (at the mandated 0.75 confidence bar) | **0.84** | **0.73** |
+| **Precision** | **0.95** | 0.70 |
+| **Recall** | **0.75** | **0.76** |
 | **Median lead time** (advance warning) | **8.8 hours** | **4.0 hours** |
 | **Attack episodes warned in advance** | **9 of 10** | **2 of 2** |
 
@@ -32,8 +32,8 @@ above normal traffic across *every* possible alert sensitivity rather than
 at one fixed cutoff.
 
 The right-hand column is the one worth dwelling on: Thursday's attack type
-was **held out of training entirely**, and the model still ranks it at 0.71
-AUC-PR with 0.75 recall. That is evidence the system learned transferable
+was **held out of training entirely**, and the model still ranks it at 0.70
+AUC-PR with 0.76 recall. That is evidence the system learned transferable
 attack *dynamics* rather than memorizing the attacks it was shown.
 
 ### Early warning — the capability no classifier has
@@ -79,7 +79,7 @@ is worth being explicit about which ones:
   the model is asked to forecast attack types for which it has, by
   construction, zero training examples.
 
-Given that, the honest framing of the unseen-attack column is that 0.71
+Given that, the honest framing of the unseen-attack column is that 0.70
 AUC-PR and 75% recall come from a model trained on a few hundred attack
 examples, on 7% of the available windows, on a laptop. More compute and more
 attack-labelled data are the two most obvious levers, and neither has been

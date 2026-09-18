@@ -42,7 +42,7 @@ published attack day, every raw packet capture — not a toy sample.
 We held an entire attack type out of training — Thursday's Infiltration —
 and then asked the system to forecast it cold.
 
-**NIDRA scored 0.71 out of 1.00** at separating that never-before-seen
+**NIDRA scored 0.70 out of 1.00** at separating that never-before-seen
 attack from normal traffic, catching **75%** of it at the strict mandated
 confidence bar. That is the equivalent of a student acing a question on a
 topic that was never covered in class, and it is the strongest evidence
@@ -57,10 +57,10 @@ possible alert sensitivity rather than one fixed cutoff.
 
 | | Friday's attacks | Never-seen-before attack type |
 |---|:---:|:---:|
-| **AUC-PR** | 🟢 **0.93** | 🟢 **0.71** |
-| **F1** | 🟢 **0.84** | 🟢 **0.72** |
-| **Precision** | 🟢 **0.95** | 0.69 |
-| **Recall** | 🟢 **0.75** | 🟢 **0.75** |
+| **AUC-PR** | 🟢 **0.93** | 🟢 **0.70** |
+| **F1** | 🟢 **0.84** | 🟢 **0.73** |
+| **Precision** | 🟢 **0.95** | 0.70 |
+| **Recall** | 🟢 **0.75** | 🟢 **0.76** |
 | **Median advance warning** | 🟢 **8.8 hours** | 🟢 **4.0 hours** |
 | **Episodes caught before they unfolded** | 🟢 **9 of 10** | 🟢 **2 of 2** |
 
@@ -93,7 +93,7 @@ rather than tuning choices:
   The model is asked to forecast categories of attack for which it has, by
   construction, zero training examples.
 
-So the unseen-attack result — 0.71 AUC-PR, 75% recall, 4 hours of advance
+So the unseen-attack result — 0.70 AUC-PR, 76% recall, 4 hours of advance
 warning — comes from a model trained on a few hundred attack examples, on 7%
 of the available data, on a laptop. More compute and more attack-labelled
 telemetry are the two clear levers, and neither has been pulled.

@@ -1,37 +1,57 @@
 {
   "split": "holdout",
   "seed": 0,
+  "n_samples": 200,
+  "n_trajectories": 1000,
+  "max_eval_samples": 4000,
+  "n_eval_rows": 4000,
+  "ensemble_seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "risk_pooling": {
+    "method": "quantile",
+    "quantile": 0.85,
+    "head_reduction": "before_pooling"
+  },
+  "risk_threshold": 0.75,
+  "forecast_chunk_size": 500,
+  "config_hash": "5f50ab5570322547",
+  "git_commit": "05edaa741b6ae7a549bf6854c452021bb173e3f3",
   "ablations": {
     "persistence": {
       "auc_pr_persistence": 0.5581644021687125,
-      "auc_pr_world_model": 0.6513280547461652,
-      "auc_collapse": 0.09316365257745263,
+      "auc_pr_world_model": 0.6349414695610258,
+      "auc_collapse": 0.07677706739231327,
       "nrmse_persistence_mean": 2.6537224339691687,
-      "nrmse_world_model_mean": 2.394245379106111,
+      "nrmse_world_model_mean": 2.3842326865839785,
       "interpretation": "world model beats persistence"
     },
     "time_shuffle": {
-      "auc_pr_normal_order": 0.6626525946071408,
-      "auc_pr_shuffled_order": 0.6608344474958575,
-      "collapse": 0.0018181471112832526,
-      "interpretation": "NO COLLAPSE under shuffling \u2014 the model may be using per-window features only, not real temporal structure; this is a reportable negative result, not a bug to hide"
+      "auc_pr_normal_order": 0.6930928913731742,
+      "auc_pr_shuffled_order": 0.6644556537309791,
+      "collapse": 0.028637237642195057,
+      "interpretation": "temporal order matters (collapse observed)"
     },
     "horizon_curve": {
       "auc_pr_by_k": [
-        0.09776217689990462,
-        0.22177323668021576,
-        0.11349984104892896,
-        0.3035189258945763,
-        0.14435388597822524,
-        0.34867841203015787
+        0.12185279263566469,
+        0.24463525112674073,
+        0.1450722638751658,
+        0.44414852874919775,
+        0.14474975106267482,
+        0.47627567570307955
       ],
       "nrmse_by_k": [
-        2.597020244385718,
-        2.0046824302191038,
-        2.7619531174535252,
-        2.2546761015795926,
-        2.8797340995271448,
-        2.5122852588771045
+        2.534549377842417,
+        1.8603872010165239,
+        2.6198514776195845,
+        2.0588272348475134,
+        2.687499693322517,
+        2.2594922420934016
       ],
       "flat_curve_leakage_warning": false
     },

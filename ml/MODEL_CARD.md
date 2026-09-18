@@ -92,7 +92,7 @@ serves):
 | LR, current state only | 0.944 | 0.632 | 0.758 | 0.817 |
 | LR, flattened 15-min history | 0.968 | 0.659 | 0.785 | 0.863 |
 | Oracle, theoretical ceiling (ensemble) | 0.945 | 0.471 | 0.629 | 0.902 |
-| **World model (ensemble)** | 0.950 | 0.744 | **0.835** | **0.926** |
+| **World model (ensemble)** | 0.954 | 0.750 | **0.840** | **0.931** |
 
 **Holdout split (Thursday, unseen attack type), n=4,000:**
 
@@ -102,19 +102,19 @@ serves):
 | LR, current state only | 0.652 | 0.752 | 0.698 | 0.616 |
 | LR, flattened 15-min history | 0.832 | 0.901 | **0.865** | **0.883** |
 | Oracle, theoretical ceiling (ensemble) | 0.650 | 0.584 | 0.615 | 0.760 |
-| **World model (ensemble)** | 0.682 | 0.759 | 0.718 | 0.691 |
+| **World model (ensemble)** | 0.699 | 0.763 | 0.729 | 0.701 |
 
 **Reading these numbers (updated in Run 6)**: earlier versions of this card
 reported near-perfect precision at ~0.5% recall. That was a pooling artifact,
 not a property of the model — the sampled futures were averaged before
 scoring, which washed out the risky minority. Pooling the 85th percentile of
-sampled futures instead takes test F1 from 0.010 to 0.835 and holdout F1 from
-0.014 to 0.718 with AUC-PR flat-to-better, and takes advance warning from 0
+sampled futures instead takes test F1 from 0.010 to 0.840 and holdout F1 from
+0.014 to 0.729 with AUC-PR flat-to-better, and takes advance warning from 0
 of 10 test episodes to 9 of 10 (median ~8.8h). See REAL_DATA_RESULTS.md Run 6.
 
 On ranking quality the model leads every baseline on the test split (AUC-PR
-0.926 vs 0.863, F1 0.835 vs 0.785) and still **loses on the holdout split**
-to the flattened-history baseline (AUC-PR 0.691 vs 0.883, F1 0.718 vs 0.865).
+0.931 vs 0.863, F1 0.840 vs 0.785) and still **loses on the holdout split**
+to the flattened-history baseline (AUC-PR 0.701 vs 0.883, F1 0.729 vs 0.865).
 On an attack type it never trained on, a plain logistic regression over 15
 minutes of history remains the better ranker. The world model's distinct
 contribution there is the forecast itself — hours of advance warning, which
@@ -143,11 +143,14 @@ above):**
    overlap rather than stack. This is why the table above still reports
    Run 3's `logvar_max=3.0` checkpoint as the production ensemble — see
    `REAL_DATA_RESULTS.md` Run 4 for the full measurement.
-2. Recall at the strict 0.75 operating threshold is still low in absolute
-   terms — the model ranks risk well (the AUC-PR numbers above) but its
-   raw probabilities cross the mandated threshold less often than ideal.
-   This is a calibration tuning problem, not a signal problem, and is the
-   clearest next-step item for continued work.
+2. **Resolved; kept for the record.** This footnote used to read that
+   recall at the strict 0.75 threshold was still low, that the cause was a
+   calibration tuning problem, and that fixing it was the clearest
+   next-step item. The first part was true and the diagnosis was wrong: the
+   cause was mean-pooling over sampled rollout trajectories, which averaged
+   away the risky minority of imagined futures before any threshold was
+   applied. Pooling the 85th percentile instead took recall to 0.750 (test)
+   and 0.763 (holdout) with AUC-PR held or improved. See limitation 8.
 3. There is one open, flagged-not-hidden anomaly on the test split where
    the world model's score slightly exceeds the theoretical oracle ceiling
    — most likely small-sample estimation noise (it does not appear on the
@@ -155,7 +158,19 @@ above):**
 
 ## Known limitations
 
-1. **Calibration at threshold=0.75 — root-caused at MVP scale (harmful),
+1. **SUPERSEDED by limitation 8 — read that first.** The low
+   threshold-0.75 recall described here was a *pooling* artifact, not a
+   calibration deficit, and pooling the 85th percentile of sampled futures
+   resolved it: recall is now 0.750 on test and 0.763 on holdout (see the
+   results tables above). The account below is kept because it is the
+   record of how the wrong hypothesis was pursued and what it measured —
+   every "recall is still low" statement in it describes the mean-pooled
+   checkpoint, not the shipped one. Post-hoc calibration was subsequently
+   re-fit against the quantile-pooled statistic and rejected on the
+   evidence (it drops test F1 from 0.840 to 0.067), which is why
+   `NidraPredictor` still defaults to `apply_calibration=False`.
+
+   **Calibration at threshold=0.75 — root-caused at MVP scale (harmful),
    re-measured at full production scale (mildly helpful, but not a fix).**
    (Full detail: `PROJECT_DEEP_DIVE.md` Part 10, `REAL_DATA_RESULTS.md`
    Run 2 addendum and Run 3.) At MVP scale (40k/8k samples), individual
@@ -217,8 +232,14 @@ above):**
    worse (holdout F1 0.486 vs 0.727), because the validation split carries
    182 positives at a 0.364% positive rate against training's 0.057%. It is
    retained as a rejected config option — see REAL_DATA_RESULTS.md Run 6.
-6. Not run at `config/default.yaml`'s full production scale (60/30 epochs,
-   uncapped ~6.9M-candidate training set) — compute/time, not a blocker.
+6. **RESOLVED.** Previously read "not run at `config/default.yaml`'s full
+   production scale". It has since been run and is the shipped model: 5
+   seeds, 60 dynamics epochs / 30 head epochs, on 500,000 training and
+   50,000 validation samples drawn from the ~6.9M-window candidate pool.
+   The pool is not exhausted and cannot be — materializing all of it needs
+   ~35GB against 16GB of RAM — so the cap is a hardware limit, applied by a
+   stratified draw that keeps every attack-positive window. Every number in
+   this card comes from that run.
 7. **Rollout noise measurably erodes score separation with horizon depth —
    diagnosed AND validated by an actual retrain (`logvar_max=1.5`), which
    measurably helped.** Comparing the real stochastic rollout against a
@@ -280,13 +301,18 @@ above):**
    usable training windows on every real day-file** under newer pandas
    (see `REAL_DATA_RESULTS.md` Run 5, Finding 1) — unrelated to pooling,
    but discovered while reproducing this project's own pipeline to test
-   the pooling fix. **Caveats, unchanged from every other single-seed
-   finding in this document**: measured at MVP scale (single seed, 40k/8k
-   samples) only, not re-validated against the full 5-seed ensemble —
-   `config/default.yaml`/`config/default_logvar15.yaml` are deliberately
-   left at the old `"mean"` pooling pending that re-validation, while
-   `config/mvp_2017.yaml` now defaults to the measured `quantile`/`0.5`
-   setting. See `REAL_DATA_RESULTS.md`'s "Run 5" section for the full
+   the pooling fix. **The MVP-scale caveat this entry used to carry has
+   since been discharged.** It read: measured at MVP scale only, not
+   re-validated against the full 5-seed ensemble, with
+   `config/default.yaml` deliberately left at `"mean"` pooling pending that
+   re-validation. The re-validation was done at full production scale
+   against the real pooled 5-seed path, and it changed the answer: q=0.5,
+   the MVP-scale winner, is **catastrophic** at full scale (test AUC-PR
+   0.925 → 0.499), which is precisely why the default was not flipped on
+   the strength of the MVP result. A quantile sweep on both splits selected
+   **q=0.85**, which is what `config/default.yaml` now ships and what every
+   number in this card was produced with; `config/mvp_2017.yaml` stays at
+   q=0.5 with a comment saying it does not transfer. See `REAL_DATA_RESULTS.md`'s "Run 5" section for the full
    sweep table (mean vs. quantile at 0.5/0.7/0.75/0.85/0.9/0.95/0.99) and
    lead-time numbers.
 
