@@ -78,6 +78,24 @@ def _warn_if_single_class(y_true: np.ndarray, split_name: str, max_eval_samples:
         )
 
 
+def resolve_pooling(cfg: dict) -> dict:
+    """The trajectory-pooling settings, read from the one place they live.
+
+    These keys sit under `rollout:` in the config. This helper exists because
+    they were being read in two places — once to drive the forecast calls and
+    once to stamp the metrics files — and the second read looked at the top
+    level, found nothing, and silently fell back to the `"mean"` default. The
+    numbers were quantile-pooled and the provenance block said "mean", which
+    is worse than recording nothing at all. One reader, used by both.
+    """
+    rollout = cfg.get("rollout", {})
+    return {
+        "method": rollout.get("risk_pooling_method", "mean"),
+        "quantile": rollout.get("risk_pooling_quantile", 0.9),
+        "head_reduction": rollout.get("risk_pooling_head_reduction", "before_pooling"),
+    }
+
+
 def build_run_params(cfg: dict, seed: int, split_name: str, n_samples: int,
                       max_eval_samples: int | None, ensemble_seeds: list[int] | None,
                       n_eval_rows: int) -> dict:
@@ -90,11 +108,7 @@ def build_run_params(cfg: dict, seed: int, split_name: str, n_samples: int,
     exactly that reason. `n_trajectories` is the count the served statistic
     actually pools — n_samples per ensemble member, times the members.
     """
-    pooling = {
-        "method": cfg.get("risk_pooling_method", "mean"),
-        "quantile": cfg.get("risk_pooling_quantile"),
-        "head_reduction": cfg.get("risk_pooling_head_reduction", "before_pooling"),
-    }
+    pooling = resolve_pooling(cfg)
     eval_cfg = cfg.get("eval", {})
     seeds = [int(s) for s in ensemble_seeds] if ensemble_seeds is not None else None
     n_members = len(seeds) if seeds else 1
@@ -138,9 +152,10 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
     metrics_dir = resolve_path(cfg, cfg["artifacts"]["metrics_dir"]) / split_name
     metrics_dir.mkdir(parents=True, exist_ok=True)
 
-    risk_pooling_method = cfg["rollout"].get("risk_pooling_method", "mean")
-    risk_pooling_quantile = cfg["rollout"].get("risk_pooling_quantile", 0.9)
-    risk_pooling_head_reduction = cfg["rollout"].get("risk_pooling_head_reduction", "before_pooling")
+    _pooling = resolve_pooling(cfg)
+    risk_pooling_method = _pooling["method"]
+    risk_pooling_quantile = _pooling["quantile"]
+    risk_pooling_head_reduction = _pooling["head_reduction"]
     # Bounds peak memory in the forecast functions, which tile the whole batch
     # by n_samples in one allocation — an unchunked large split at a high
     # sample count gets OOM-killed by the OS with no Python traceback.
