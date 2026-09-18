@@ -301,10 +301,18 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
     # --- Ablations ---
     logger.info("running ablations")
     ablations = {
-        "persistence": persistence_ablation(X_eval, Y_eval, y_true, model, feature_scale=feature_scale),
-        "time_shuffle": time_shuffle_ablation(X_eval, y_true, model, K=Y_eval.shape[1]),
+        "persistence": persistence_ablation(
+            X_eval, Y_eval, y_true, model, feature_scale=feature_scale,
+            risk_pooling_method=risk_pooling_method, risk_pooling_quantile=risk_pooling_quantile,
+            chunk_size=forecast_chunk_size),
+        "time_shuffle": time_shuffle_ablation(
+            X_eval, y_true, model, K=Y_eval.shape[1],
+            risk_pooling_method=risk_pooling_method, risk_pooling_quantile=risk_pooling_quantile,
+            chunk_size=forecast_chunk_size),
         "horizon_curve": horizon_curve(
-            eval_arrays.future_is_attack, Y_eval, model, X_eval, n_samples=n_samples, feature_scale=feature_scale
+            eval_arrays.future_is_attack, Y_eval, model, X_eval, n_samples=n_samples,
+            feature_scale=feature_scale, risk_pooling_method=risk_pooling_method,
+            risk_pooling_quantile=risk_pooling_quantile, chunk_size=forecast_chunk_size
         ),
         "surprise_signal": surprise_signal(X_eval, Y_eval, eval_arrays.future_is_attack, model),
     }

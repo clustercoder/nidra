@@ -4,6 +4,14 @@ Each of these is a real experiment with a real possible failure. Rule 3
 (CLAUDE.md): if persistence matches the model, or time-shuffle doesn't
 collapse performance, that is the reported result — never hidden, never
 engineered away.
+
+
+The forecast calls here take the same risk_pooling_*/chunk_size arguments as
+eval.baselines, and run_eval passes the config's values. Without that these
+ablations silently reported MEAN-pooled numbers next to quantile-pooled
+headline metrics — an apples-to-oranges comparison in the same results file —
+and ran the rollout unchunked, which is the OOM path documented in
+REAL_DATA_RESULTS.md.
 """
 
 from __future__ import annotations
@@ -18,7 +26,11 @@ from nidra.models.world_model import WorldModel
 
 
 def persistence_ablation(
-    X: np.ndarray, Y: np.ndarray, risk_label: np.ndarray, model: WorldModel, feature_scale: np.ndarray | None = None
+    X: np.ndarray, Y: np.ndarray, risk_label: np.ndarray, model: WorldModel,
+    feature_scale: np.ndarray | None = None,
+    risk_pooling_method: str = "mean",
+    risk_pooling_quantile: float = 0.9,
+    chunk_size: int | None = None,
 ) -> dict:
     """Replace the transition model with copy-forward (mu=0): S_hat[t+k]=S_t
     for every k. Compares risk-prediction AUC-PR and state nRMSE against
@@ -33,7 +45,7 @@ def persistence_ablation(
     persistence_risk = baseline_persistence(X_last, model)
     persisted_states = np.repeat(X_last[:, None, :], K, axis=1)  # S_hat[t+k] = S_t for all k
 
-    world = world_model_forecast(X, model, K=K, n_samples=50)
+    world = world_model_forecast(X, model, K=K, n_samples=50, risk_pooling_method=risk_pooling_method, risk_pooling_quantile=risk_pooling_quantile, chunk_size=chunk_size)
 
     auc_persistence = float(average_precision_score(risk_label, persistence_risk)) if len(np.unique(risk_label)) > 1 else float("nan")
     auc_world_model = float(average_precision_score(risk_label, world["risk_over_horizon"])) if len(np.unique(risk_label)) > 1 else float("nan")
@@ -55,7 +67,9 @@ def persistence_ablation(
     }
 
 
-def time_shuffle_ablation(X: np.ndarray, risk_label: np.ndarray, model: WorldModel, K: int = 6, seed: int = 0) -> dict:
+def time_shuffle_ablation(X: np.ndarray, risk_label: np.ndarray, model: WorldModel, K: int = 6, seed: int = 0,
+                           risk_pooling_method: str = "mean", risk_pooling_quantile: float = 0.9,
+                           chunk_size: int | None = None) -> dict:
     """Shuffle window order WITHIN each input sequence (per-sample
     permutation of the L axis) and re-run the world-model forecast.
 
@@ -71,8 +85,8 @@ def time_shuffle_ablation(X: np.ndarray, risk_label: np.ndarray, model: WorldMod
         perm = rng.permutation(L)
         X_shuffled[i] = X_shuffled[i, perm]
 
-    world_normal = world_model_forecast(X, model, K=K, n_samples=50)
-    world_shuffled = world_model_forecast(X_shuffled, model, K=K, n_samples=50)
+    world_normal = world_model_forecast(X, model, K=K, n_samples=50, risk_pooling_method=risk_pooling_method, risk_pooling_quantile=risk_pooling_quantile, chunk_size=chunk_size)
+    world_shuffled = world_model_forecast(X_shuffled, model, K=K, n_samples=50, risk_pooling_method=risk_pooling_method, risk_pooling_quantile=risk_pooling_quantile, chunk_size=chunk_size)
 
     has_two_classes = len(np.unique(risk_label)) > 1
     auc_normal = float(average_precision_score(risk_label, world_normal["risk_over_horizon"])) if has_two_classes else float("nan")
@@ -97,12 +111,15 @@ def horizon_curve(
     X: np.ndarray,
     n_samples: int = 50,
     feature_scale: np.ndarray | None = None,
+    risk_pooling_method: str = "mean",
+    risk_pooling_quantile: float = 0.9,
+    chunk_size: int | None = None,
 ) -> dict:
     """AUC-PR and state nRMSE plotted against horizon k. Smooth degradation
     is expected; a FLAT curve across all k is a leakage red flag, not a
     good result (IMPLEMENTATION-ML.md §5.4)."""
     K = Y.shape[1]
-    world = world_model_forecast(X, model, K=K, n_samples=n_samples)
+    world = world_model_forecast(X, model, K=K, n_samples=n_samples, risk_pooling_method=risk_pooling_method, risk_pooling_quantile=risk_pooling_quantile, chunk_size=chunk_size)
     risk_mean_k = world["risk_mean_k"]          # [N, K]
     pred_states_k = world["predicted_states_mean"]  # [N, K, F]
 
