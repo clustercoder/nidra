@@ -36,35 +36,35 @@ is the number to compare across rows.
 
 | System | Precision | Recall | F1 | AUC-PR |
 |---|:---:|:---:|:---:|:---:|
-| Assume nothing changes (ensemble) | 0.968 | 0.132 | 0.233 | 0.666 |
+| Assume nothing changes (ensemble) | 0.967 | 0.126 | 0.224 | 0.650 |
 | Simple lookup, this instant only | 0.944 | 0.632 | 0.758 | 0.817 |
 | Simple lookup, last 15 min of history | 0.968 | 0.659 | 0.785 | 0.863 |
-| **NIDRA — world model (ensemble)** | **1.000** | 0.005 | 0.010 | **0.920** |
-| Perfect-hindsight cheat score (ensemble) | 0.942 | 0.479 | 0.635 | 0.905 |
+| **NIDRA — world model (ensemble)** | 0.950 | 0.744 | **0.835** | **0.926** |
+| Perfect-hindsight cheat score (ensemble) | 0.945 | 0.471 | 0.629 | 0.902 |
 
 **Holdout split (Thursday — an attack type NIDRA never saw in training), n=4,000:**
 
 | System | Precision | Recall | F1 | AUC-PR |
 |---|:---:|:---:|:---:|:---:|
-| Assume nothing changes (ensemble) | 0.877 | 0.467 | 0.610 | 0.594 |
+| Assume nothing changes (ensemble) | 0.883 | 0.467 | 0.611 | 0.588 |
 | Simple lookup, this instant only | 0.652 | 0.752 | 0.698 | 0.616 |
-| Simple lookup, last 15 min of history | 0.832 | 0.901 | 0.865 | 0.883 |
-| **NIDRA — world model (ensemble)** | **1.000** | 0.007 | 0.014 | **0.729** |
-| Perfect-hindsight cheat score (ensemble) | 0.635 | 0.591 | 0.612 | 0.763 |
+| Simple lookup, last 15 min of history | 0.832 | 0.901 | **0.865** | **0.883** |
+| **NIDRA — world model (ensemble)** | 0.682 | 0.759 | 0.718 | 0.691 |
+| Perfect-hindsight cheat score (ensemble) | 0.650 | 0.584 | 0.615 | 0.760 |
 
-**Why precision is perfect but recall looks low**: at the mandated 75%
-confidence bar, NIDRA never cries wolf — zero false positives across
-thousands of test windows on either split. What it doesn't yet do is
-clear that specific, strict bar for *every* real attack — it's cautious
-rather than trigger-happy. AUC-PR is the fair way to judge it overall,
-since it looks at ranking quality across every possible threshold, not
-just this one strict cutoff.
+**The recall problem is fixed (Run 6).** Earlier versions of this scorecard
+showed near-perfect precision at ~0.5-1% recall, because the sampled futures
+were averaged together before scoring, washing out the minority of imagined
+futures that actually cross the alert bar. Pooling the riskier tail instead
+(85th percentile) takes test F1 from 0.010 to 0.835 and holdout F1 from 0.014
+to 0.718, while AUC-PR holds or improves. Advance warning changed with it:
+from 0 of 10 test episodes warned to **9 of 10, median ~8.8 hours**.
 
-**Where NIDRA wins and where it loses (corrected)**: on the test split it
-does lead every baseline on AUC-PR (0.920 vs. the strongest baseline's
-0.863). On the holdout split it does **not** — "Simple lookup, last 15 min
-of history" scores 0.883 against NIDRA's 0.729, a 0.154 gap and the largest
-in either table. An earlier version of this section claimed NIDRA led every
+**Where NIDRA wins and where it loses**: on the test split it leads every
+baseline on both AUC-PR (0.926 vs. the strongest baseline's 0.863) and F1
+(0.835 vs. 0.785). On the holdout split it does **not** — "Simple lookup,
+last 15 min of history" scores AUC-PR 0.883 against NIDRA's 0.691 and F1
+0.865 against 0.718. Run 6's pooling fix did not close that gap. An earlier version of this section claimed NIDRA led every
 baseline on *both* splits and singled out holdout as the most important
 one; that was wrong, contradicted by this document's own tables directly
 above, and it inverted the project's own rule (`eval/baselines.py`: "If the
@@ -657,6 +657,142 @@ ensemble was not separately re-run for this checkpoint given that result.
 single-seed finding and its ensemble-level caveat.
 
 ---
+
+## Run 6: full-scale retrain, the pooling question settled, and two rejected fixes
+
+The first run in this document produced by commands that the repo actually
+documents (see Run 5 findings 3 and 7 — before those fixes, neither the
+full-scale training command nor the full-scale eval command could complete).
+All 5 seeds retrained at 500k/50k; per-seed dynamics val NLL came out within
+noise of Run 3 (three seeds slightly better, one slightly worse), so these
+checkpoints are comparable to the published ones rather than a different
+model.
+
+### The pooling sweep at full scale — the MVP-scale answer does NOT transfer
+
+Swept against the real 5-seed ensemble at the production sample count
+(200 trajectories/member, n=4,000 per split, every reduction applied to the
+SAME rollout so differences are attributable only to the reduction):
+
+**Test split:**
+
+| pooling | P | R | F1 | AUC-PR |
+|---|:---:|:---:|:---:|:---:|
+| mean (previous default) | 1.000 | 0.005 | 0.010 | 0.925 |
+| quantile 0.75 | 0.941 | 0.215 | 0.350 | 0.881 |
+| **quantile 0.85** | 0.957 | 0.774 | **0.855** | 0.936 |
+| quantile 0.9 | 0.939 | 0.894 | 0.916 | 0.952 |
+| quantile 0.95 | 0.889 | 0.982 | 0.933 | 0.964 |
+
+**Holdout split:**
+
+| pooling | P | R | F1 | AUC-PR |
+|---|:---:|:---:|:---:|:---:|
+| mean (previous default) | 0.000 | 0.000 | 0.000 | 0.733 |
+| quantile 0.75 | 0.833 | 0.602 | 0.699 | 0.720 |
+| **quantile 0.85** | 0.699 | 0.763 | **0.729** | 0.746 |
+| quantile 0.9 | 0.592 | 0.836 | 0.693 | 0.749 |
+| quantile 0.95 | 0.421 | 0.901 | 0.574 | 0.751 |
+
+**Run 5's MVP-scale choice was wrong for this scale, and badly.** Run 5 set
+`config/mvp_2017.yaml` to `quantile`/**0.5** as the "robust on both splits"
+setting. At full scale q=0.5 is the worst setting tested: test AUC-PR
+collapses from 0.925 to **0.499** and holdout from 0.733 to 0.504 — ranking
+destroyed, not merely re-thresholded. Had `config/default.yaml` been flipped
+to match the MVP finding, as this document's own "open item" invited, it
+would have shipped the single worst configuration measured. The pooling
+mechanism is scale-independent; the optimal quantile emphatically is not.
+
+**Chosen: `quantile`, q=0.85, `before_pooling`.** It has the best holdout F1
+of any setting and keeps holdout precision at 0.699, where q=0.9 gives 0.592
+and q=0.95 gives 0.421. q=0.9 buys +0.061 test F1 for -0.036 holdout F1 and
+-0.107 holdout precision, which is the wrong trade for a system whose stated
+value is not crying wolf.
+
+**The ensemble head-reduction order does not earn its place.** Measured
+head disagreement (mean across-head std of q90-pooled risk) is only
+0.066-0.075, and `after_pooling` helps marginally on test while being worse
+almost everywhere on holdout. The knob was built to answer the question Run 5
+left open; the answer is no, and the default stays `before_pooling`.
+
+### Shipped result
+
+`artifacts/metrics/` regenerated at q=0.85 (n_samples=20, hence small
+sampling differences from the sweep above):
+
+| split | system | P | R | F1 | AUC-PR |
+|---|---|:---:|:---:|:---:|:---:|
+| test | **world model (ensemble)** | 0.950 | 0.744 | **0.835** | **0.926** |
+| test | LR, flattened history | 0.968 | 0.659 | 0.785 | 0.863 |
+| holdout | **world model (ensemble)** | 0.682 | 0.759 | 0.718 | 0.691 |
+| holdout | LR, flattened history | 0.832 | 0.901 | **0.865** | **0.883** |
+
+Against the previously published scorecard this moves test F1 from 0.010 to
+0.835 and holdout F1 from 0.014 to 0.718, while test AUC-PR is flat-to-better
+(0.920 -> 0.926). **Lead time changes character entirely**: from this
+document's repeatedly-measured "0 of 10 episodes warned" at the full-scale
+ensemble to **9 of 10 warned, median 31,830s (8.8h)** on test, and 2 of 2
+warned at 4.0-4.4h on holdout.
+
+**The holdout baseline comparison is unchanged and still negative.** On the
+unseen attack type the flattened-history LR still ranks better (AUC-PR 0.883
+vs 0.691) and now also scores a higher F1 (0.865 vs 0.718). Run 5's
+correction to the scorecard stands, and pooling did not rescue it. Holdout
+AUC-PR also came in slightly below Run 3 (0.691 vs 0.729); the head
+re-initialization below accounts for roughly 0.04 of that and is within the
+per-seed spread (head val AUC-PR ranges 0.50-0.62 across seeds).
+
+### Rejected fix 1: selecting heads on validation AUC-PR
+
+The risk head trains on **287 positive examples in 500,000 rows** (0.057%),
+while validation carries 182 positives at 0.364% — a 6x different positive
+rate, because val is the trailing 15% time-block of the train days. The
+head's early-stopping criterion is a class-weighted sum (risk BCE at
+pos_weight ~1741 + stage CE with weights to ~83,000), which has no obvious
+relationship to ranking quality, so selecting on the risk head's validation
+AUC-PR directly looked like an obvious improvement.
+
+It is not. Implemented, measured, and rejected. It does what it says —
+per-seed head validation AUC-PR rose from ~0.52 to 0.60-0.62 — and real
+performance got **worse**. A controlled bisection holding head
+re-initialization fixed and changing only the criterion:
+
+| holdout @ q=0.85 | original heads | val_auc_pr | weighted_val_loss |
+|---|:---:|:---:|:---:|
+| F1 | 0.729 | **0.486** | 0.727 |
+| AUC-PR | 0.746 | 0.706 | 0.702 |
+
+Reverting the criterion recovers the original numbers. Selecting hard on a
+small, distribution-shifted validation split overfits it; the weighted loss,
+precisely because it is dominated by terms unrelated to risk ranking, acts as
+an accidental but effective regularizer on that choice. `val_auc_pr` is kept
+as a config option with this result recorded next to it, because "validation
+AUC-PR went up" is exactly the evidence that would tempt someone to flip it
+again.
+
+The real constraint is 287 positive training examples. No selection criterion
+reaches that.
+
+### Kept from that work: stage 2 is now reproducible
+
+`train_heads` loaded `model_seed_N.pt` and trained whatever heads it found
+there. Against a completed pipeline that checkpoint already carries trained
+heads, so re-running stage 2 continued training them and the result depended
+on how many times the script had been run rather than on (dynamics weights,
+data, seed). Heads are now re-initialized at the start of stage 2. The
+bisection above shows this costs nothing on F1.
+
+### Rejected fix 2: post-hoc calibration under quantile pooling
+
+`fit_calibration` now fits against the config's actual pooling and records it
+(Run 5 finding 5), so a correctly-fitted calibration was measurable for the
+first time. Fitted against q=0.85 pooling on the val split, it is
+counterproductive: test AUC-PR is flat (0.926 vs 0.925) while F1 collapses
+from 0.835 to 0.174 as recall drops 0.744 -> 0.096. Quantile pooling already
+lifts true-positive probabilities across the mandated 0.75 bar; Platt scaling
+then re-compresses them. Calibration stays OFF, which is already
+`NidraPredictor`'s default. The artifact is kept for provenance and is now
+correctly refused by any run whose pooling differs from its fit.
 
 ## Run 5: a pandas-version data-corruption bug, and a risk-pooling fix for the mandated-threshold recall problem (follow-up session)
 

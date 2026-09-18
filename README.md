@@ -25,9 +25,9 @@ randomly would score close to 0.
 
 | | **Test day** (Friday's attacks) | **Never-seen-before day** (Thursday's attack type — held back from training entirely) |
 |---|:---:|:---:|
-| A guard who never raises an alarm ("nothing changes") | 0.67 | 0.59 |
+| A guard who never raises an alarm ("nothing changes") | 0.65 | 0.59 |
 | Best non-forecasting method (LR over 15 min of history) | 0.86 | 🟢 **0.88** |
-| **NIDRA (this project)** | 🟢 **0.92** | 0.73 |
+| **NIDRA (this project)** | 🟢 **0.93** | 0.69 |
 | A "perfect hindsight" cheat score* | 0.90 | 0.76 |
 
 *\*This row peeks at the real future to compute a theoretical best-possible
@@ -76,11 +76,11 @@ Four different scores show up below. In plain English:
 
 | System | Precision | Recall | F1 | AUC-PR |
 |---|:---:|:---:|:---:|:---:|
-| "Assume nothing changes" | 0.97 | 0.13 | 0.23 | 0.67 |
+| "Assume nothing changes" | 0.97 | 0.13 | 0.22 | 0.65 |
 | Simple lookup (this instant only) | 0.94 | 0.63 | 0.76 | 0.82 |
 | Simple lookup (last 15 min of history) | 0.97 | 0.66 | 0.79 | 0.86 |
-| **NIDRA (forecasts the future, 5 models voting)** | **1.00** | 0.01 | 0.01 | **0.92** |
-| Perfect-hindsight cheat score | 0.94 | 0.48 | 0.64 | 0.90 |
+| **NIDRA (forecasts the future, 5 models voting)** | 0.95 | 0.74 | **0.84** | **0.93** |
+| Perfect-hindsight cheat score | 0.95 | 0.47 | 0.63 | 0.90 |
 
 **Never-seen-before day (Thursday's held-out attack type):**
 
@@ -88,30 +88,28 @@ Four different scores show up below. In plain English:
 |---|:---:|:---:|:---:|:---:|
 | "Assume nothing changes" | 0.88 | 0.47 | 0.61 | 0.59 |
 | Simple lookup (this instant only) | 0.65 | 0.75 | 0.70 | 0.62 |
-| Simple lookup (last 15 min of history) | 0.83 | 0.90 | 0.87 | **0.88** |
-| **NIDRA (forecasts the future, 5 models voting)** | **1.00** | 0.01 | 0.01 | 0.73 |
-| Perfect-hindsight cheat score | 0.64 | 0.59 | 0.61 | 0.76 |
+| Simple lookup (last 15 min of history) | 0.83 | 0.90 | **0.87** | **0.88** |
+| **NIDRA (forecasts the future, 5 models voting)** | 0.68 | 0.76 | 0.72 | 0.69 |
+| Perfect-hindsight cheat score | 0.65 | 0.58 | 0.62 | 0.76 |
 
-**Why NIDRA's precision is perfect (1.00) but its recall looks low at this
-strict threshold**: NIDRA never cries wolf — every alarm it raises at the
-75%-confidence bar is a genuine attack, zero false positives across
-thousands of test windows. What it doesn't yet do is clear that
-particular bar for *every* real attack — it's a cautious system rather
-than a trigger-happy one. **The AUC-PR column is the fair way to judge it
-overall**: it shows NIDRA ranks danger well (0.92 / 0.73 — leading every
-baseline on the test day, behind the history lookup's 0.88 on the unseen
-day), and it's specifically the fixed 75% cutoff where it's conservative.
-Lowering that cutoff would trade some of the perfect precision for more
-coverage — a tuning dial, not a redesign.
+**What changed here, and why the old numbers looked odd**: earlier versions
+of this README showed NIDRA at perfect precision (1.00) but ~1% recall. That
+was a bug in how the system summarized its own imagined futures, not a
+property of the model — it averaged all the imagined futures together, which
+drowned out the minority that actually looked dangerous. Scoring the riskier
+tail of those futures instead takes F1 from 0.01 to **0.84** on the test day
+and 0.01 to **0.72** on the unseen day, while the ranking score holds or
+improves. Advance warning changed with it: from **0 of 10** attack episodes
+flagged ahead of time to **9 of 10, a median of about 8.8 hours early**.
 
-NIDRA beats every simple lookup-based approach on AUC-PR on the **test**
-day (0.92 vs. 0.86). On the never-trained-for day it does **not** — the
-15-minute-history lookup scores 0.88 against NIDRA's 0.73. An earlier
-version of this README claimed the opposite, specifically about the
-never-trained-for day; the tables directly above contradicted it. The
-scenario a real deployment has to handle (new attacks nobody has a
-labelled example of yet) is therefore still an open item for the ranking
-quality, and is honestly reported as one in `ml/REAL_DATA_RESULTS.md`.
+**Where NIDRA wins and where it loses.** On the test day it is now the best
+system tried, on both F1 (0.84 vs 0.79) and ranking (0.93 vs 0.86). On the
+never-seen-before day it is still **not** — the 15-minute-history lookup
+scores 0.88 ranking and 0.87 F1 against NIDRA's 0.69 and 0.72. The fix above
+did not close that gap, and we report it rather than omitting the row. What
+no baseline in either column does at all is forecast forward, so none of them
+can give the hours of advance warning NIDRA produces; that remains the
+contribution, and better ranking on unseen attack types remains open.
 
 ### The tuning experiment, in full
 
@@ -147,7 +145,7 @@ what 5-model voting already achieves on its own.
   **well before the attack fully unfolds** — anywhere from about 25
   minutes to several hours of advance notice in testing, not an
   after-the-fact alert.[^1]
-- **Code health**: 212 automated tests, all passing — the pipeline, the
+- **Code health**: 221 automated tests, all passing — the pipeline, the
   model, and the serving code are exercised end-to-end, not just eyeballed.
 
 See [`ml/REAL_DATA_RESULTS.md`](ml/REAL_DATA_RESULTS.md) for every one of
@@ -181,7 +179,7 @@ ml/                     the ML subsystem — data pipeline, world model,
                          training, evaluation, explainability, serving
   nidra/                 source (data/, models/, train/, eval/, explain/, serve/)
   config/                default.yaml (production) / mvp_2017.yaml (fast iteration)
-  tests/                 212 tests, synthetic fixtures, runs in seconds
+  tests/                 221 tests, synthetic fixtures, runs in seconds
   README.md              full technical documentation, start here for details
   MODEL_CARD.md          compact model card: claims, deviations, limitations
   REAL_DATA_RESULTS.md   single source of truth for every measured number
@@ -193,7 +191,7 @@ docs/                    problem-statement PRD and build specs
 ```bash
 cd ml
 pip install -e .
-pytest tests/ -q                     # 212 tests, synthetic fixtures — seconds
+pytest tests/ -q                     # 221 tests, synthetic fixtures — seconds
 
 # Reproduce the full-scale production result (requires the real
 # CIC-IDS2017 dataset — see ml/PRODUCTION_RUN_GUIDE.md):

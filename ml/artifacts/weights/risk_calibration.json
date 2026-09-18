@@ -1,38 +1,38 @@
 {
   "params_by_k": [
     {
-      "a": 1.0806886161519866,
-      "b": -0.43570481668375577,
+      "a": 0.4294831156730652,
+      "b": -2.954181432723999,
       "n": 4000,
       "degenerate": false
     },
     {
-      "a": 2.3416628075914745,
-      "b": 0.7040007544088813,
+      "a": 0.7933856844902039,
+      "b": -3.685716390609741,
       "n": 4000,
       "degenerate": false
     },
     {
-      "a": 1.4790217739525027,
-      "b": -0.18445342414072516,
+      "a": 0.4300926923751831,
+      "b": -3.2889630794525146,
       "n": 4000,
       "degenerate": false
     },
     {
-      "a": 3.057081837099974,
-      "b": 1.4941340283417632,
+      "a": 1.0648772716522217,
+      "b": -3.6843678951263428,
       "n": 4000,
       "degenerate": false
     },
     {
-      "a": 1.7659225584162586,
-      "b": -0.05858799291240734,
+      "a": 0.46374306082725525,
+      "b": -3.443866491317749,
       "n": 4000,
       "degenerate": false
     },
     {
-      "a": 3.395920882866628,
-      "b": 1.7264462061608181,
+      "a": 1.0216901302337646,
+      "b": -3.829272747039795,
       "n": 4000,
       "degenerate": false
     }
@@ -48,9 +48,12 @@
       3,
       4
     ],
-    "n_samples_per_member": 100,
-    "fitted_at": "2026-09-11T16:47:50Z",
+    "n_samples_per_member": 50,
+    "fitted_at": "2026-09-18T09:15:44Z",
     "method": "platt_scaling_per_horizon",
-    "note": "Fit on the validation split only, using the same pooled-ensemble rollout statistic (`ensemble_world_model_forecast`) that NidraPredictor serves at inference time. Does not retrain or modify the frozen risk head in any way \u2014 see eval/calibrate.py."
+    "risk_pooling_method": "quantile",
+    "risk_pooling_quantile": 0.85,
+    "risk_pooling_head_reduction": "before_pooling",
+    "note": "Fit on the validation split only, using the same pooled-ensemble rollout statistic (`ensemble_world_model_forecast`) that NidraPredictor serves at inference time, under the risk_pooling_* settings recorded above. Does not retrain or modify the frozen risk head in any way \u2014 see eval/calibrate.py. The recorded pooling settings are load-bearing, not informational: eval/calibrate.calibration_pooling_mismatch refuses to apply this fit to a run that pools differently."
   }
 }

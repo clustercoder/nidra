@@ -88,36 +88,37 @@ serves):
 
 | Baseline | Precision | Recall | F1 | AUC-PR |
 |---|---|---|---|---|
-| Persistence (ensemble) | 0.968 | 0.132 | 0.233 | 0.666 |
+| Persistence (ensemble) | 0.967 | 0.126 | 0.224 | 0.650 |
 | LR, current state only | 0.944 | 0.632 | 0.758 | 0.817 |
 | LR, flattened 15-min history | 0.968 | 0.659 | 0.785 | 0.863 |
-| Oracle, theoretical ceiling (ensemble) | 0.942 | 0.479 | 0.635 | 0.905 |
-| **World model (ensemble)** | **1.000** | 0.005 | 0.010 | **0.920** |
+| Oracle, theoretical ceiling (ensemble) | 0.945 | 0.471 | 0.629 | 0.902 |
+| **World model (ensemble)** | 0.950 | 0.744 | **0.835** | **0.926** |
 
 **Holdout split (Thursday, unseen attack type), n=4,000:**
 
 | Baseline | Precision | Recall | F1 | AUC-PR |
 |---|---|---|---|---|
-| Persistence (ensemble) | 0.877 | 0.467 | 0.610 | 0.594 |
+| Persistence (ensemble) | 0.883 | 0.467 | 0.611 | 0.588 |
 | LR, current state only | 0.652 | 0.752 | 0.698 | 0.616 |
-| LR, flattened 15-min history | 0.832 | 0.901 | 0.865 | 0.883 |
-| Oracle, theoretical ceiling (ensemble) | 0.635 | 0.591 | 0.612 | 0.763 |
-| **World model (ensemble)** | **1.000** | 0.007 | 0.014 | **0.729** |
+| LR, flattened 15-min history | 0.832 | 0.901 | **0.865** | **0.883** |
+| Oracle, theoretical ceiling (ensemble) | 0.650 | 0.584 | 0.615 | 0.760 |
+| **World model (ensemble)** | 0.682 | 0.759 | 0.718 | 0.691 |
 
-**Reading the precision/recall split**: the world model's precision is
-perfect (1.000 — zero false positives at the mandated threshold, on both
-splits) but its recall at that same strict 75%-confidence bar is low —
-it's conservative, not indiscriminate. AUC-PR (threshold-independent) is
-the fairer summary of its actual ranking quality: ahead of every baseline
-on the test split (0.920 vs. 0.863 for the strongest), but **behind the
-flattened-history baseline on the holdout split** (0.729 vs. 0.883). An
-earlier version of this card claimed it was ahead on both splits and called
-holdout the strongest evidence of generalization; the tables above say
-otherwise and take precedence. On an attack type it never trained on, LR
-over 15 minutes of flattened history ranks risk better than the world
-model. The world model's distinct contribution on that split is lead time
-(hours of advance warning, which no baseline produces) and zero false
-positives at the mandated threshold — not ranking quality.
+**Reading these numbers (updated in Run 6)**: earlier versions of this card
+reported near-perfect precision at ~0.5% recall. That was a pooling artifact,
+not a property of the model — the sampled futures were averaged before
+scoring, which washed out the risky minority. Pooling the 85th percentile of
+sampled futures instead takes test F1 from 0.010 to 0.835 and holdout F1 from
+0.014 to 0.718 with AUC-PR flat-to-better, and takes advance warning from 0
+of 10 test episodes to 9 of 10 (median ~8.8h). See REAL_DATA_RESULTS.md Run 6.
+
+On ranking quality the model leads every baseline on the test split (AUC-PR
+0.926 vs 0.863, F1 0.835 vs 0.785) and still **loses on the holdout split**
+to the flattened-history baseline (AUC-PR 0.691 vs 0.883, F1 0.718 vs 0.865).
+On an attack type it never trained on, a plain logistic regression over 15
+minutes of history remains the better ranker. The world model's distinct
+contribution there is the forecast itself — hours of advance warning, which
+no baseline produces at all.
 
 A dedicated retrain experiment (`logvar_max=1.5`, tightening the transition
 model's rollout-noise clamp) independently **validated and improved**

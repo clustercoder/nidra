@@ -43,10 +43,10 @@ We held back an entire attack type (**Infiltration**) and never showed it
 to the model during training — the equivalent of putting a topic on the
 exam that was never covered in class.
 
-**NIDRA still scored 0.73 out of 1.00** at telling that unseen attack
-apart from normal traffic — well ahead of a system that just assumes
-"nothing changes" (0.59), but, stated plainly, **behind the best simple
-lookup method (0.88) on that same unseen attack type.** So the learned
+**NIDRA scored 0.69 out of 1.00** at telling that unseen attack apart from
+normal traffic — well ahead of a system that just assumes "nothing changes"
+(0.59), but, stated plainly, **behind the best simple lookup method (0.88)
+on that same unseen attack type.** So the learned
 dynamics do transfer to an attack never trained on, but on pure ranking
 quality a plain statistical method over the last 15 minutes of history
 still does that particular job better. What that method cannot do at all
@@ -61,9 +61,9 @@ possible alert sensitivity, not just one fixed cutoff):
 
 | System | Friday's attacks | Never-seen-before attack type |
 |---|:---:|:---:|
-| "Assume nothing changes" | 0.67 | 0.59 |
+| "Assume nothing changes" | 0.65 | 0.59 |
 | Best simple lookup (no forecasting) | 0.86 | 🟢 **0.88** |
-| **NIDRA (forecasts the future)** | 🟢 **0.92** | 0.73 |
+| **NIDRA (forecasts the future)** | 🟢 **0.93** | 0.69 |
 | Theoretical perfect-hindsight ceiling | 0.90 | 0.76 |
 
 NIDRA wins the left column and loses the right one — the green marks say
@@ -71,15 +71,16 @@ which, rather than implying it wins both. Only NIDRA produces a forecast
 with lead time, so the right column is a ranking-quality loss, not a
 head-to-head loss at the job NIDRA does.
 
-- **Precision: 1.00 on both days.** When NIDRA raises a strict-confidence
-  alarm, it is never wrong — zero false alarms across thousands of test
-  windows.
+- **Precision 0.95 on the test day at 0.74 recall.** An earlier version of
+  this page advertised precision 1.00 — true, but at ~1% recall, which meant
+  it almost never raised the alarm at all. Fixing how the system summarizes
+  its imagined futures traded a little of that precision for catching most of
+  the attacks: F1 went from 0.01 to 0.84.
 - **Speed:** ~137ms per forecast on an ordinary CPU — comfortably fast
   enough to run live.
-- **Early warning:** when it does flag an attack, it gives real advance
-  notice — minutes to hours before the attack fully plays out, not an
-  after-the-fact alert.
-- **Reliability:** 212 automated tests, all passing, covering the full
+- **Early warning:** 9 of 10 test attack episodes flagged before they
+  unfolded, a median of about 8.8 hours ahead (previously 0 of 10).
+- **Reliability:** 221 automated tests, all passing, covering the full
   pipeline end to end.
 
 ## The science actually worked

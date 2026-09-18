@@ -2,33 +2,42 @@
   "split": "holdout",
   "seed": 0,
   "raw": {
-    "median_lead_time_s": null,
-    "lead_time_distribution_s": [],
+    "median_lead_time_s": 15720.0,
+    "lead_time_distribution_s": [
+      27690.0,
+      3750.0
+    ],
     "n_episodes": 2,
-    "n_no_warning": 2,
-    "fraction_no_warning": 1.0
+    "n_no_warning": 0,
+    "fraction_no_warning": 0.0
   },
   "calibrated": {
-    "median_lead_time_s": 18660.0,
+    "median_lead_time_s": 14535.0,
     "lead_time_distribution_s": [
-      18660.0
+      25320.0,
+      3750.0
+    ],
+    "n_episodes": 2,
+    "n_no_warning": 0,
+    "fraction_no_warning": 0.0
+  },
+  "ensemble": {
+    "median_lead_time_s": 14505.0,
+    "lead_time_distribution_s": [
+      25260.0,
+      3750.0
+    ],
+    "n_episodes": 2,
+    "n_no_warning": 0,
+    "fraction_no_warning": 0.0
+  },
+  "ensemble_calibrated": {
+    "median_lead_time_s": 1620.0,
+    "lead_time_distribution_s": [
+      1620.0
     ],
     "n_episodes": 2,
     "n_no_warning": 1,
     "fraction_no_warning": 0.5
-  },
-  "ensemble": {
-    "median_lead_time_s": null,
-    "lead_time_distribution_s": [],
-    "n_episodes": 2,
-    "n_no_warning": 2,
-    "fraction_no_warning": 1.0
-  },
-  "ensemble_calibrated": {
-    "median_lead_time_s": null,
-    "lead_time_distribution_s": [],
-    "n_episodes": 2,
-    "n_no_warning": 2,
-    "fraction_no_warning": 1.0
   }
 }

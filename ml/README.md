@@ -280,7 +280,7 @@ over target, cut samples toward 100 before cutting ensemble size.
 ```bash
 cd ml
 pip install -e .
-pytest tests/ -q                                    # 212 tests, synthetic fixtures, seconds
+pytest tests/ -q                                    # 221 tests, synthetic fixtures, seconds
 
 # MVP scale, full 5-seed ensemble (what REAL_DATA_RESULTS.md §Run 2 reports):
 for seed in 0 1 2 3 4; do
