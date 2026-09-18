@@ -54,9 +54,10 @@ what makes it possible.
 ### What these numbers were produced on
 
 Every result above was trained and measured on a **MacBook Air (Apple M1,
-8 cores, 16 GB RAM)** — no GPU, no cluster, no cloud. That single fact sets
-the ceiling on several of the numbers, and it is worth being explicit about
-which ones:
+8 cores, 16 GB RAM)** — no GPU, no cluster, no cloud — on Python 3.14.7 with
+PyTorch 2.14 (CPU), the exact versions recorded in `ml/requirements.txt`.
+That single hardware fact sets the ceiling on several of the numbers, and it
+is worth being explicit about which ones:
 
 - **Training set capped at 500,000 windows of a ~6.9M-window candidate
   pool.** Materializing the full pool as float32 tensors needs roughly
