@@ -1,7 +1,15 @@
-# artifacts / large data — never commit weights, raw datasets, or processed parquet
-artifacts/weights/*.pt
-artifacts/scaler/*.joblib
-artifacts/scaler/*.npy
+# artifacts / large data.
+#
+# EXCEPTION: artifacts/ holds the SHIPPED production model and is committed
+# deliberately, so the repo can be cloned and served without retraining —
+# 5 ensemble checkpoints (~5.7MB) plus the fitted scaler and SHAP background
+# (~44KB). Inference needs the exact scaler the model was trained against, so
+# the weights alone would not be usable.
+#
+# Still ignored: artifacts/processed/ (28MB of derived windowed parquet,
+# rebuildable from the raw dataset in one command) and every experiment tree
+# below (rejected variants; their metadata is committed for provenance, the
+# weights are not needed to run anything).
 artifacts/processed/
 artifacts_mvp_2017/weights/*.pt
 artifacts_mvp_2017/scaler/*.joblib
