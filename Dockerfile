@@ -31,7 +31,7 @@ RUN pip install --upgrade pip \
 
 COPY config/ ./config/
 COPY nidra_common/ ./nidra_common/
-COPY nidra/ ./nidra/
+COPY ml/nidra/ ./ml/nidra/
 COPY api/ ./api/
 COPY services/ ./services/
 COPY scripts/ ./scripts/

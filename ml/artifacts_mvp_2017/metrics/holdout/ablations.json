@@ -1,0 +1,68 @@
+{
+  "split": "holdout",
+  "seed": 0,
+  "ablations": {
+    "persistence": {
+      "auc_pr_persistence": 0.7102600911764946,
+      "auc_pr_world_model": 0.7225180024138206,
+      "auc_collapse": 0.012257911237326002,
+      "nrmse_persistence_mean": 2.880983742612431,
+      "nrmse_world_model_mean": 3.181369297994639,
+      "interpretation": "NO MEANINGFUL GAP over persistence \u2014 dynamics may not be adding value; this is a reportable negative result, not a bug to hide"
+    },
+    "time_shuffle": {
+      "auc_pr_normal_order": 0.7315477977235358,
+      "auc_pr_shuffled_order": 0.663300636169189,
+      "collapse": 0.06824716155434685,
+      "interpretation": "temporal order matters (collapse observed)"
+    },
+    "horizon_curve": {
+      "auc_pr_by_k": [
+        0.31013475921775296,
+        0.2790469914454349,
+        0.3895584420794844,
+        0.15367156546001778,
+        0.4568761959771233,
+        0.12905573991468192
+      ],
+      "nrmse_by_k": [
+        3.7253102513745873,
+        2.381461003517994,
+        3.8031822253057643,
+        2.664700239792489,
+        3.919557134802029,
+        3.1202571617062005
+      ],
+      "flat_curve_leakage_warning": false
+    },
+    "surprise_signal": {
+      "mean_error_benign": 0.24102963294911028,
+      "mean_error_pre_attack": 5.3450559912319235,
+      "n_benign": 1726,
+      "n_pre_attack": 274,
+      "error_rises_before_onset": true
+    },
+    "nrmse_normalization": {
+      "method": "train_population_reference_std",
+      "scale_floor": 0.05,
+      "low_variance_features_floored": [
+        "syn_ratio",
+        "ack_ratio",
+        "rst_ratio",
+        "fin_ratio",
+        "psh_ratio",
+        "urg_ratio",
+        "tcp_window_entropy",
+        "frag_flag_rate",
+        "payload_size_entropy",
+        "retrans_count",
+        "retrans_rate",
+        "local_clustering_coeff",
+        "d_syn_ratio",
+        "d_retrans_rate",
+        "slope3_syn_ratio",
+        "slope3_dst_port_entropy"
+      ]
+    }
+  }
+}

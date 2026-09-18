@@ -1,0 +1,40 @@
+# Artifacts / large data.
+#
+# EXCEPTION: artifacts/ holds everything needed to CLONE AND RUN this repo
+# without the ~50GB raw CIC-IDS2017 release, which is not redistributable
+# here and which judges/reviewers are not expected to download:
+#
+#   artifacts/weights/*.pt      5 ensemble checkpoints (~5.7MB)
+#   artifacts/scaler/*          fitted RobustScaler + SHAP background (~44KB)
+#   artifacts/processed/*.parquet  windowed, labelled per-day tables (~28MB)
+#   artifacts/metrics/**        the published evaluation numbers
+#   artifacts/metadata/**       dataset/model/experiment provenance
+#
+# Inference needs the exact scaler the model was trained against, so the
+# weights alone would not be usable; evaluation needs the windowed tables,
+# which are derived from the raw release and cannot be rebuilt without it.
+# nidra/train/pipeline.py resolves each day from its cached table first and
+# only falls back to the raw CSV on a miss, so a clone with these files
+# needs no dataset download. Total committed artifact weight is ~34MB.
+#
+# Still ignored: the experiment trees for rejected variants below (their
+# metadata is committed for provenance; the weights run nothing).
+artifacts_mvp_2017/weights/*.pt
+artifacts_mvp_2017/scaler/*.joblib
+artifacts_mvp_2017/scaler/*.npy
+artifacts_mvp_2017/processed/
+artifacts_logvar15/weights/*.pt
+artifacts_diverse/
+
+# Windowed parquet is ignored by default (it is derived data and can be
+# large) EXCEPT the production tables above, which ship with the repo.
+*.parquet
+!artifacts/processed/*.parquet
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+.DS_Store

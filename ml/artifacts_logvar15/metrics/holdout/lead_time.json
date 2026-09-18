@@ -1,0 +1,11 @@
+{
+  "split": "holdout",
+  "seed": 0,
+  "raw": {
+    "median_lead_time_s": null,
+    "lead_time_distribution_s": [],
+    "n_episodes": 2,
+    "n_no_warning": 2,
+    "fraction_no_warning": 1.0
+  }
+}

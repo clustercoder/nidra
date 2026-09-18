@@ -1,0 +1,90 @@
+{
+  "split": "holdout",
+  "seed": 0,
+  "baselines": {
+    "lr_current_state": {
+      "f1": 0.7796610169491526,
+      "precision": 0.8054474708171206,
+      "recall": 0.7554744525547445,
+      "auc_pr": 0.7171062266813079,
+      "fpr": 0.028968713789107765,
+      "tp": 207,
+      "fp": 50,
+      "tn": 1676,
+      "fn": 67
+    },
+    "lr_flattened_history": {
+      "f1": 0.9214659685863874,
+      "precision": 0.882943143812709,
+      "recall": 0.9635036496350365,
+      "auc_pr": 0.9395834359770953,
+      "fpr": 0.020278099652375436,
+      "tp": 264,
+      "fp": 35,
+      "tn": 1691,
+      "fn": 10
+    },
+    "persistence": {
+      "f1": 0.7130801687763713,
+      "precision": 0.845,
+      "recall": 0.6167883211678832,
+      "auc_pr": 0.7102600911764946,
+      "fpr": 0.017960602549246814,
+      "tp": 169,
+      "fp": 31,
+      "tn": 1695,
+      "fn": 105
+    },
+    "world_model": {
+      "f1": 0.7027972027972028,
+      "precision": 0.674496644295302,
+      "recall": 0.7335766423357665,
+      "auc_pr": 0.6780385745233126,
+      "fpr": 0.05619930475086906,
+      "tp": 201,
+      "fp": 97,
+      "tn": 1629,
+      "fn": 73
+    },
+    "oracle": {
+      "f1": 0.7851851851851852,
+      "precision": 0.6608478802992519,
+      "recall": 0.9671532846715328,
+      "auc_pr": 0.9384473407890402,
+      "fpr": 0.07879490150637311,
+      "tp": 265,
+      "fp": 136,
+      "tn": 1590,
+      "fn": 9
+    },
+    "world_model_calibrated": {
+      "f1": 0.7021276595744681,
+      "precision": 0.6827586206896552,
+      "recall": 0.7226277372262774,
+      "auc_pr": 0.6733720528958426,
+      "fpr": 0.05330243337195829,
+      "tp": 198,
+      "fp": 92,
+      "tn": 1634,
+      "fn": 76
+    },
+    "calibration_fit_metadata": {
+      "fit_split": "val",
+      "n_val_samples": 4000,
+      "n_ensemble_members": 5,
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "n_samples_per_member": 100,
+      "fitted_at": "2026-09-11T10:37:57Z",
+      "method": "platt_scaling_per_horizon",
+      "note": "Fit on the validation split only, using the same pooled-ensemble rollout statistic (`ensemble_world_model_forecast`) that NidraPredictor serves at inference time. Does not retrain or modify the frozen risk head in any way \u2014 see eval/calibrate.py.",
+      "applied_to_single_seed_approximation": true,
+      "applied_to_seed": 0
+    }
+  }
+}
