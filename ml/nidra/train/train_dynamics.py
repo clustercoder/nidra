@@ -31,6 +31,20 @@ from nidra.utils.seed import set_seed
 logger = logging.getLogger(__name__)
 
 
+def resolve_sample_caps(cfg: dict, max_train_samples: int | None,
+                         max_val_samples: int | None) -> tuple[int | None, int | None]:
+    """CLI caps win; otherwise fall back to the config's `training_data`
+    caps. Without a config fallback, the documented full-scale command
+    (`--config config/default.yaml`, no flags) windowed the whole ~6.9M-window
+    train split uncapped and was OOM-killed before the first epoch, while the
+    published Run 3 checkpoints record 500000/50000 — i.e. the documented
+    command could not produce the documented numbers."""
+    training_data = cfg.get("training_data", {})
+    resolved_train = max_train_samples if max_train_samples is not None else training_data.get("max_train_samples")
+    resolved_val = max_val_samples if max_val_samples is not None else training_data.get("max_val_samples")
+    return resolved_train, resolved_val
+
+
 def prepare_training_data(cfg: dict, max_train_samples: int | None, max_val_samples: int | None, subsample_seed: int = 0):
     """Builds splits, windowed arrays, and the fitted scaler ONCE. Reused
     across every ensemble seed — the scaler in particular must be fit
@@ -38,7 +52,9 @@ def prepare_training_data(cfg: dict, max_train_samples: int | None, max_val_samp
     scaler_dir = resolve_path(cfg, cfg["artifacts"]["scaler_dir"])
     scaler_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info("building splits from raw data")
+    max_train_samples, max_val_samples = resolve_sample_caps(cfg, max_train_samples, max_val_samples)
+    logger.info("building splits from raw data (max_train_samples=%s, max_val_samples=%s)",
+                max_train_samples, max_val_samples)
     splits = build_all_splits(cfg)
     # Windowize train/val only (test/holdout are never used by this
     # function) and cap DURING construction, not after — building the full
