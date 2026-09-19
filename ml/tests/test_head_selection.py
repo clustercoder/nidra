@@ -52,7 +52,7 @@ def head_ready_artifacts(tmp_path):
     splits = SplitResult(train=train, val=val, test=_day(100), holdout=pd.DataFrame())
     windowed = build_windowed_splits(splits)
     scaler = fit_scaler(windowed["train"])
-    scaler.save(tmp_path / "scaler" / "robust_scaler.joblib",
+    scaler.save(tmp_path / "scaler" / "feature_scaler.json",
                 tmp_path / "scaler" / "scaler_metadata.json")
     train_one_seed(cfg, seed=0, epochs_override=1, windowed=windowed, scaler=scaler, device="cpu")
     return cfg, tmp_path, windowed, scaler

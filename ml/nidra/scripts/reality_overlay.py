@@ -60,7 +60,7 @@ def run(cfg: dict, weights_dir: str, scaler_dir: str, split: str, seed: int) -> 
     # (cfg["ensemble"]["seeds"]), pooling their trajectories — this demo
     # should show the real ensemble forecast, not a single seed. `seed` is
     # used only below, to pick which sample to overlay deterministically.
-    predictor = NidraPredictor(weights_dir=weights_dir, scaler_path=Path(scaler_dir) / "robust_scaler.joblib",
+    predictor = NidraPredictor(weights_dir=weights_dir, scaler_path=Path(scaler_dir) / "feature_scaler.json",
                                 config_path=cfg.get("_config_path"))
 
     splits = build_all_splits(cfg)
@@ -87,7 +87,7 @@ def run(cfg: dict, weights_dir: str, scaler_dir: str, split: str, seed: int) -> 
     # blended raw RMSE would be dominated by whichever of those happens to
     # be large in this window, exactly the scaled-vs-raw-units pitfall
     # flagged in the project's own metric-auditing guidance.
-    scaler = FeatureScaler.load(Path(scaler_dir) / "robust_scaler.joblib", Path(scaler_dir) / "scaler_metadata.json")
+    scaler = FeatureScaler.load(Path(scaler_dir) / "feature_scaler.json", Path(scaler_dir) / "scaler_metadata.json")
     Y_true_scaled = scaler.transform(Y_true)
     per_horizon_error = []
     for k, h in enumerate(forecast["horizons"]):

@@ -179,7 +179,7 @@ def main() -> None:
 
     predictor = NidraPredictor(
         weights_dir=resolve_path(cfg, artifacts["weights_dir"]),
-        scaler_path=resolve_path(cfg, artifacts["scaler_dir"]) / "robust_scaler.joblib",
+        scaler_path=resolve_path(cfg, artifacts["scaler_dir"]) / "feature_scaler.json",
         config_path=args.config,
     )
     forecast = predictor.forecast(window.states, host_id=window.host_id, origin_ts=window.origin_ts)

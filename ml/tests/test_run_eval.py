@@ -49,7 +49,7 @@ def eval_ready_artifacts(tmp_path, monkeypatch):
     splits = _synthetic_split_with_test()
     windowed = build_windowed_splits(splits)
     scaler = fit_scaler(windowed["train"])
-    scaler.save(scaler_dir / "robust_scaler.joblib", scaler_dir / "scaler_metadata.json")
+    scaler.save(scaler_dir / "feature_scaler.json", scaler_dir / "scaler_metadata.json")
 
     benign_mask = windowed["train"].stage_label == "benign"
     background = build_shap_background(scaler.transform(windowed["train"].X[benign_mask, -1, :]), n_centroids=10)
@@ -97,7 +97,7 @@ def eval_ready_artifacts_two_seeds(tmp_path, monkeypatch):
     splits = _synthetic_split_with_test()
     windowed = build_windowed_splits(splits)
     scaler = fit_scaler(windowed["train"])
-    scaler.save(scaler_dir / "robust_scaler.joblib", scaler_dir / "scaler_metadata.json")
+    scaler.save(scaler_dir / "feature_scaler.json", scaler_dir / "scaler_metadata.json")
 
     benign_mask = windowed["train"].stage_label == "benign"
     background = build_shap_background(scaler.transform(windowed["train"].X[benign_mask, -1, :]), n_centroids=10)

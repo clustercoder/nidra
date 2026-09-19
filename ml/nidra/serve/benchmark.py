@@ -5,7 +5,7 @@ toward 100 before touching the ensemble size — see CLAUDE.md §25.
 
 Usage:
     python -m nidra.serve.benchmark --weights-dir artifacts/weights \\
-        --scaler-path artifacts/scaler/robust_scaler.joblib --config config/default.yaml
+        --scaler-path artifacts/scaler/feature_scaler.json --config config/default.yaml
 """
 
 from __future__ import annotations

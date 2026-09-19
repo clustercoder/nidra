@@ -205,16 +205,18 @@ class WorldModelDataset(Dataset):
     """Thin tensor wrapper. Expects X/Y already scaled (see normalize.py) —
     scaling happens once over the whole split, not per __getitem__."""
 
-    def __init__(self, arrays: WindowedArrays, X_scaled: np.ndarray | None = None, Y_scaled: np.ndarray | None = None):
+    def __init__(self, arrays: WindowedArrays, X_scaled: np.ndarray | None = None, Y_scaled: np.ndarray | None = None,
+                 sample_weight: np.ndarray | None = None):
         self.arrays = arrays
         self.X = X_scaled if X_scaled is not None else arrays.X
         self.Y = Y_scaled if Y_scaled is not None else arrays.Y
+        self.sample_weight = sample_weight
 
     def __len__(self) -> int:
         return len(self.X)
 
     def __getitem__(self, idx: int) -> dict:
-        return {
+        item = {
             "x": torch.from_numpy(self.X[idx]).float(),
             "y": torch.from_numpy(self.Y[idx]).float(),
             "risk_label": torch.tensor(self.arrays.risk_label[idx], dtype=torch.float32),
@@ -223,3 +225,6 @@ class WorldModelDataset(Dataset):
             "origin_ts": int(self.arrays.origin_ts[idx]),
             "episode_id": int(self.arrays.episode_id[idx]),
         }
+        if self.sample_weight is not None:
+            item["sample_weight"] = torch.tensor(float(self.sample_weight[idx]), dtype=torch.float32)
+        return item

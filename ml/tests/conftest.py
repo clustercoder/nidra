@@ -75,7 +75,7 @@ def trained_predictor(tmp_path_factory):
     splits = synthetic_split_result()
     windowed = build_windowed_splits(splits)
     scaler = fit_scaler(windowed["train"])
-    scaler.save(scaler_dir / "robust_scaler.joblib", scaler_dir / "scaler_metadata.json")
+    scaler.save(scaler_dir / "feature_scaler.json", scaler_dir / "scaler_metadata.json")
 
     benign_mask = windowed["train"].stage_label == "benign"
     benign_last_states = scaler.transform(windowed["train"].X[benign_mask, -1, :])
@@ -90,7 +90,7 @@ def trained_predictor(tmp_path_factory):
 
     predictor = NidraPredictor(
         weights_dir=tmp_path / "weights",
-        scaler_path=tmp_path / "scaler" / "robust_scaler.joblib",
+        scaler_path=tmp_path / "scaler" / "feature_scaler.json",
         config_path=config_path,
         seeds=[0],
     )
