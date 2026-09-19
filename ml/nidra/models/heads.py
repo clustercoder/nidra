@@ -50,3 +50,39 @@ class StageHead(nn.Module):
     def forward(self, state: torch.Tensor) -> torch.Tensor:
         """state: [..., F]. Returns raw logits [..., n_stages]."""
         return self.net(state)
+
+
+class OnsetHead(nn.Module):
+    """F -> hidden -> H logits: P(an attack episode BEGINS within h_j minutes
+    | state), one output per horizon in `horizons_min`. Trained on observed
+    states at origins OUTSIDE any episode (data/onset.py), then frozen —
+    the same discipline as the risk head. Stored as its own artifact
+    (`onset_head_seed_<s>.pt`) so the WorldModel checkpoint format is
+    unchanged."""
+
+    def __init__(self, n_features: int = 45, hidden: int = 64, horizons_min: tuple[int, ...] = (1, 3, 5, 10, 15, 30)):
+        super().__init__()
+        self.horizons_min = tuple(int(h) for h in horizons_min)
+        self.net = nn.Sequential(
+            nn.Linear(n_features, hidden),
+            nn.ReLU(),
+            nn.Linear(hidden, len(self.horizons_min)),
+        )
+
+    def forward(self, state: torch.Tensor) -> torch.Tensor:
+        """state: [..., F]. Returns raw logits [..., H]."""
+        return self.net(state)
+
+    def save(self, path) -> None:
+        torch.save({"state_dict": self.state_dict(), "n_features": self.net[0].in_features,
+                    "hidden": self.net[0].out_features, "horizons_min": self.horizons_min}, path)
+
+    @classmethod
+    def load(cls, path, map_location: str = "cpu") -> "OnsetHead":
+        ckpt = torch.load(path, map_location=map_location)
+        head = cls(ckpt["n_features"], ckpt["hidden"], tuple(ckpt["horizons_min"]))
+        head.load_state_dict(ckpt["state_dict"])
+        head.eval()
+        for p in head.parameters():
+            p.requires_grad_(False)
+        return head

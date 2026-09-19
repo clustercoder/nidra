@@ -34,12 +34,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from nidra.data.audit import merge_episodes
 from nidra.data.dataset import CandidateTable, WindowedArrays, enumerate_candidates, materialize
+from nidra.data.onset import DEFAULT_ONSET_HORIZONS_MIN, episode_geometry, onset_targets
 
 STRATA = ("positive", "pre_onset", "active_negative", "silent_negative")
 DEFAULT_CAPS = {"positive": None, "pre_onset": None, "active_negative": 6000, "silent_negative": 2000}
-DEFAULT_ONSET_HORIZONS_MIN = (1, 3, 5, 10, 15, 30)
 
 
 @dataclass
@@ -92,38 +91,6 @@ class EvalSet:
         }
 
 
-def _episode_geometry(table: pd.DataFrame, candidates: CandidateTable, window_seconds: int,
-                      merge_gap_windows: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Per candidate: inside a merged episode?, minutes to the next onset on
-    the host (inf if none), and the key of the episode it is inside of / the
-    next episode it precedes ("" if neither)."""
-    episodes = merge_episodes(table, window_seconds, merge_gap_windows)
-    n = len(candidates)
-    inside = np.zeros(n, dtype=bool)
-    to_onset = np.full(n, np.inf)
-    key = np.full(n, "", dtype=object)
-    if episodes.empty:
-        return inside, to_onset, key
-    ts = candidates.origin_ts
-    hosts = candidates.host
-    for host, g in episodes.groupby("host_id"):
-        m = hosts == host
-        if not m.any():
-            continue
-        idx = np.where(m)[0]
-        t = ts[idx]
-        for start, end in zip(g["start_ts"].to_numpy(), g["end_ts"].to_numpy()):
-            ek = f"{host}@{int(start)}"
-            in_ep = (t >= start) & (t <= end)
-            inside[idx[in_ep]] = True
-            key[idx[in_ep]] = ek
-            d = (start - t) / 60.0
-            before = (d > 0) & (d < to_onset[idx])
-            to_onset[idx[before]] = d[before]
-            key[idx[before & ~in_ep]] = ek
-    return inside, to_onset, key
-
-
 def build_eval_set(
     table: pd.DataFrame,
     L: int,
@@ -139,7 +106,7 @@ def build_eval_set(
     caps = {**DEFAULT_CAPS, **(caps or {})}
     df = table.sort_values(["host_id", "window_ts"]).reset_index(drop=True)
     cands = enumerate_candidates(df, L, K)
-    inside, to_onset, ep_key = _episode_geometry(df, cands, window_seconds, merge_gap_windows)
+    inside, to_onset, ep_key = episode_geometry(df, cands.host, cands.origin_ts, window_seconds, merge_gap_windows)
 
     stratum = np.full(len(cands), "silent_negative", dtype=object)
     pos = cands.risk_label == 1
@@ -171,9 +138,8 @@ def build_eval_set(
     key_sel = ep_key[select_all]
     cluster = np.where(key_sel != "", key_sel, cands.host[select_all]).astype(object)
 
-    onset_labels = {}
-    for h in onset_horizons_min:
-        onset_labels[h] = ((~inside_sel) & (to_onset_sel <= h)).astype(int)
+    onset_matrix = onset_targets(inside_sel, to_onset_sel, tuple(onset_horizons_min))
+    onset_labels = {h: onset_matrix[:, j] for j, h in enumerate(onset_horizons_min)}
 
     ts_all = df["window_ts"].to_numpy()
     span_hours = float((ts_all.max() - ts_all.min()) / 3600.0) if len(ts_all) else 0.0

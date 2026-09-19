@@ -16,6 +16,13 @@ import torch
 from torch.utils.data import Dataset
 
 from nidra.data.schema import CONTEXT_LENGTH, FEATURE_INDEX, FEATURE_ORDER, HORIZON_LENGTH, STAGE_INDEX
+from nidra.data.onset import (
+    DEFAULT_MERGE_GAP_WINDOWS,
+    DEFAULT_ONSET_HORIZONS_MIN,
+    episode_geometry,
+    infer_window_seconds,
+    onset_targets,
+)
 from nidra.data.splits import find_episodes
 
 
@@ -30,6 +37,16 @@ class WindowedArrays:
     risk_label: np.ndarray     # [N] int — forward-looking risk target (any attack in (t,t+K])
     future_stage_idx: np.ndarray = None    # [N, K] int — ground truth stage index at each t+k, for horizon curves
     future_is_attack: np.ndarray = None    # [N, K] int — 1 if t+k itself is a non-benign window
+    sample_weight: np.ndarray = None       # [N] float — natural-prevalence weight when the set was capped (1.0 otherwise)
+    inside_episode: np.ndarray = None      # [N] bool — origin t lies inside a merged attack episode
+    minutes_to_onset: np.ndarray = None    # [N] float — minutes from t to the host's next episode start (inf if none)
+
+    def onset_targets(self, horizons_min: tuple[int, ...] = DEFAULT_ONSET_HORIZONS_MIN) -> np.ndarray:
+        """[N, H] onset-within-h targets; rows inside an episode are 0 and
+        must be masked with `~inside_episode` (see data/onset.py)."""
+        if self.inside_episode is None or self.minutes_to_onset is None:
+            raise ValueError("arrays were built without onset geometry")
+        return onset_targets(self.inside_episode, self.minutes_to_onset, horizons_min)
 
 
 def _episode_lookup(df: pd.DataFrame) -> dict:
@@ -191,6 +208,7 @@ def build_windowed_arrays(
         return _empty_arrays(L, K)
 
     select = np.arange(len(candidates))
+    weight = np.ones(len(candidates), dtype="float64")
     if max_samples is not None and len(candidates) > max_samples:
         risk_arr = candidates.risk_label
         rng = np.random.default_rng(seed)
@@ -198,14 +216,24 @@ def build_windowed_arrays(
         neg_idx = np.where(risk_arr == 0)[0]
         if len(pos_idx) >= max_samples:
             keep = rng.choice(pos_idx, size=max_samples, replace=False)
+            weight[keep] = len(pos_idx) / len(keep)
         else:
             n_neg = max_samples - len(pos_idx)
             neg_sample = rng.choice(neg_idx, size=min(n_neg, len(neg_idx)), replace=False)
             keep = np.concatenate([pos_idx, neg_sample])
+            # each sampled negative stands for this many negatives of the full split
+            weight[neg_sample] = len(neg_idx) / max(len(neg_sample), 1)
         rng.shuffle(keep)
         select = keep
 
-    return materialize(candidates, select, L, K, episode_lookup)
+    arrays = materialize(candidates, select, L, K, episode_lookup)
+    arrays.sample_weight = weight[select]
+    if len(candidates):
+        inside, to_onset, _ = episode_geometry(df, candidates.host[select], candidates.origin_ts[select],
+                                               infer_window_seconds(df), DEFAULT_MERGE_GAP_WINDOWS)
+        arrays.inside_episode = inside
+        arrays.minutes_to_onset = to_onset
+    return arrays
 
 
 def subsample_stratified_by_risk(arrays: WindowedArrays, max_n: int | None, seed: int = 0) -> WindowedArrays:
@@ -237,6 +265,9 @@ def subsample_stratified_by_risk(arrays: WindowedArrays, max_n: int | None, seed
         stage_label=arrays.stage_label[idx], risk_label=arrays.risk_label[idx],
         future_stage_idx=arrays.future_stage_idx[idx] if arrays.future_stage_idx is not None else None,
         future_is_attack=arrays.future_is_attack[idx] if arrays.future_is_attack is not None else None,
+        sample_weight=arrays.sample_weight[idx] if arrays.sample_weight is not None else None,
+        inside_episode=arrays.inside_episode[idx] if arrays.inside_episode is not None else None,
+        minutes_to_onset=arrays.minutes_to_onset[idx] if arrays.minutes_to_onset is not None else None,
     )
 
 

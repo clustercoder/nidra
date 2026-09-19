@@ -20,6 +20,7 @@ import argparse
 import copy
 import json
 import logging
+import shutil
 import time
 from pathlib import Path
 from typing import Any
@@ -75,17 +76,41 @@ def derive_run_config(base_path: str | None, label: str, overrides: list[str], r
     return cfg_path
 
 
+def copy_run_artifacts(src_run: Path, weights_dir: Path, scaler_dir: Path, seeds: list[int]) -> None:
+    """Seed a run directory with another run's dynamics checkpoints and scaler
+    so a heads-only stage compares recipes on identical stage-1 weights."""
+    src_weights = src_run / "artifacts" / "weights"
+    src_scaler = src_run / "artifacts" / "scaler"
+    if not src_weights.is_dir() or not src_scaler.is_dir():
+        raise FileNotFoundError(f"--init-from {src_run.name}: expected {src_weights} and {src_scaler}")
+    weights_dir.mkdir(parents=True, exist_ok=True)
+    scaler_dir.mkdir(parents=True, exist_ok=True)
+    for seed in seeds:
+        for name in (f"model_seed_{seed}.pt", f"model_seed_{seed}_metadata.json"):
+            if not (src_weights / name).exists():
+                raise FileNotFoundError(f"--init-from {src_run.name}: missing {src_weights / name}")
+            shutil.copy2(src_weights / name, weights_dir / name)
+    for item in src_scaler.iterdir():
+        if item.is_file():
+            shutil.copy2(item, scaler_dir / item.name)
+    logger.info("initialised weights/scaler from %s", src_run)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-config", default=None)
     parser.add_argument("--label", required=True)
     parser.add_argument("--set", dest="overrides", action="append", default=[])
     parser.add_argument("--seeds", default="0", help="comma-separated")
-    parser.add_argument("--stages", default="dynamics,heads")
+    parser.add_argument("--stages", default="dynamics,heads,onset",
+                        help="comma-separated subset of dynamics,heads,onset,gru_baseline")
     parser.add_argument("--epochs", type=int, default=None, help="dynamics epochs override")
     parser.add_argument("--max-train-samples", type=int, default=None)
     parser.add_argument("--max-val-samples", type=int, default=None)
     parser.add_argument("--threads", type=int, default=6)
+    parser.add_argument("--init-from", default=None, metavar="LABEL",
+                        help="copy weights + scaler from experiments/runs/LABEL before running (heads-only "
+                             "recipe comparisons on one dynamics checkpoint)")
     parser.add_argument("--note", default="")
     args = parser.parse_args()
 
@@ -96,6 +121,9 @@ def main() -> None:
     cfg_path = derive_run_config(args.base_config, args.label, args.overrides, run_dir if args.label != "production" else RUNS_DIR / "production")
     cfg = load_config(cfg_path)
     seeds = [int(s) for s in args.seeds.split(",")]
+    if args.init_from:
+        copy_run_artifacts(RUNS_DIR / args.init_from, Path(cfg["artifacts"]["weights_dir"]),
+                           Path(cfg["artifacts"]["scaler_dir"]), seeds)
     stages = [s.strip() for s in args.stages.split(",") if s.strip()]
     t0 = time.time()
     logger.info("experiment %s: config %s (hash %s) seeds %s stages %s", args.label, cfg_path, cfg["_config_hash"], seeds, stages)
@@ -122,6 +150,13 @@ def main() -> None:
             seed_result["heads"] = {k: v for k, v in hmeta.items() if k not in ("history", "heads_history")}
             seed_result["heads_history"] = hmeta.get("heads_history")
             logger.info("seed %d heads done at %.0fs", seed, time.time() - t0)
+        if "onset" in stages:
+            from nidra.train.train_onset import train_onset_head_for_seed
+            ometa = train_onset_head_for_seed(cfg, seed, windowed, scaler, "cpu")
+            seed_result["onset"] = {k: v for k, v in ometa.items() if k != "history"}
+            seed_result["onset_history"] = ometa.get("history")
+            logger.info("seed %d onset head done at %.0fs: best val AP by horizon %s", seed, time.time() - t0,
+                        ometa["best_val_ap_natural_by_horizon"])
         results["seeds"][str(seed)] = seed_result
 
     if "gru_baseline" in stages:
@@ -142,6 +177,7 @@ def main() -> None:
     record = experiment_record(
         cfg, stage="train", seeds=seeds, metrics=results,
         extra={"label": args.label, "note": args.note, "stages": stages, "epochs_override": args.epochs,
+               "init_from": args.init_from,
                "n_train_samples": int(len(windowed["train"].X)), "n_val_samples": int(len(windowed["val"].X)),
                "wall_seconds": time.time() - t0},
     )

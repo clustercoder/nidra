@@ -91,8 +91,63 @@ def test_unknown_selection_metric_raises():
         head_selection_score(1.0, 0.5, "vibes")
 
 
-def test_valid_metrics_are_the_documented_two():
-    assert set(VALID_SELECTION_METRICS) == {"val_auc_pr", "weighted_val_loss"}
+def test_valid_metrics_are_the_documented_three():
+    assert set(VALID_SELECTION_METRICS) == {"val_auc_pr", "val_auc_pr_natural", "weighted_val_loss"}
+
+
+def test_natural_metric_scores_like_auc_pr():
+    assert head_selection_score(1.0, 0.7, "val_auc_pr_natural") == pytest.approx(-0.7)
+    assert head_selection_score(1.0, float("nan"), "val_auc_pr_natural") == float("inf")
+
+
+def test_balanced_epoch_indices_repeats_positives_and_mixes_hard_negatives():
+    from nidra.train.train_heads import balanced_epoch_indices
+    rng = np.random.default_rng(0)
+    risk = np.zeros(1000, dtype=int)
+    risk[:5] = 1
+    active = np.zeros(1000, dtype=bool)
+    active[5:105] = True  # 100 active benign, 895 silent benign
+    idx = balanced_epoch_indices(risk, active, rng, pos_repeat=4, neg_ratio=3, hard_negative_fraction=0.5)
+    pos_count = int((risk[idx] == 1).sum())
+    neg_count = int((risk[idx] == 0).sum())
+    assert pos_count == 5 * 4
+    assert neg_count == 5 * 4 * 3
+    hard = int(active[idx][risk[idx] == 0].sum())
+    assert hard == neg_count // 2
+    # negatives outside the sampled set are untouched; the epoch is a permutation, not sorted
+    assert not np.all(np.diff(idx) >= 0)
+
+
+def test_balanced_epoch_indices_handles_no_active_negatives():
+    from nidra.train.train_heads import balanced_epoch_indices
+    rng = np.random.default_rng(0)
+    risk = np.zeros(50, dtype=int)
+    risk[:2] = 1
+    active = np.zeros(50, dtype=bool)
+    idx = balanced_epoch_indices(risk, active, rng, pos_repeat=2, neg_ratio=2, hard_negative_fraction=0.5)
+    assert int((risk[idx] == 1).sum()) == 4
+    assert int((risk[idx] == 0).sum()) == 8
+
+
+def test_unknown_sampling_is_rejected(head_ready_artifacts):
+    cfg, _, windowed, scaler = head_ready_artifacts
+    bad = {**cfg, "train_heads": {**cfg["train_heads"], "risk_sampling": "whatever"}}
+    with pytest.raises(ValueError, match="risk_sampling"):
+        train_heads_for_seed(bad, seed=0, windowed=windowed, scaler=scaler, device="cpu")
+
+
+def test_balanced_recipe_trains_and_records_recipe(head_ready_artifacts):
+    cfg, _, windowed, scaler = head_ready_artifacts
+    recipe = {**cfg["train_heads"], "risk_sampling": "balanced", "input_noise": 0.3, "pos_repeat": 3,
+              "neg_ratio": 4, "hard_negative_fraction": 0.5, "selection_metric": "val_auc_pr_natural"}
+    meta = train_heads_for_seed({**cfg, "train_heads": recipe}, seed=0, windowed=windowed, scaler=scaler, device="cpu")
+    assert meta["heads_recipe"]["risk_sampling"] == "balanced"
+    assert meta["heads_recipe"]["input_noise"] == pytest.approx(0.3)
+    assert meta["heads_pos_weight"] is None  # balanced sampling: no pos_weight in the loss
+    assert meta["heads_selection_metric"] == "val_auc_pr_natural"
+    assert meta["heads_best_epoch_risk"] >= 0
+    assert meta["heads_best_epoch_stage"] >= 0
+    assert np.isfinite(meta["heads_best_val_auc_pr_natural"]) or np.isnan(meta["heads_best_val_auc_pr_natural"])
 
 
 def _run_heads(cfg, tmp_path, windowed, scaler, metric):

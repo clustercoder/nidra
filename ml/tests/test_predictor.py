@@ -34,6 +34,13 @@ def test_forecast_output_contract(trained_predictor):
     assert "schema_ver" in result
     assert result["lead_time_s"] is None or result["lead_time_s"] >= 0
     assert len(result["top_signals"]) <= 5
+    # ATT&CK mapping travels with every horizon and as a progression summary
+    for h in result["horizons"]:
+        for cand in h["attack_mapping"]:
+            assert cand["stage"] != "benign"
+            assert cand["tactics"] and cand["candidate_techniques"] is not None
+    assert len(result["progression"]["steps"]) == HORIZON_LENGTH
+    assert result["progression"]["label"] == "projected stage sequence (model-internal)"
 
 
 def test_predicted_features_are_in_raw_units_not_scaled_space(trained_predictor):

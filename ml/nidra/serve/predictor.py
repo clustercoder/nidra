@@ -33,6 +33,7 @@ from nidra.data.schema import (
 from nidra.eval.calibrate import apply_platt_by_horizon, calibration_pooling_mismatch, load_calibration
 from nidra.explain.counterfactual import COUNTERFACTUAL_LABEL, compare_to_baseline
 from nidra.explain.saliency import temporal_saliency
+from nidra.data.attack_mapping import map_stage_distribution, progression_summary
 from nidra.explain.shap_runner import explain_current_risk, explain_predicted_stage, load_background, top_signals
 from nidra.models.risk_pooling import pool_ensemble_risk
 from nidra.models.world_model import WorldModel
@@ -336,10 +337,12 @@ class NidraPredictor:
                 "ci_low": float(rollout["risk_ci_low_k"][k]),
                 "ci_high": float(rollout["risk_ci_high_k"][k]),
                 "stage_dist": stage_dist,
+                "attack_mapping": map_stage_distribution(stage_dist),
                 "predicted_features": predicted_features,
             })
 
         lead_time_s = self._lead_time_from_curve(horizons, window_seconds)
+        progression = progression_summary([h["stage_dist"] for h in horizons], window_seconds)
 
         background = self._shap_background(scaled)
         attributions = explain_current_risk(scaled[-1], background, self.models[0], nsamples=100)
@@ -354,6 +357,7 @@ class NidraPredictor:
             "lead_time_s": lead_time_s,
             "observed_stage": observed_stage,
             "observed_risk": observed_risk,
+            "progression": progression,
             "top_signals": signals,
             "driving_window": saliency["driving_window"],
             "model_version": MODEL_VERSION,

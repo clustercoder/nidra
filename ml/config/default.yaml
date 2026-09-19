@@ -151,25 +151,39 @@ train_dynamics:
 # Stage-2 head training
 # ---------------------------------------------------------------------------
 train_heads:
-  # Which epoch's heads to keep. "val_auc_pr" selects on the risk head's
-  # validation AUC-PR; "weighted_val_loss" (the original) selects on risk BCE
-  # at pos_weight ~1741 plus stage CE with class weights up to ~83,000.
+  # Stage 2: frozen dynamics, heads trained on OBSERVED states only.
   #
-  # val_auc_pr was implemented, measured, and REJECTED — kept here as an
-  # option and documented because the negative result is informative. It does
-  # raise validation AUC-PR (0.52 -> 0.60-0.62 per seed), and it makes real
-  # performance WORSE: a controlled bisection holding head re-initialization
-  # fixed gave holdout F1 0.486 under val_auc_pr against 0.727 under
-  # weighted_val_loss at the shipped q=0.85 pooling (test AUC-PR 0.916 vs
-  # 0.930). The validation split is the trailing 15% time-block of the train
-  # days: 182 positives at a 0.364% positive rate against training's 0.057%.
-  # Selecting hard on a small, distribution-shifted split overfits it, and
-  # the weighted loss — being dominated by terms unrelated to risk ranking —
-  # acts as an accidental but effective regularizer on that choice.
+  # Which epoch's risk head to keep. "val_auc_pr_natural" selects on the risk
+  # head's validation AUC-PR reweighted to the split's natural prevalence
+  # (the benchmark's primary metric); "val_auc_pr" on the plain subsample
+  # AUC-PR; "weighted_val_loss" (the Δ=30 original) on risk BCE at
+  # pos_weight ~1741 plus stage CE with class weights up to ~83,000.
   #
-  # See REAL_DATA_RESULTS.md Run 6. Do not flip this without re-running the
-  # bisection; validation AUC-PR going up is NOT evidence it helps.
-  selection_metric: weighted_val_loss
+  # History, for the record: under the Δ=30 pipeline (validation = trailing
+  # 15% of the train days, ONE attack family, 182 positives) selecting on
+  # val_auc_pr overfit that split — holdout F1 0.486 vs 0.727 (REAL_DATA_RESULTS
+  # Run 6) — and the weighted loss survived as an accidental regularizer.
+  # The Δ=60 rebuild changed the premise: validation is now a 30% per-day
+  # block holding two families (SSH-Patator, Heartbleed — DECISIONS D105),
+  # and selection is on the natural-prevalence statistic the system is
+  # judged on. The stage head is selected independently on validation
+  # macro-F1. Any change here must be re-measured on the natural-prevalence
+  # benchmark (nidra.eval.benchmark), never on validation AUC-PR alone.
+  selection_metric: val_auc_pr_natural
+  # Risk-head sampling. "balanced": every positive is seen `pos_repeat`
+  # times per epoch against `neg_ratio` freshly drawn negatives per
+  # positive, `hard_negative_fraction` of them from ACTIVE benign windows
+  # (the rows a detector actually has to reject; silent windows are trivially
+  # negative). BCE without pos_weight. "imbalanced": the original — every
+  # sample once per epoch, BCE with pos_weight = n_neg / n_pos.
+  risk_sampling: balanced
+  pos_repeat: 20
+  neg_ratio: 10
+  hard_negative_fraction: 0.5
+  # Gaussian noise (in scaled feature space) added to S_t during head
+  # training only. The head must rank *predicted* states at inference, which
+  # carry rollout error the observed training states do not.
+  input_noise: 0.3
   optimizer: adamw
   lr: 1.0e-3
   weight_decay: 1.0e-4
@@ -177,6 +191,27 @@ train_heads:
   epochs: 30
   grad_clip: 1.0
   patience: 6
+
+# ---------------------------------------------------------------------------
+# Onset head (stage 2b): explicit future-target supervision
+# ---------------------------------------------------------------------------
+# P(an attack episode BEGINS within h minutes | S_t), one output per horizon,
+# defined only at origins outside any episode (data/onset.py). Trained on
+# observed states, frozen, saved as onset_head_seed_<s>.pt. Selected on
+# validation natural-prevalence AP at `selection_horizon_min`.
+onset:
+  horizons_min: [1, 3, 5, 10, 15, 30]
+  selection_horizon_min: 5
+  hidden: 64
+  epochs: 30
+  patience: 6
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  batch_size: 256
+  input_noise: 0.3
+  pos_repeat: 20
+  neg_ratio: 10
+  hard_negative_fraction: 0.5
 
 # ---------------------------------------------------------------------------
 # Ensemble
