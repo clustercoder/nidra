@@ -34,7 +34,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from nidra.data.dataset import CandidateTable, WindowedArrays, enumerate_candidates, materialize
+from nidra.data.dataset import WindowedArrays, enumerate_candidates, materialize
 from nidra.data.onset import DEFAULT_ONSET_HORIZONS_MIN, episode_geometry, onset_targets
 
 STRATA = ("positive", "pre_onset", "active_negative", "silent_negative")

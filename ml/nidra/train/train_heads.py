@@ -20,14 +20,12 @@ import time
 import numpy as np
 import torch
 from sklearn.metrics import average_precision_score
-from torch.utils.data import DataLoader
 
-from nidra.data.dataset import WorldModelDataset
 from nidra.data.normalize import FeatureScaler
 from nidra.data.schema import FEATURE_INDEX, STAGE_INDEX, STAGE_LABELS
 from nidra.models.world_model import RiskHead, StageHead, WorldModel
 from nidra.train.losses import risk_head_loss, stage_head_loss
-from nidra.train.pipeline import build_all_splits, build_windowed_splits, scale_arrays
+from nidra.train.pipeline import scale_arrays
 from nidra.utils.config import load_config, resolve_path
 from nidra.utils.seed import set_seed
 

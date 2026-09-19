@@ -22,12 +22,9 @@ import torch
 
 from nidra.data.normalize import FeatureScaler
 from nidra.data.schema import (
-    CONTEXT_LENGTH,
     FEATURE_ORDER,
-    HORIZON_LENGTH,
     SCHEMA_VERSION,
     STAGE_LABELS,
-    WINDOW_SECONDS,
     validate_state_array_width,
 )
 from nidra.eval.calibrate import apply_platt_by_horizon, calibration_pooling_mismatch, load_calibration
