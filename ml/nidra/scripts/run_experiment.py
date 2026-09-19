@@ -135,6 +135,16 @@ def main() -> None:
     logger.info("data ready in %.0fs: train %d (pos %d) val %d (pos %d); dropped features %s",
                 time.time() - t0, len(windowed["train"].X), int(windowed["train"].risk_label.sum()),
                 len(windowed["val"].X), int(windowed["val"].risk_label.sum()), scaler.dropped_features)
+    head_data = None
+    if "heads" in stages or "onset" in stages:
+        # Heads are functions of one state: train and select them on EVERY row
+        # of the split, not the dynamics' windowed subsample (train/head_data.py).
+        from nidra.train.head_data import build_head_arrays
+        from nidra.train.pipeline import build_all_splits
+        splits = build_all_splits(cfg)
+        head_data = {"train": build_head_arrays(splits.train, scaler), "val": build_head_arrays(splits.val, scaler)}
+        del splits
+        logger.info("head data: train %s val %s (%.0fs)", head_data["train"].summary(), head_data["val"].summary(), time.time() - t0)
 
     results: dict[str, Any] = {"seeds": {}}
     for seed in seeds:
@@ -146,13 +156,13 @@ def main() -> None:
             logger.info("seed %d dynamics done at %.0fs: best epoch %s, %s", seed, time.time() - t0,
                         meta["best_epoch"], json.dumps(meta["best_val_free_running"], default=float)[:300])
         if "heads" in stages:
-            hmeta = train_heads_for_seed(cfg, seed, windowed, scaler, "cpu")
+            hmeta = train_heads_for_seed(cfg, seed, windowed, scaler, "cpu", head_data=head_data)
             seed_result["heads"] = {k: v for k, v in hmeta.items() if k not in ("history", "heads_history")}
             seed_result["heads_history"] = hmeta.get("heads_history")
             logger.info("seed %d heads done at %.0fs", seed, time.time() - t0)
         if "onset" in stages:
             from nidra.train.train_onset import train_onset_head_for_seed
-            ometa = train_onset_head_for_seed(cfg, seed, windowed, scaler, "cpu")
+            ometa = train_onset_head_for_seed(cfg, seed, windowed, scaler, "cpu", head_data=head_data)
             seed_result["onset"] = {k: v for k, v in ometa.items() if k != "history"}
             seed_result["onset_history"] = ometa.get("history")
             logger.info("seed %d onset head done at %.0fs: best val AP by horizon %s", seed, time.time() - t0,

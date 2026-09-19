@@ -101,7 +101,27 @@ def _natural_weights(arrays) -> np.ndarray:
     return np.ones(len(arrays.risk_label)) if w is None else np.asarray(w, dtype="float64")
 
 
-def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureScaler, device: str) -> dict:
+def _head_inputs(windowed: dict, scaler: FeatureScaler, head_data: dict | None):
+    """(s_train, risk_train, stage_train, active_train, s_val, risk_val, stage_val, w_val).
+    With `head_data` (train/val HeadArrays over EVERY row of the split —
+    train/head_data.py) validation needs no weights; without it the windowed
+    subsample and its natural-prevalence weights are used (tests, legacy)."""
+    if head_data is not None:
+        tr, va = head_data["train"], head_data["val"]
+        return (tr.states, tr.risk_label, tr.stage_idx, tr.active,
+                va.states, va.risk_label, va.stage_idx, np.ones(len(va), dtype="float64"))
+    X_train, _ = scale_arrays(windowed["train"], scaler)
+    X_val, _ = scale_arrays(windowed["val"], scaler)
+    s_train = X_train[:, -1, :]  # S_t: observed state at the sample's origin window
+    s_val = X_val[:, -1, :]
+    del X_train, X_val
+    return (s_train, windowed["train"].risk_label, _stage_indices(windowed["train"].stage_label),
+            windowed["train"].X[:, -1, FEATURE_INDEX["is_active"]] > 0,
+            s_val, windowed["val"].risk_label, _stage_indices(windowed["val"].stage_label), _natural_weights(windowed["val"]))
+
+
+def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureScaler, device: str,
+                         head_data: dict | None = None) -> dict:
     set_seed(seed)
     rng = np.random.default_rng(seed)
     hcfg = cfg["train_heads"]
@@ -137,18 +157,7 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
     ).to(device)
     model.freeze_dynamics()
 
-    X_train, _ = scale_arrays(windowed["train"], scaler)
-    X_val, _ = scale_arrays(windowed["val"], scaler)
-    s_train = X_train[:, -1, :]  # S_t: observed state at the sample's origin window
-    s_val = X_val[:, -1, :]
-    del X_train, X_val
-
-    risk_train = windowed["train"].risk_label
-    risk_val = windowed["val"].risk_label
-    stage_train = _stage_indices(windowed["train"].stage_label)
-    stage_val = _stage_indices(windowed["val"].stage_label)
-    active_train = windowed["train"].X[:, -1, FEATURE_INDEX["is_active"]] > 0
-    w_val = _natural_weights(windowed["val"])
+    s_train, risk_train, stage_train, active_train, s_val, risk_val, stage_val, w_val = _head_inputs(windowed, scaler, head_data)
 
     sampling = hcfg.get("risk_sampling", "imbalanced")
     if sampling not in VALID_SAMPLING:
@@ -164,9 +173,10 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
     pos_weight = compute_pos_weight(risk_train).to(device) if sampling == "imbalanced" else None
     class_weights = compute_class_weights(stage_train, len(STAGE_LABELS)).to(device)
     logger.info("seed=%d heads: sampling=%s input_noise=%.2f pos_repeat=%d neg_ratio=%d hard_neg=%.2f selecting on %s; "
-                "train pos=%d/%d (active %.3f) val pos=%d/%d",
+                "train pos=%d/%d (active %.3f) val pos=%d/%d (%s)",
                 seed, sampling, input_noise, pos_repeat, neg_ratio, hard_frac, selection_metric,
-                int(risk_train.sum()), len(risk_train), float(active_train.mean()), int(risk_val.sum()), len(risk_val))
+                int(risk_train.sum()), len(risk_train), float(active_train.mean()), int(risk_val.sum()), len(risk_val),
+                "every row of the split" if head_data is not None else "windowed subsample, natural weights")
 
     s_train_t = torch.from_numpy(s_train).float()
     risk_train_t = torch.from_numpy(risk_train.astype("float32"))
@@ -283,6 +293,9 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
         "heads_best_epoch_risk": best_risk["epoch"],
         "heads_best_epoch_stage": best_stage["epoch"],
         "heads_selection_metric": selection_metric,
+        "heads_data": "all_split_rows" if head_data is not None else "windowed_subsample",
+        "heads_n_train": int(len(risk_train)), "heads_n_train_pos": int(risk_train.sum()),
+        "heads_n_val": int(len(risk_val)), "heads_n_val_pos": int(risk_val.sum()),
         "heads_recipe": {"risk_sampling": sampling, "input_noise": input_noise, "pos_repeat": pos_repeat,
                          "neg_ratio": neg_ratio, "hard_negative_fraction": hard_frac,
                          "separate_optimizers": True},

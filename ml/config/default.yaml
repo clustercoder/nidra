@@ -324,6 +324,18 @@ eval:
   # refactor (every reduction is per-row); null means one single pass.
   forecast_chunk_size: 500
   window_seconds: 60
+  # Natural-prevalence benchmark set (nidra/eval/eval_set.py): every positive
+  # and every pre-onset window (30 min before each onset) is kept; active and
+  # silent benign windows are sampled with these caps and carry weight
+  # N_full / n_sampled. Larger caps mean smaller per-row weights and a less
+  # fragile AP — with 2,000 silent rows one confident false alarm on a silent
+  # host weighs 340 positives. The variant screen used 6000 / 2000; the locked
+  # test/holdout runs use these.
+  episode_merge_gap_windows: 5
+  benchmark_set:
+    active_negative_cap: 15000
+    silent_negative_cap: 5000
+    pre_onset_minutes: 30
 
 # ---------------------------------------------------------------------------
 # Explainability

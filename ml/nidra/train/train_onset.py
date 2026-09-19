@@ -50,7 +50,8 @@ def _eligible_states(windowed, scaler: FeatureScaler, horizons: tuple[int, ...])
     return states[eligible], targets[eligible], np.asarray(weight)[eligible], eligible
 
 
-def train_onset_head_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureScaler, device: str = "cpu") -> dict:
+def train_onset_head_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureScaler, device: str = "cpu",
+                              head_data: dict | None = None) -> dict:
     set_seed(seed)
     rng = np.random.default_rng(seed)
     ocfg = cfg.get("onset", {})
@@ -71,9 +72,16 @@ def train_onset_head_for_seed(cfg: dict, seed: int, windowed: dict, scaler: Feat
     hard_frac = float(ocfg.get("hard_negative_fraction", 0.5))
     broadest = len(horizons) - 1  # sampling treats "onset within max(h)" as the positive class
 
-    s_tr, y_tr, _, _ = _eligible_states(windowed["train"], scaler, horizons)
-    s_va, y_va, w_va, _ = _eligible_states(windowed["val"], scaler, horizons)
-    active_tr = (windowed["train"].X[:, -1, :][~windowed["train"].inside_episode][:, _active_index()] > 0)
+    if head_data is not None:
+        tr, va = head_data["train"], head_data["val"]
+        el_tr, el_va = ~tr.inside_episode, ~va.inside_episode
+        s_tr, y_tr = tr.states[el_tr], tr.onset_targets(horizons)[el_tr]
+        s_va, y_va, w_va = va.states[el_va], va.onset_targets(horizons)[el_va], np.ones(int(el_va.sum()))
+        active_tr = tr.active[el_tr]
+    else:
+        s_tr, y_tr, _, _ = _eligible_states(windowed["train"], scaler, horizons)
+        s_va, y_va, w_va, _ = _eligible_states(windowed["val"], scaler, horizons)
+        active_tr = (windowed["train"].X[:, -1, :][~windowed["train"].inside_episode][:, _active_index()] > 0)
     n_pos_h = {str(h): int(y_tr[:, j].sum()) for j, h in enumerate(horizons)}
     n_pos_val_h = {str(h): int(y_va[:, j].sum()) for j, h in enumerate(horizons)}
     logger.info("seed=%d onset head: train eligible %d (positives by horizon %s), val eligible %d (%s)",
