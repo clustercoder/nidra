@@ -1,0 +1,607 @@
+{
+  "stage": "baseline-delta30-run7",
+  "recorded_at": "2026-09-19T18:40:16Z",
+  "git_commit": "36801e5fac372888377867b2cf7f1116e95c2851",
+  "config_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/config/default.yaml",
+  "config_hash": "5f50ab5570322547",
+  "schema_version": "1.0",
+  "n_features": 45,
+  "geometry": {
+    "window_seconds": 30,
+    "context_length_L": 30,
+    "horizon_length_K": 6,
+    "history_minutes": 15.0,
+    "horizon_minutes": 3.0,
+    "min_windows_per_host": 36
+  },
+  "dataset": {
+    "name": "CIC-IDS2017 (TrafficLabelling CSVs + project tshark packet parquet)",
+    "flow_timebase": "utc12h",
+    "days": {
+      "monday": {
+        "role": "benign_baseline",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Monday-WorkingHours.pcap_ISCX.csv",
+          "bytes": 268649908,
+          "mtime": "2017-08-10T17:15:46Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Monday-WorkingHours_packets.parquet",
+          "bytes": 147461456,
+          "mtime": "2026-09-07T11:19:48Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/monday__w30__m36__Monday-WorkingHours_packets.parquet__capNone__utc12h.parquet",
+          "bytes": 8050710,
+          "mtime": "2026-09-19T13:41:32Z"
+        },
+        "processed_table_sha256": "34fdcf0918477c437965f7f15957617918a934e5f9ea09df9b05465c5f6c31ba"
+      },
+      "tuesday": {
+        "role": "train",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Tuesday-WorkingHours.pcap_ISCX.csv",
+          "bytes": 174696560,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Tuesday-WorkingHours_packets.parquet",
+          "bytes": 144575051,
+          "mtime": "2026-09-11T05:53:26Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/tuesday__w30__m36__Tuesday-WorkingHours_packets.parquet__capNone__utc12h.parquet",
+          "bytes": 5857982,
+          "mtime": "2026-09-19T13:41:32Z"
+        },
+        "processed_table_sha256": "4b08033b3c2903174dc0579f4017078da6c03fb7e4cf15ad25db899e2641d626"
+      },
+      "wednesday": {
+        "role": "train",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Wednesday-workingHours.pcap_ISCX.csv",
+          "bytes": 285642925,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Wednesday-workingHours_packets.parquet",
+          "bytes": 167783673,
+          "mtime": "2026-09-11T06:00:54Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/wednesday__w30__m36__Wednesday-workingHours_packets.parquet__capNone__utc12h.parquet",
+          "bytes": 5763073,
+          "mtime": "2026-09-19T13:41:32Z"
+        },
+        "processed_table_sha256": "9a687213ed83a1e619dbb6519e7caded35d394334b9784aa888c4b90ef7b88dd"
+      },
+      "thursday_web": {
+        "role": "holdout",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv",
+          "bytes": 92030223,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Thursday-WorkingHours_packets.parquet",
+          "bytes": 117663088,
+          "mtime": "2026-09-11T06:06:08Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/thursday_web__w30__m36__Thursday-WorkingHours_packets.parquet__capNone__utc12h.parquet",
+          "bytes": 1917511,
+          "mtime": "2026-09-19T13:41:32Z"
+        },
+        "processed_table_sha256": "48a83792aa988b74c2539a2780a518f4ff9644dc9520408a1da1e0a99746d3e1"
+      },
+      "thursday_infiltration": {
+        "role": "holdout",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv",
+          "bytes": 108723183,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Thursday-WorkingHours_packets.parquet",
+          "bytes": 117663088,
+          "mtime": "2026-09-11T06:06:08Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/thursday_infiltration__w30__m36__Thursday-WorkingHours_packets.parquet__capNone__utc12h.parquet",
+          "bytes": 2538435,
+          "mtime": "2026-09-19T13:41:32Z"
+        },
+        "processed_table_sha256": "bf7e643463e49172f98521a42f22504a59bda3f85cba800a7903162a3f3aa6b4"
+      },
+      "friday_morning": {
+        "role": "test",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Morning.pcap_ISCX.csv",
+          "bytes": 75386737,
+          "mtime": "2017-08-17T14:16:06Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/friday_morning__w30__m36__Friday-WorkingHours_packets.parquet__capNone__utc12h.parquet",
+          "bytes": 2017283,
+          "mtime": "2026-09-19T13:41:32Z"
+        },
+        "processed_table_sha256": "03be291988cb7ae085e03ff5e2a2271b32cb4d8cbcb57b1cd76b6917f365f01b"
+      },
+      "friday_portscan": {
+        "role": "test",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv",
+          "bytes": 101874777,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/friday_portscan__w30__m36__Friday-WorkingHours_packets.parquet__capNone__utc12h.parquet",
+          "bytes": 1225759,
+          "mtime": "2026-09-19T13:41:32Z"
+        },
+        "processed_table_sha256": "bbed2cc580e2791fe5a1538537ce8e8ef651e950c5c90e7102ef23e91b323311"
+      },
+      "friday_ddos": {
+        "role": "test",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv",
+          "bytes": 96101069,
+          "mtime": "2018-06-07T16:33:50Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/friday_ddos__w30__m36__Friday-WorkingHours_packets.parquet__capNone__utc12h.parquet",
+          "bytes": 563508,
+          "mtime": "2026-09-19T13:41:32Z"
+        },
+        "processed_table_sha256": "f926966260c6e4bcd324b142b81a2fd79f506da8de5ca6c27c494d1d5d5836a7"
+      }
+    }
+  },
+  "seed": null,
+  "ensemble_seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "split": null,
+  "threshold": 0.75,
+  "pooling": {
+    "method": "quantile",
+    "quantile": 0.85,
+    "head_reduction": "before_pooling",
+    "n_samples_per_member": 200
+  },
+  "calibration": {
+    "params_by_k": [
+      {
+        "a": 0.4448392987251282,
+        "b": -4.035715579986572,
+        "n": 4000,
+        "degenerate": false
+      },
+      {
+        "a": 0.4082845449447632,
+        "b": -4.462120532989502,
+        "n": 4000,
+        "degenerate": false
+      },
+      {
+        "a": 0.33119240403175354,
+        "b": -4.773479461669922,
+        "n": 4000,
+        "degenerate": false
+      },
+      {
+        "a": 0.4723339378833771,
+        "b": -4.650808811187744,
+        "n": 4000,
+        "degenerate": false
+      },
+      {
+        "a": 0.36481690406799316,
+        "b": -4.884183406829834,
+        "n": 4000,
+        "degenerate": false
+      },
+      {
+        "a": 0.4573047161102295,
+        "b": -4.812565803527832,
+        "n": 4000,
+        "degenerate": false
+      }
+    ],
+    "metadata": {
+      "fit_split": "val",
+      "n_val_samples": 4000,
+      "n_ensemble_members": 5,
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "n_samples_per_member": 100,
+      "fitted_at": "2026-09-19T09:10:40Z",
+      "method": "platt_scaling_per_horizon",
+      "risk_pooling_method": "quantile",
+      "risk_pooling_quantile": 0.85,
+      "risk_pooling_head_reduction": "before_pooling",
+      "note": "Fit on the validation split only, using the same pooled-ensemble rollout statistic (`ensemble_world_model_forecast`) that NidraPredictor serves at inference time, under the risk_pooling_* settings recorded above. Does not retrain or modify the frozen risk head in any way \u2014 see eval/calibrate.py. The recorded pooling settings are load-bearing, not informational: eval/calibrate.calibration_pooling_mismatch refuses to apply this fit to a run that pools differently."
+    },
+    "params_present": false
+  },
+  "checkpoints": {
+    "weights": {
+      "seed_0": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/weights/model_seed_0.pt",
+        "sha256": "a0a55c953cc75dccfd2542f34c4400fc47aa88de6aa8ac5dc9601e01619cec15"
+      },
+      "seed_1": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/weights/model_seed_1.pt",
+        "sha256": "e03a2a6f33065f319b3ebb47bc9c2e47b0181cf70b9901701fb68408400e4b38"
+      },
+      "seed_2": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/weights/model_seed_2.pt",
+        "sha256": "27bcd5a00edd7dd0c74de843b77f987fb6ee0a1116f93e621810ee0c1821a849"
+      },
+      "seed_3": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/weights/model_seed_3.pt",
+        "sha256": "cb66a9522466d15070a275238b34816615115d3156caf6fe3c8bb3870c581eff"
+      },
+      "seed_4": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/weights/model_seed_4.pt",
+        "sha256": "de4d3b140e81b9d55518f18c94e1d9894427fbb454fd6685d7d98a59e325a85f"
+      }
+    },
+    "scaler": {
+      "robust_scaler.joblib": "d9e3871400cba0e4f7c3272f016a0d5c71ea3e26b786a19283e2440af4b9b605",
+      "feature_scaler.json": null,
+      "scaler_metadata.json": "3dbce1d1c75ad0de47db799643f7ca3bfcc970caac5b19e2c4b1a5ac93f48e3d",
+      "shap_background.npy": "6ba0add3806c68e8d50776271956b47af0d2a396528ca1f2bdd15d4a4b7c2657"
+    },
+    "calibration": {
+      "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/weights/risk_calibration.json",
+      "sha256": "228f4ca55e65e85d452271222dfff647180c663d66bcdb591d23dfc0acf58039"
+    }
+  },
+  "platform": {
+    "python": "3.14.7",
+    "machine": "arm64",
+    "system": "Darwin"
+  },
+  "metrics": {
+    "test": {
+      "baselines_sha256": "c7ce5474997b6183281db3d879a306fcf98210c4f7f077db3065f487bc7b8b4b",
+      "run_params": {
+        "n_samples": 200,
+        "n_trajectories": 1000,
+        "max_eval_samples": 4000,
+        "n_eval_rows": 4000,
+        "ensemble_seeds": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "risk_pooling": {
+          "method": "quantile",
+          "quantile": 0.85,
+          "head_reduction": "before_pooling"
+        },
+        "risk_threshold": 0.75,
+        "config_hash": "5f50ab5570322547",
+        "git_commit": "c8785f2f2d7d4d5b6a66d8b1144f68a1ab2749ce"
+      },
+      "baselines": {
+        "lr_current_state": {
+          "auc_pr": 0.7669883338640666,
+          "f1": 0.6505681818181818,
+          "precision": 0.9511941848390446,
+          "recall": 0.49433351322180247,
+          "fpr": 0.021891010712622262,
+          "tp": 916,
+          "fp": 47,
+          "tn": 2100,
+          "fn": 937
+        },
+        "lr_flattened_history": {
+          "auc_pr": 0.7447331404948271,
+          "f1": 0.5633587786259542,
+          "precision": 0.9621903520208605,
+          "recall": 0.39827307069616835,
+          "fpr": 0.01350721937587331,
+          "tp": 738,
+          "fp": 29,
+          "tn": 2118,
+          "fn": 1115
+        },
+        "persistence": {
+          "auc_pr": 0.6174197162945452,
+          "f1": 0.2784693407100046,
+          "precision": 0.9556962025316456,
+          "recall": 0.16297895304910956,
+          "fpr": 0.006520726595249185,
+          "tp": 302,
+          "fp": 14,
+          "tn": 2133,
+          "fn": 1551
+        },
+        "world_model": {
+          "auc_pr": 0.908808172795279,
+          "f1": 0.8236024844720496,
+          "precision": 0.9700073152889539,
+          "recall": 0.7155963302752294,
+          "fpr": 0.019096413600372612,
+          "tp": 1326,
+          "fp": 41,
+          "tn": 2106,
+          "fn": 527
+        },
+        "oracle": {
+          "auc_pr": 0.8726444756060304,
+          "f1": 0.7169936814100433,
+          "precision": 0.9341421143847487,
+          "recall": 0.5817593092282785,
+          "fpr": 0.035398230088495575,
+          "tp": 1078,
+          "fp": 76,
+          "tn": 2071,
+          "fn": 775
+        },
+        "world_model_calibrated": {
+          "auc_pr": 0.9110324265382022,
+          "f1": 0.0032310177705977385,
+          "precision": 0.75,
+          "recall": 0.0016189962223421479,
+          "fpr": 0.0004657661853749418,
+          "tp": 3,
+          "fp": 1,
+          "tn": 2146,
+          "fn": 1850
+        },
+        "ensemble_persistence": {
+          "auc_pr": 0.7011472886540074,
+          "f1": 0.2824287028518859,
+          "precision": 0.956386292834891,
+          "recall": 0.16567728008634647,
+          "fpr": 0.006520726595249185,
+          "tp": 307,
+          "fp": 14,
+          "tn": 2133,
+          "fn": 1546
+        },
+        "ensemble_oracle": {
+          "auc_pr": 0.8780781815377502,
+          "f1": 0.7129043014338112,
+          "precision": 0.9328097731239092,
+          "recall": 0.576902320561252,
+          "fpr": 0.03586399627387052,
+          "tp": 1069,
+          "fp": 77,
+          "tn": 2070,
+          "fn": 784
+        },
+        "ensemble_world_model": {
+          "auc_pr": 0.9600667103393256,
+          "f1": 0.9064912782384902,
+          "precision": 0.9641119221411192,
+          "recall": 0.8553696708041014,
+          "fpr": 0.027480204937121566,
+          "tp": 1585,
+          "fp": 59,
+          "tn": 2088,
+          "fn": 268
+        },
+        "ensemble_world_model_calibrated": {
+          "auc_pr": 0.9569088597708694,
+          "f1": 0.01072961373390558,
+          "precision": 0.9090909090909091,
+          "recall": 0.005396654074473826,
+          "fpr": 0.0004657661853749418,
+          "tp": 10,
+          "fp": 1,
+          "tn": 2146,
+          "fn": 1843
+        }
+      },
+      "ablations_sha256": "2d33adabce37be9df99254ff10a211e8add88e6135b3efbcbadddb0bafc165f5",
+      "calibration_sha256": "e03c5f4c9a4e0ead0f9a670cdc0c95b59ff97e682539cbe79abd1fa51a7a5cfc",
+      "lead_time_sha256": "0bb356aa62a16ad5269a091cc5870751b0bc7ac1e86808ec29b7e26a51f7a6e8",
+      "lead_time_raw": {
+        "median_lead_time_s": 4305.0,
+        "n_episodes": 10,
+        "n_no_warning": 2,
+        "fraction_no_warning": 0.2
+      },
+      "lead_time_ensemble": {
+        "median_lead_time_s": 4320.0,
+        "n_episodes": 10,
+        "n_no_warning": 2,
+        "fraction_no_warning": 0.2
+      },
+      "lead_time_ensemble_calibrated": {
+        "median_lead_time_s": null,
+        "n_episodes": 10,
+        "n_no_warning": 10,
+        "fraction_no_warning": 1.0
+      }
+    },
+    "holdout": {
+      "baselines_sha256": "376bea186bbebf4152ff63fba9b88a165a97ac1605b898c97dbbc4a9e8d99ee1",
+      "run_params": {
+        "n_samples": 200,
+        "n_trajectories": 1000,
+        "max_eval_samples": 4000,
+        "n_eval_rows": 4000,
+        "ensemble_seeds": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "risk_pooling": {
+          "method": "quantile",
+          "quantile": 0.85,
+          "head_reduction": "before_pooling"
+        },
+        "risk_threshold": 0.75,
+        "config_hash": "5f50ab5570322547",
+        "git_commit": "c8785f2f2d7d4d5b6a66d8b1144f68a1ab2749ce"
+      },
+      "baselines": {
+        "lr_current_state": {
+          "auc_pr": 0.7477075315009302,
+          "f1": 0.7701612903225806,
+          "precision": 0.7609561752988048,
+          "recall": 0.7795918367346939,
+          "fpr": 0.015978695073235686,
+          "tp": 191,
+          "fp": 60,
+          "tn": 3695,
+          "fn": 54
+        },
+        "lr_flattened_history": {
+          "auc_pr": 0.872417172184417,
+          "f1": 0.8513238289205702,
+          "precision": 0.8495934959349594,
+          "recall": 0.8530612244897959,
+          "fpr": 0.00985352862849534,
+          "tp": 209,
+          "fp": 37,
+          "tn": 3718,
+          "fn": 36
+        },
+        "persistence": {
+          "auc_pr": 0.5203618857446852,
+          "f1": 0.555256064690027,
+          "precision": 0.8174603174603174,
+          "recall": 0.4204081632653061,
+          "fpr": 0.006125166444740347,
+          "tp": 103,
+          "fp": 23,
+          "tn": 3732,
+          "fn": 142
+        },
+        "world_model": {
+          "auc_pr": 0.6297262732718231,
+          "f1": 0.7091295116772823,
+          "precision": 0.7389380530973452,
+          "recall": 0.6816326530612244,
+          "fpr": 0.015712383488681758,
+          "tp": 167,
+          "fp": 59,
+          "tn": 3696,
+          "fn": 78
+        },
+        "oracle": {
+          "auc_pr": 0.6406129479863556,
+          "f1": 0.5833333333333334,
+          "precision": 0.5957446808510638,
+          "recall": 0.5714285714285714,
+          "fpr": 0.02529960053262317,
+          "tp": 140,
+          "fp": 95,
+          "tn": 3660,
+          "fn": 105
+        },
+        "world_model_calibrated": {
+          "auc_pr": 0.6287026426541971,
+          "f1": 0.0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "fpr": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "tn": 3755,
+          "fn": 245
+        },
+        "ensemble_persistence": {
+          "auc_pr": 0.6182508497614978,
+          "f1": 0.5683646112600537,
+          "precision": 0.828125,
+          "recall": 0.4326530612244898,
+          "fpr": 0.005858854860186418,
+          "tp": 106,
+          "fp": 22,
+          "tn": 3733,
+          "fn": 139
+        },
+        "ensemble_oracle": {
+          "auc_pr": 0.7734138337312925,
+          "f1": 0.6053169734151329,
+          "precision": 0.6065573770491803,
+          "recall": 0.6040816326530613,
+          "fpr": 0.025565912117177098,
+          "tp": 148,
+          "fp": 96,
+          "tn": 3659,
+          "fn": 97
+        },
+        "ensemble_world_model": {
+          "auc_pr": 0.6823277250095859,
+          "f1": 0.7641325536062378,
+          "precision": 0.7313432835820896,
+          "recall": 0.8,
+          "fpr": 0.019174434087882823,
+          "tp": 196,
+          "fp": 72,
+          "tn": 3683,
+          "fn": 49
+        },
+        "ensemble_world_model_calibrated": {
+          "auc_pr": 0.66955662015366,
+          "f1": 0.0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "fpr": 0.0005326231691078562,
+          "tp": 0,
+          "fp": 2,
+          "tn": 3753,
+          "fn": 245
+        }
+      },
+      "ablations_sha256": "46559d81ad30c3b42a3e6fb8707fb56fd1a86752ec0cc63eef9cec7b0f4c5f29",
+      "calibration_sha256": "c64876b587498f060ec5519cb5700d845b9692437cebfe4c96c6c0ab7f8036da",
+      "lead_time_sha256": "e56fde59d4760f99d35206a45eda1fa6d1ee5e3edd0890dd013f1123b95416a7",
+      "lead_time_raw": {
+        "median_lead_time_s": 18210.0,
+        "n_episodes": 2,
+        "n_no_warning": 1,
+        "fraction_no_warning": 0.5
+      },
+      "lead_time_ensemble": {
+        "median_lead_time_s": 18210.0,
+        "n_episodes": 2,
+        "n_no_warning": 1,
+        "fraction_no_warning": 0.5
+      },
+      "lead_time_ensemble_calibrated": {
+        "median_lead_time_s": null,
+        "n_episodes": 2,
+        "n_no_warning": 2,
+        "fraction_no_warning": 1.0
+      }
+    }
+  },
+  "label": "baseline-delta30-run7"
+}
