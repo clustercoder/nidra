@@ -71,12 +71,14 @@ def counterfactual_rollout(
     x_tiled = x_t.repeat_interleave(n_samples, dim=0) if n_samples > 1 else x_t
     h_t, h = model.encoder(x_tiled)
     cur = x_tiled[:, -1, :].clone()
+    prev = x_tiled[:, -2, :].clone() if x_tiled.shape[1] > 1 else cur
     if feature_idx is not None:
         cur[:, feature_idx] = clamp_value
+        prev[:, feature_idx] = clamp_value
 
     traj = []
     for _ in range(K):
-        mu, logvar = model.transition(h_t)
+        mu, logvar = model.transition(h_t, cur, prev)
         nxt = cur + mu
         if stochastic:
             nxt = nxt + torch.randn_like(mu) * (0.5 * logvar).exp()
@@ -85,7 +87,7 @@ def counterfactual_rollout(
             nxt[:, feature_idx] = clamp_value  # re-clamp after every step
         traj.append(nxt)
         h_t, h = model.encoder(nxt.unsqueeze(1), h)
-        cur = nxt
+        prev, cur = cur, nxt
 
     states = torch.stack(traj, dim=1)  # [B*S, K, F]
     BS = B * max(n_samples, 1)

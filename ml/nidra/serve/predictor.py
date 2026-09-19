@@ -260,6 +260,7 @@ class NidraPredictor:
             stage_hidden=mcfg["stage_head"]["hidden"],
             n_stages=mcfg["stage_head"]["n_stages"],
             state_clamp=mcfg["transition"]["state_clamp"],
+        linear_skip=bool(mcfg["transition"].get("linear_skip", False)),
         ).to(self.device)
 
     def _validate_and_scale(self, states: np.ndarray) -> np.ndarray:

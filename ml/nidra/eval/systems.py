@@ -94,8 +94,8 @@ def _rollout_risk(models: list[WorldModel], X: torch.Tensor, K: int, n_samples: 
             if force_zero_mu or iso_sigma is not None:
                 orig = m.transition.forward
 
-                def patched(h, _orig=orig):
-                    mu, logvar = _orig(h)
+                def patched(h, *lags, _orig=orig):
+                    mu, logvar = _orig(h, *lags)
                     mu = torch.zeros_like(mu)
                     if iso_sigma is not None:
                         logvar = torch.full_like(logvar, float(np.log(iso_sigma ** 2)))

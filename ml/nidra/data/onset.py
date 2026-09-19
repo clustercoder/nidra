@@ -44,6 +44,8 @@ def episode_geometry(table: pd.DataFrame, hosts: np.ndarray, origin_ts: np.ndarr
     onset on that host (inf if none), and the key of the episode it is
     inside of or precedes ("" if neither)."""
     episodes = merge_episodes(table, window_seconds, merge_gap_windows)
+    if not episodes.empty:
+        episodes = episodes.sort_values(["host_id", "start_ts"])
     n = len(origin_ts)
     inside = np.zeros(n, dtype=bool)
     to_onset = np.full(n, np.inf)
@@ -57,6 +59,10 @@ def episode_geometry(table: pd.DataFrame, hosts: np.ndarray, origin_ts: np.ndarr
             continue
         idx = np.where(m)[0]
         t = origin_ts[idx]
+        # Episodes in start order: a row is keyed to the episode it is INSIDE,
+        # else to the NEXT onset it precedes. Processing later episodes must
+        # not re-key rows that sit inside an earlier one (a host that attacks
+        # on two days has two episodes, not one spanning both).
         for start, end in zip(g["start_ts"].to_numpy(), g["end_ts"].to_numpy()):
             ek = f"{host}@{int(start)}"
             in_ep = (t >= start) & (t <= end)
@@ -64,8 +70,8 @@ def episode_geometry(table: pd.DataFrame, hosts: np.ndarray, origin_ts: np.ndarr
             key[idx[in_ep]] = ek
             d = (start - t) / 60.0
             before = (d > 0) & (d < to_onset[idx])
-            to_onset[idx[before]] = d[before]
-            key[idx[before & ~in_ep]] = ek
+            to_onset[idx[before]] = d[before]          # informational for rows inside an earlier episode
+            key[idx[before & ~inside[idx]]] = ek       # keying never crosses an episode boundary
     return inside, to_onset, key
 
 

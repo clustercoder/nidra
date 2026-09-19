@@ -84,11 +84,12 @@ def dynamics_loss(
     """
     h_t, h = model.encoder(x)
     cur = x[:, -1, :]
+    prev = x[:, -2, :] if x.shape[1] > 1 else cur
     total = x.new_zeros(())
     mask = feature_mask.to(x.dtype) if feature_mask is not None else None
 
     for k in range(K):
-        mu, logvar = model.transition(h_t)
+        mu, logvar = model.transition(h_t, cur, prev)
         pred = cur + mu
         target = y_future[:, k, :]
         elements = gaussian_nll_elements(pred, logvar, target)
@@ -105,7 +106,7 @@ def dynamics_loss(
             nxt = pred.detach()
 
         h_t, h = model.encoder(nxt.unsqueeze(1), h)
-        cur = nxt
+        prev, cur = cur, nxt
 
     return total / K
 
@@ -127,12 +128,13 @@ def free_running_metrics(
     inside the ±1.645σ band). Everything is over kept features only."""
     h_t, h = model.encoder(x)
     cur = x[:, -1, :]
+    prev = x[:, -2, :] if x.shape[1] > 1 else cur
     last = x[:, -1, :]
     mask = feature_mask.to(x.dtype) if feature_mask is not None else torch.ones(x.shape[-1], dtype=x.dtype, device=x.device)
     denom = mask.sum().clamp_min(1.0)
     nll_k, mse_k, pers_k, cov_k = [], [], [], []
     for k in range(K):
-        mu, logvar = model.transition(h_t)
+        mu, logvar = model.transition(h_t, cur, prev)
         pred = (cur + mu).clamp(-model.state_clamp, model.state_clamp)
         target = y_future[:, k, :]
         elements = gaussian_nll_elements(pred, logvar, target)
@@ -142,7 +144,7 @@ def free_running_metrics(
         inside = ((pred - target).abs() <= 1.645 * (0.5 * logvar).exp()).to(x.dtype)
         cov_k.append(((inside * mask).sum(-1) / denom).mean())
         h_t, h = model.encoder(pred.unsqueeze(1), h)
-        cur = pred
+        prev, cur = cur, pred
     return {
         "nll": torch.stack(nll_k),
         "mse": torch.stack(mse_k),

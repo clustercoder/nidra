@@ -42,12 +42,14 @@ class WorldModel(nn.Module):
         stage_hidden: int = 64,
         n_stages: int = 6,
         state_clamp: float = 10.0,
+        linear_skip: bool = False,
     ):
         super().__init__()
         self.n_features = n_features
         self.state_clamp = state_clamp
         self.encoder = Encoder(n_features, hidden_size, encoder_layers, encoder_dropout)
-        self.transition = Transition(hidden_size, n_features, transition_mlp_hidden, logvar_min, logvar_max)
+        self.transition = Transition(hidden_size, n_features, transition_mlp_hidden, logvar_min, logvar_max,
+                                     linear_skip=linear_skip)
         self.risk_head = RiskHead(n_features, risk_hidden)
         self.stage_head = StageHead(n_features, stage_hidden, n_stages)
 
@@ -103,10 +105,11 @@ class WorldModel(nn.Module):
 
         h_t, h = self.encoder(x_tiled)
         cur = x_tiled[:, -1, :]
+        prev = x_tiled[:, -2, :] if x_tiled.shape[1] > 1 else cur
 
         traj, mus, logvars = [], [], []
         for _ in range(K):
-            mu, logvar = self.transition(h_t)
+            mu, logvar = self.transition(h_t, cur, prev)
             nxt = cur + mu
             if stochastic:
                 noise = torch.randn_like(mu) * (0.5 * logvar).exp()
@@ -118,7 +121,7 @@ class WorldModel(nn.Module):
             logvars.append(logvar)
 
             h_t, h = self.encoder(nxt.unsqueeze(1), h)
-            cur = nxt
+            prev, cur = cur, nxt
 
         states = torch.stack(traj, dim=1)      # [B*S, K, F]
         mus_t = torch.stack(mus, dim=1)

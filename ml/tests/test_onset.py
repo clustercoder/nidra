@@ -72,3 +72,20 @@ def test_windowed_arrays_carry_onset_geometry():
     # the published risk label at 39 is also 1 (attack within K=3) — the two agree there,
     # but differ at 41 where risk_label is 1 (ongoing) and onset is masked
     assert arrays.risk_label[i39] == 1 and arrays.risk_label[i41] == 1
+
+
+def test_two_episodes_on_one_host_keep_separate_keys():
+    """A host that attacks twice (SSH-Patator on Tuesday, Heartbleed on
+    Wednesday from the same attacker IP) has two episodes; rows inside the
+    first must not be re-keyed to the second."""
+    df = _table(60, n=80, attack_windows=(10, 11, 12, 60, 61))
+    origin_ts = df["window_ts"].to_numpy()
+    hosts = df["host_id"].to_numpy()
+    inside, to_onset, key = episode_geometry(df, hosts, origin_ts, 60, merge_gap_windows=5)
+    k1 = "h1@" + str(1000 + 10 * 60)
+    k2 = "h1@" + str(1000 + 60 * 60)
+    assert key[11] == k1 and key[61] == k2
+    assert inside[11] and inside[61]
+    assert key[9] == k1 and key[59] == k2
+    assert key[30] == k2 and to_onset[30] == pytest.approx(30.0)
+    assert to_onset[11] == pytest.approx(49.0)  # minutes from inside episode 1 to the onset of episode 2

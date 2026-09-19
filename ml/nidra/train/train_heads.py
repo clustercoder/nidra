@@ -125,6 +125,7 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
         stage_hidden=mcfg["stage_head"]["hidden"],
         n_stages=mcfg["stage_head"]["n_stages"],
         state_clamp=mcfg["transition"]["state_clamp"],
+        linear_skip=bool(mcfg["transition"].get("linear_skip", False)),
     ).to(device)
     model.load_state_dict(torch.load(weights_path, map_location=device))
     # Stage 2 always starts from FRESHLY INITIALIZED heads. The checkpoint at

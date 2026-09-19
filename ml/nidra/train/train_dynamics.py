@@ -252,6 +252,7 @@ def train_one_seed(cfg: dict, seed: int, epochs_override: int | None, windowed: 
         stage_hidden=mcfg["stage_head"]["hidden"],
         n_stages=mcfg["stage_head"]["n_stages"],
         state_clamp=mcfg["transition"]["state_clamp"],
+        linear_skip=bool(mcfg["transition"].get("linear_skip", False)),
     ).to(device)
 
     params = list(model.encoder.parameters()) + list(model.transition.parameters())

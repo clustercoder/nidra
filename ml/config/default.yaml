@@ -122,6 +122,10 @@ model:
     logvar_min: -6.0
     logvar_max: 3.0
     state_clamp: 10.0
+    # mu = MLP(h_t) + A[s_t, s_{t-1}] + b (zero-initialised). Off by default;
+    # a Stage-5 dynamics variant — see models/transition.py for the
+    # validation evidence that motivated it and DECISIONS.md for the outcome.
+    linear_skip: false
   risk_head:
     hidden: 64
   stage_head:
