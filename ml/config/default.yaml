@@ -143,13 +143,29 @@ train_dynamics:
   epochs: 60
   grad_clip: 1.0
   scheduler: cosine
-  early_stopping_metric: val_multistep_nll
+  # Checkpoint selection (DECISIONS.md D107): "val_free_running_nll" — the
+  # deterministic free-running rollout's NLL on validation, i.e. the model
+  # as deployed — or "val_free_running_mse" / "val_multistep_nll" (the
+  # Δ=30 original, teacher-forced).
+  selection_metric: val_free_running_nll
+  early_stopping_metric: val_multistep_nll   # legacy name, kept for old records; selection_metric is what is used
   patience: 8
   horizon_discount: 0.85   # (0.85 ** k) per-horizon loss weighting
   teacher_forcing:
     start_p: 1.0
     end_p: 0.3
     anneal_fraction_of_epochs: 0.6
+  # Loss options, all measured as Stage-5 variants on the validation
+  # benchmark (see DECISIONS.md for which were kept):
+  #   beta_nll              β-NLL (Seitzer et al. 2022): each element's NLL is
+  #                         scaled by σ².detach()^β so the mean is fit even where
+  #                         the model claims high variance. 0 = plain NLL.
+  #   mse_aux_weight        adds w * MSE(mean, target) to the NLL.
+  #   nonsilent_sample_weight  training weight of samples whose origin window
+  #                         is active (the 94% silent windows dominate otherwise).
+  beta_nll: 0.0
+  mse_aux_weight: 0.0
+  nonsilent_sample_weight: 1.0
 
 # ---------------------------------------------------------------------------
 # Stage-2 head training
@@ -174,13 +190,21 @@ train_heads:
   # macro-F1. Any change here must be re-measured on the natural-prevalence
   # benchmark (nidra.eval.benchmark), never on validation AUC-PR alone.
   selection_metric: val_auc_pr_natural
-  # Risk-head sampling. "balanced": every positive is seen `pos_repeat`
-  # times per epoch against `neg_ratio` freshly drawn negatives per
-  # positive, `hard_negative_fraction` of them from ACTIVE benign windows
-  # (the rows a detector actually has to reject; silent windows are trivially
-  # negative). BCE without pos_weight. "imbalanced": the original — every
-  # sample once per epoch, BCE with pos_weight = n_neg / n_pos.
-  risk_sampling: balanced
+  # Risk-head sampling. "imbalanced": every sample once per epoch, BCE with
+  # pos_weight = n_neg / n_pos. "balanced": every positive is seen
+  # `pos_repeat` times per epoch against `neg_ratio` freshly drawn negatives
+  # per positive, `hard_negative_fraction` of them from ACTIVE benign windows,
+  # BCE without pos_weight.
+  #
+  # Measured 2026-09-20 on the Δ=60 validation benchmark (geomA_L15K3 dynamics,
+  # seed 0; head on observed val states at natural prevalence / world-model
+  # path): imbalanced+noise 0.655/0.660, balanced no noise 0.599/0.638,
+  # balanced+noise 0.378/0.505, balanced pos_repeat 5 0.566/0.601, the Δ=30
+  # recipe (imbalanced, weighted_val_loss, no noise) 0.630/0.686. Validation
+  # holds two episodes, so these are one-seed numbers without a usable
+  # interval; the recipe was chosen on the head's own validation statistic.
+  # Balanced sampling with 147 training positives overfits within one epoch.
+  risk_sampling: imbalanced
   pos_repeat: 20
   neg_ratio: 10
   hard_negative_fraction: 0.5
