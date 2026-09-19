@@ -36,6 +36,7 @@ from nidra.explain.saliency import temporal_saliency
 from nidra.data.attack_mapping import map_stage_distribution, progression_summary
 from nidra.eval.operating_point import OPERATING_POINT_FILENAME, load_operating_point
 from nidra.models.risk_pooling import pool_trajectories_np
+from nidra.explain.forecast_attribution import explain_forecast
 from nidra.explain.shap_runner import explain_current_risk, explain_predicted_stage, load_background, top_signals
 from nidra.models.risk_pooling import pool_ensemble_risk
 from nidra.models.world_model import WorldModel
@@ -606,9 +607,16 @@ class NidraPredictor:
         leading_saliency = saliency_results.get(
             leading[0]["name"] if leading else "", {}
         )
+        # (d) the forecast itself: signed integrated-gradient contributions of
+        # every (history window, feature) cell to the composite within-horizon
+        # score, with a deletion-based faithfulness check on the same forward
+        # function — see explain/forecast_attribution.py.
+        forecast_attr = explain_forecast(self.models, scaled, self.scaler.zero_state_scaled(), self.K,
+                                         horizon_reduction=self.horizon_reduction)
         return {
             "current_risk_attributions": leading,
             "top_signals": leading,
+            "forecast_attributions": forecast_attr,
             "window_importance": _as_distribution(leading_saliency.get("window_importance", [])),
             "driving_window": int(leading_saliency.get("driving_window", 0)),
             "predicted_stage": STAGE_LABELS[predicted_stage_idx],
