@@ -37,7 +37,10 @@ def test_config_defaults() -> None:
     assert cfg["risk_threshold"] == 0.75
     assert cfg["lead_time_m"] == 2
     assert cfg["episode_close_after"] == 4
-    assert cfg["predictor"]["impl"] == "stub"
+    # The shipped default is the trained world model, not the placeholder.
+    # This assertion said "stub" for a while after the switch, which is a test
+    # asserting a default the product no longer has.
+    assert cfg["predictor"]["impl"] == "nidra"
     assert cfg["auth"]["algorithm"] == "HS256"
     assert set(cfg["streams"]) == {
         "raw_events",

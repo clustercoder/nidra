@@ -57,21 +57,22 @@ possible alert sensitivity rather than one fixed cutoff.
 
 | | Friday's attacks | Never-seen-before attack type |
 |---|:---:|:---:|
-| **AUC-PR** | 🟢 **0.93** | 🟢 **0.70** |
-| **F1** | 🟢 **0.84** | 🟢 **0.73** |
-| **Precision** | 🟢 **0.95** | 0.70 |
-| **Recall** | 🟢 **0.75** | 🟢 **0.76** |
-| **Median advance warning** | 🟢 **8.8 hours** | 🟢 **4.0 hours** |
-| **Episodes caught before they unfolded** | 🟢 **9 of 10** | 🟢 **2 of 2** |
+| **AUC-PR** | 🟢 **0.96** | 🟡 **0.68** |
+| **F1** | 🟢 **0.91** | 🟢 **0.76** |
+| **Precision** | 🟢 **0.96** | 0.73 |
+| **Recall** | 🟢 **0.86** | 🟢 **0.80** |
+| **Episodes caught before they unfolded** | 🟢 **8 of 10** | 🟡 **1 of 2** |
 
-- **Early warning — the thing only forecasting can do.** 9 of 10 test
-  attack episodes were flagged *before* they played out, a median of
-  **8.8 hours** ahead. On the unseen attack type, 2 of 2 episodes flagged,
-  4.0 hours ahead. A system that only judges the present moment cannot
-  produce this number at all.
-- **Speed:** ~137ms per forecast on an ordinary CPU — comfortably fast
+- **Early warning — the thing only forecasting can do.** 8 of 10 test
+  attack episodes raised a sustained warning *before* their first
+  attack-labelled window. A system that only judges the present moment
+  cannot do this at all. We previously put a number of hours on that
+  warning; it has been withdrawn, because the metric turned out to measure
+  how much history each capture contained rather than how far ahead the
+  model saw. The full working is in `ml/REAL_DATA_RESULTS.md`.
+- **Speed:** ~115ms per forecast on an ordinary CPU — comfortably fast
   enough to run live.
-- **Reliability:** 235 automated tests, all passing, covering the full
+- **Reliability:** 507 automated tests, all passing, covering the full
   pipeline end to end.
 
 ## The constraints these numbers were achieved under
@@ -104,7 +105,7 @@ Seven experiments, measured and recorded with full numbers:
 
 | Experiment | Outcome |
 |---|---|
-| **Pooling the riskier tail of simulated futures** | **Adopted** — F1 0.01 → **0.84**, advance warning 0 of 10 → **9 of 10**. The biggest win in the project. |
+| **Pooling the riskier tail of simulated futures** | **Adopted** — F1 0.01 → **0.91**, and the difference between never crossing the alert bar and warning on 8 of 10 episodes. The biggest win in the project. |
 | 5-model ensemble voting | **Adopted** — beats any single model. |
 | Post-hoc probability calibration | **Rejected** — undid the pooling gain. |
 | Tightening rollout noise, retrained from scratch | **Rejected** — small-scale gain vanished at full scale. |
@@ -114,9 +115,12 @@ Seven experiments, measured and recorded with full numbers:
 
 Four of seven were rejected on the evidence, and that is the point: each one
 was built, measured against held-out data, and dropped when the numbers said
-so. Three genuine correctness bugs were also found and fixed along the way,
-including a silent timestamp bug that was corrupting every training window on
-current library versions.
+so. Three genuine correctness bugs were also found and fixed along the way. The
+largest was found last: the dataset's flow records are stamped in local time
+on a 12-hour clock with no AM/PM marker, while its packet captures carry true
+UTC, so the join between them was matching almost nothing and eleven of the
+forty-five features were arriving as zeros. Correcting it and retraining is
+what produced the numbers above.
 
 ### The one that mattered most, in detail
 
@@ -125,8 +129,9 @@ almost never crossed the confidence bar. Rather than lower the bar, we
 instrumented the model and found the actual mechanism: the risk scores of a
 thousand simulated futures were being averaged together, drowning out the
 dangerous minority. Scoring the riskier *tail* of those futures instead is
-the change behind F1 0.01 → **0.84** and advance warning 0 of 10 → **9 of
-10**. Diagnosis, then a targeted fix — not a knob turned at random.
+the change behind F1 0.01 → **0.91** and the difference between never
+crossing the alert bar and warning on 8 of 10 episodes. Diagnosis, then a
+targeted fix — not a knob turned at random.
 
 ## Where it's headed next
 

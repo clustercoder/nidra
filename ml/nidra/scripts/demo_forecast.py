@@ -26,14 +26,19 @@ import pandas as pd
 
 from nidra.data.schema import CONTEXT_LENGTH, FEATURE_ORDER
 from nidra.serve.predictor import NidraPredictor
+from nidra.train.pipeline import day_cache_path, declared_packets_tag
 from nidra.utils.config import load_config, resolve_path
 from nidra.utils.seed import set_seed
 
 logger = logging.getLogger(__name__)
 
 # Default demo day: a test-split day that contains a real labelled attack
-# episode, so `--want-risk 1` has something to find.
-DEFAULT_DAY = "friday_ddos__w30__m36__Friday-WorkingHours_packets.parquet__capNone.parquet"
+# episode, so `--want-risk 1` has something to find. The FILENAME is derived
+# from the config through the same function that writes the cache, never
+# written out here — a spelled-out name is a second source for the cache key
+# that goes stale silently the next time the key changes (it already has: the
+# flow-timebase tag was added to it).
+DEFAULT_DAY_KEY = "friday_ddos"
 
 REQUIRED_COLUMNS = ("host_id", "window_ts", "risk_label", "stage_label")
 
@@ -130,8 +135,9 @@ def main() -> None:
         description="Forecast one real CIC-IDS2017 window using the shipped ensemble."
     )
     parser.add_argument("--config", type=str, default=None)
-    parser.add_argument("--day", type=str, default=DEFAULT_DAY,
-                        help="filename under artifacts/processed/ to draw the window from")
+    parser.add_argument("--day", type=str, default=None,
+                        help="filename under artifacts/processed/ to draw the window from; "
+                             f"defaults to the cached table for '{DEFAULT_DAY_KEY}'")
     parser.add_argument("--want-risk", type=int, default=1, choices=[0, 1],
                         help="1 = a window labelled as leading to an attack, 0 = a benign window")
     parser.add_argument("--threshold", type=float, default=0.75,
@@ -151,7 +157,14 @@ def main() -> None:
     cfg = load_config(args.config)
     artifacts = cfg["artifacts"]
 
-    table_path = resolve_path(cfg, artifacts["processed_dir"]) / args.day
+    processed_dir = resolve_path(cfg, artifacts["processed_dir"])
+    if args.day:
+        table_path = processed_dir / args.day
+    else:
+        day_meta = cfg["dataset"]["days"][DEFAULT_DAY_KEY]
+        table_path = day_cache_path(processed_dir, DEFAULT_DAY_KEY, cfg["windowing"],
+                                     cfg["dataset"].get("mvp_row_cap_per_day"),
+                                     declared_packets_tag(day_meta))
     if not table_path.exists():
         available = sorted(p.name for p in resolve_path(cfg, artifacts["processed_dir"]).glob("*.parquet"))
         raise SystemExit(

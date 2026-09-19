@@ -60,15 +60,59 @@ def _bin_entropy(values: pd.Series, bins: int = 16) -> float:
     return shannon_entropy(counts)
 
 
-def parse_cic_timestamp(ts: pd.Series) -> pd.Series:
-    """Parse the CICFlowMeter Timestamp column to epoch seconds (UTC-naive).
+#: CIC-IDS2017 was captured at UNB in Fredericton, on Atlantic Daylight Time
+#: (UTC-3) in July 2017. The published CSVs print that local wall clock; the
+#: PCAPs carry true UTC epochs. Lifting the CSV clock by this many hours is
+#: what puts a flow and its own packets on the same timeline.
+CIC2017_UTC_OFFSET_HOURS: float = 3.0
+
+#: The published CSVs also print a 12-hour clock and drop the AM/PM marker,
+#: so an afternoon day-file writes 13:00 as "1:00". The captures run
+#: 09:00-17:00 local, so the hours that actually occur are {8..12} in the
+#: morning and {1..5} in the afternoon: 6 and 7 never appear and every hour
+#: at or below this bound is unambiguously PM.
+CIC2017_PM_HOUR_MAX: int = 7
+
+#: Short name for the flow timebase the two constants above define. It goes
+#: in the windowed-table cache key (train.pipeline.day_cache_path) because a
+#: table built on a different timebase is a different table — nothing else in
+#: that key would change, so a stale cache would otherwise be served silently.
+CIC2017_TIMEBASE_TAG: str = "utc12h"
+
+
+def parse_cic_timestamp(
+    ts: pd.Series,
+    *,
+    twelve_hour: bool = True,
+    utc_offset_hours: float = CIC2017_UTC_OFFSET_HOURS,
+) -> pd.Series:
+    """Parse the CICFlowMeter Timestamp column to epoch seconds (true UTC).
 
     CIC-IDS2017 releases are inconsistent about exact timestamp formatting
     across days; unparseable rows become NaT and are dropped by the caller
     (logged), never silently coerced to an arbitrary time.
+
+    Two defects in the published CSVs are corrected here by default, because
+    leaving either one in place is silent rather than loud — the timestamps
+    stay well-formed and plausible, they just describe the wrong instant, and
+    the (host_id, window_ts) join in join.py then quietly drops to a few
+    percent of its rows with all packet-derived features zero-filled:
+
+    `twelve_hour` undoes the missing AM/PM marker (see CIC2017_PM_HOUR_MAX)
+    and `utc_offset_hours` undoes the local-time clock (see
+    CIC2017_UTC_OFFSET_HOURS). Both are keyword arguments so a release that
+    does not share these defects can be read literally, but no caller in this
+    project should need to.
     """
     # CIC-IDS2017's "TrafficLabelling" release uses DD/MM/YYYY HH:MM:SS.
     parsed = pd.to_datetime(ts, errors="coerce", dayfirst=True)
+    if twelve_hour:
+        # Noon is already 12 on a 12-hour clock, so only hours at or below
+        # the PM bound move; 12:xx must stay put rather than become 00:xx.
+        is_pm = parsed.dt.hour <= CIC2017_PM_HOUR_MAX
+        parsed = parsed + pd.to_timedelta(is_pm.astype("int64") * 12, unit="h")
+    if utc_offset_hours:
+        parsed = parsed + pd.Timedelta(hours=utc_offset_hours)
     epoch = pd.Series(np.nan, index=ts.index, dtype="float64")
     valid = parsed.notna()
     # `pd.to_datetime` does not always default to nanosecond resolution (it

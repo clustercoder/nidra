@@ -17,6 +17,7 @@ import pandas as pd
 import pytest
 
 from nidra.train import pipeline as pipeline_mod
+from nidra.data.windowize import CIC2017_TIMEBASE_TAG
 from nidra.train.pipeline import FLOW_ONLY_TAG, build_all_splits, day_cache_path, declared_packets_tag
 
 
@@ -90,11 +91,26 @@ def test_declared_tag_ignores_local_disk():
 
 def test_cache_key_matches_committed_naming_convention(tmp_path):
     """The committed files are named e.g.
-    monday__w30__m36__Monday-WorkingHours_packets.parquet__capNone.parquet —
+    monday__w30__m36__Monday-WorkingHours_packets.parquet__capNone__utc12h.parquet —
     if this format drifts, every committed cache silently stops matching."""
     path = day_cache_path(tmp_path, "monday", {"window_seconds": 30, "min_windows_per_host": 36},
                           None, "Monday-WorkingHours_packets.parquet")
-    assert path.name == "monday__w30__m36__Monday-WorkingHours_packets.parquet__capNone.parquet"
+    assert path.name == (
+        "monday__w30__m36__Monday-WorkingHours_packets.parquet__capNone__utc12h.parquet"
+    )
+
+
+def test_cache_key_carries_the_timebase_tag():
+    """The flow timebase is not derivable from anything else in the key, and
+    getting it wrong changes every packet-derived feature in the table (the
+    CSV clock defects — see windowize.parse_cic_timestamp — left 11 of 45
+    features ~always zero). A cache written under the old timebase must not
+    be served to a run using the new one, so the tag is part of the name."""
+    key = {"window_seconds": 30, "min_windows_per_host": 36}
+    path = day_cache_path("/p", "monday", key, None, "M.parquet")
+    assert f"__{CIC2017_TIMEBASE_TAG}." in path.name
+    # And the pre-fix naming must no longer be produced by anything.
+    assert path.name != "monday__w30__m36__M.parquet__capNone.parquet"
 
 
 def test_committed_cache_serves_day_with_no_raw_csv_and_no_packet_parquet(

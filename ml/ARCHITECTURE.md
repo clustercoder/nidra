@@ -42,7 +42,27 @@ Geometry, fixed across the pipeline, model and serving: **Δ = 30s** windows,
 raw CIC-IDS2017 CSVs  ──┐
                         ├─> windowize ─> state table ─> splits ─> windowed tensors
 tshark packet parquet ──┘   [host,ts,45]   + labels      temporal    [N,L,F],[N,K,F]
+
+an uploaded pcap ─> tshark ─> flow_assemble ─┘   (no CSV, no labels)
 ```
+
+The two inputs are joined on `(host_id, window_ts)` and nothing else — no
+five-tuple matching. That join is only as good as the clocks agree, and for a
+long time they did not: CIC-IDS2017's CSVs print the capture site's local time
+(UTC-3) on a 12-hour dial with no AM/PM marker, while the PCAPs carry true UTC.
+`parse_cic_timestamp` undoes both, and the correction is stamped into the
+windowed-table cache key and into the saved scaler's metadata, because getting
+it wrong changes every packet-derived column while raising nothing. See Run 7
+in `REAL_DATA_RESULTS.md`.
+
+An uploaded capture has no CICFlowMeter CSV, so `nidra/data/flow_assemble.py`
+reconstructs the fifteen flow features from the packets. That reconstruction is
+measured, not assumed: `scripts/validate_flow_assembly.py` compares the same
+`(host, window)` computed both ways on the one capture where both views exist.
+The volume and timing features track (Spearman 0.85-0.92); the TCP flag ratios
+do not, and `urg_ratio` cannot be reconstructed at all. Those residuals travel
+with every uploaded analysis in `source.fidelity`, so a page built from
+reconstructed flows cannot be read as if it were the labelled replay.
 
 `nidra/data/windowize.py` enforces the invariants that make the rest sound:
 window boundaries align to absolute epoch multiples (never to the first
@@ -144,9 +164,17 @@ statistic of the same distribution, not a different model and not a lowered
 bar, and monotonic in the underlying per-trajectory risk, so it invents no
 separability the ranking did not already have. Same checkpoints, F1 **0.84**.
 
+Those two figures are the Run 6 pooling sweep, measured as a matched pair on
+the pre-Run-7 checkpoints; they are quoted together because they isolate the
+pooling change and nothing else. The shipped ensemble now scores test F1
+**0.906** after the Run 7 data correction and retrain — see
+`REAL_DATA_RESULTS.md`.
+
 `q=0.85` was selected by a sweep on both splits. It is scale-specific: at
 reduced scale `q=0.5` won, and at full scale `q=0.5` is the *worst* setting
-tested (test AUC-PR collapses 0.925 → 0.499).
+tested (test AUC-PR collapses 0.925 → 0.499). That sweep also predates the
+Run 7 retrain; it has not been repeated on the new checkpoints, so `q=0.85`
+is carried forward on the earlier evidence rather than re-derived.
 
 ## Serving
 
@@ -185,3 +213,11 @@ M1 CPU.
    statistic is refused under another rather than silently applied.
 5. **Splits are temporal.** No random shuffling anywhere near split
    construction.
+6. **An artifact states what data it was built from, and is refused when
+   that does not match.** The windowed-table cache key carries the flow
+   timebase; the scaler's metadata carries it too and
+   `prepare_training_data` refits rather than reuse a mismatch. Both exist
+   because a stale artifact here does not fail — it trains.
+7. **A reconstructed input says so.** Anything derived from assembled rather
+   than published flows carries its measured fidelity, and an analysis with
+   no ground truth never reports precision or recall.

@@ -4,10 +4,14 @@ import type { Metadata } from "next";
    websocket. /demo must render with every container stopped. The replay is
    generated offline by scripts/make_demo_replay.py: real CIC-IDS2017 windows
    scored by the real ensemble, through the same predictor the inference worker
-   loads. Static, but not fabricated. */
+   loads. Static, but not fabricated.
+
+   The capture-upload panel inside the console does call /api/analyze-pcap, but
+   only when someone drops a file in — the page itself still renders with the
+   whole backend stopped. */
 import { forecastsByHost, replay } from "@/lib/demo-replay";
 
-import { DemoConsole } from "./demo-console";
+import { DemoWorkspace } from "./demo-workspace";
 
 export const metadata: Metadata = {
   title: "Demo console — NIDRA",
@@ -41,7 +45,7 @@ export default async function DemoPage({ searchParams }: PageProps<"/demo">) {
   const tValid = Number.isInteger(tParsed) && tParsed >= 0 && tParsed < windowCount;
 
   return (
-    <DemoConsole
+    <DemoWorkspace
       model={replay.model}
       hosts={hosts}
       byHost={byHost}

@@ -27,11 +27,47 @@ def test_parse_cic_timestamp_returns_correct_epoch_seconds_regardless_of_pandas_
     # int, silently producing an epoch 1000x too small (and therefore
     # corrupting every window_ts) whenever pd.to_datetime returned
     # microsecond resolution instead — with no exception raised anywhere.
+    #
+    # 1497513601 is 15/06/2017 08:00:01 read as a naive wall clock; the
+    # dataset corrections then move it to the UTC instant the PCAPs use.
     ts = pd.Series(["15/06/2017 08:00:01", "15/06/2017 08:00:02", "not a date"])
-    epoch = parse_cic_timestamp(ts)
+    epoch = parse_cic_timestamp(ts, twelve_hour=False, utc_offset_hours=0.0)
     assert epoch.iloc[0] == 1497513601
     assert epoch.iloc[1] == 1497513602
     assert pd.isna(epoch.iloc[2])
+
+
+def test_parse_cic_timestamp_lifts_local_wall_clock_to_the_utc_the_pcaps_use():
+    # CIC-IDS2017's CSVs record the capture site's local clock (UNB, Atlantic
+    # Daylight Time = UTC-3 in July 2017); the PCAPs carry true UTC epochs.
+    # Reading the CSV as UTC put every flow 3 hours before its own packets,
+    # so the (host_id, window_ts) join in join.py matched almost nothing and
+    # all 11 packet-derived features were ~always zero. Friday's capture
+    # opens at 08:59 local == 11:59 UTC, which is where the Friday PCAP's
+    # first packet (11:59:50 UTC) actually is.
+    epoch = parse_cic_timestamp(pd.Series(["7/7/2017 8:59"]))
+    assert pd.Timestamp(epoch.iloc[0], unit="s") == pd.Timestamp("2017-07-07 11:59:00")
+
+
+def test_parse_cic_timestamp_reads_the_hour_as_12_hour_with_no_meridiem():
+    # The published CSVs print a 12-hour clock and drop the AM/PM marker
+    # entirely, so the afternoon day-files say "1:00" for 13:00. Read
+    # literally, every afternoon capture lands in the small hours and can
+    # never meet its own packets. The captures run 09:00-17:00 local, so the
+    # hours present are exactly {8..12} (morning) and {1..5} (afternoon) —
+    # hours 6 and 7 never occur and the disambiguation is total.
+    epoch = parse_cic_timestamp(pd.Series(["7/7/2017 1:00", "7/7/2017 11:00"]))
+    # 13:00 local -> 16:00 UTC, and 11:00 local -> 14:00 UTC.
+    assert pd.Timestamp(epoch.iloc[0], unit="s") == pd.Timestamp("2017-07-07 16:00:00")
+    assert pd.Timestamp(epoch.iloc[1], unit="s") == pd.Timestamp("2017-07-07 14:00:00")
+
+
+def test_parse_cic_timestamp_keeps_noon_at_noon():
+    # The one hour a naive `hour < 8 -> hour + 12` rule gets wrong in the
+    # other direction: 12:xx is noon, not midnight, and Monday/Wednesday both
+    # carry tens of thousands of 12:xx rows.
+    epoch = parse_cic_timestamp(pd.Series(["03/07/2017 12:30:00"]))
+    assert pd.Timestamp(epoch.iloc[0], unit="s") == pd.Timestamp("2017-07-03 15:30:00")
 
 
 def test_align_window_exact_multiples():

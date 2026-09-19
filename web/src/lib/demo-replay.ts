@@ -1,10 +1,17 @@
 /**
  * The committed replay fixture, and the shapes the console renders.
  *
- * This module is the whole data surface for /demo. It reads one JSON file and
- * nothing else — no network, no API client — so the page renders with every
- * container stopped. The fixture is synthesised (see `source.summary`), and the
- * banner on the page says so.
+ * This module is the whole data surface for the committed replay. It reads one
+ * JSON file and nothing else — no network, no API client — so /demo renders
+ * with every container stopped. The fixture is not synthesised: every value in
+ * it is the trained ensemble's own output on real CIC-IDS2017 windows (see
+ * `source.summary` and scripts/make_demo_replay.py).
+ *
+ * `UploadedReplay` is the same shape with labels removed and fidelity notes
+ * added — what /api/analyze-pcap returns for a capture the model has never
+ * seen. The console renders both through the same components, so there is no
+ * second rendering path that could present an upload more confidently than the
+ * evidence supports.
  */
 
 import fixture from "@/fixtures/demo-replay.json";
@@ -90,15 +97,55 @@ type Replay = {
   explanations: Record<string, ExplainInfo>;
 };
 
+/** What the capture upload returns. `fidelity` is measured, not editorial —
+ *  see scripts/analyze_pcap.py's FIDELITY_NOTES. */
+export type UploadedReplay = Replay & {
+  source: Replay["source"] & {
+    kind: "upload";
+    fidelity: string[];
+    capture: {
+      filename: string;
+      packets: number;
+      hosts_in_capture: number;
+      hosts_shown: number;
+      window_count: number;
+      first_window_utc: string;
+      last_window_utc: string;
+    };
+  };
+};
+
 export const replay = fixture as unknown as Replay;
 
 /** Forecasts grouped by host, in window order. */
-export function forecastsByHost(): Record<string, Forecast[]> {
+export function forecastsByHost(
+  forecasts: Forecast[] = replay.forecasts,
+): Record<string, Forecast[]> {
   const out: Record<string, Forecast[]> = {};
-  for (const f of replay.forecasts) (out[f.host_id] ??= []).push(f);
+  for (const f of forecasts) (out[f.host_id] ??= []).push(f);
   for (const list of Object.values(out))
     list.sort((a, b) => Date.parse(a.origin_ts) - Date.parse(b.origin_ts));
   return out;
+}
+
+/**
+ * Hosts that carry the full window sequence, and that sequence's length.
+ *
+ * Ranking hosts against each other at an index is only meaningful when the
+ * index is the same instant for all of them, so a host on a different timeline
+ * is dropped rather than shown misaligned. Returns null when nothing is left
+ * to show — the caller decides whether that is a thrown error (the committed
+ * fixture, which is a build-time bug) or a message (an upload, which is data).
+ */
+export function alignedHosts(
+  hosts: string[],
+  byHost: Record<string, Forecast[]>,
+): { hosts: string[]; windowCount: number } | null {
+  const present = hosts.filter((h) => byHost[h]?.length);
+  if (present.length === 0) return null;
+  const longest = Math.max(...present.map((h) => byHost[h].length));
+  const aligned = present.filter((h) => byHost[h].length === longest);
+  return { hosts: aligned, windowCount: longest };
 }
 
 /**

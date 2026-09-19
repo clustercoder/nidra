@@ -20,46 +20,46 @@
   "risk_threshold": 0.75,
   "forecast_chunk_size": 500,
   "config_hash": "5f50ab5570322547",
-  "git_commit": "c938537cebae69d0f46628df9079932ba0594265",
+  "git_commit": "c8785f2f2d7d4d5b6a66d8b1144f68a1ab2749ce",
   "ablations": {
     "persistence": {
-      "auc_pr_persistence": 0.5482004097311163,
-      "auc_pr_world_model": 0.9028021167162563,
-      "auc_collapse": 0.35460170698514004,
-      "nrmse_persistence_mean": 6.338448616257436,
-      "nrmse_world_model_mean": 5.780771866583207,
+      "auc_pr_persistence": 0.6174197162945452,
+      "auc_pr_world_model": 0.9061514151834601,
+      "auc_collapse": 0.2887316988889149,
+      "nrmse_persistence_mean": 4.163621970808768,
+      "nrmse_world_model_mean": 3.0960857320803137,
       "interpretation": "world model beats persistence"
     },
     "time_shuffle": {
-      "auc_pr_normal_order": 0.9023457417504798,
-      "auc_pr_shuffled_order": 0.9115054103175184,
-      "collapse": -0.009159668567038648,
+      "auc_pr_normal_order": 0.9070709127298132,
+      "auc_pr_shuffled_order": 0.89935019602065,
+      "collapse": 0.007720716709163189,
       "interpretation": "NO COLLAPSE under shuffling \u2014 the model may be using per-window features only, not real temporal structure; this is a reportable negative result, not a bug to hide"
     },
     "horizon_curve": {
       "auc_pr_by_k": [
-        0.29999813355891014,
-        0.17104775701839486,
-        0.30670967459316767,
-        0.241228739387432,
-        0.3404025150181108,
-        0.2818545429213949
+        0.24949050432887404,
+        0.18630689563407682,
+        0.1579072987002476,
+        0.15243725988899015,
+        0.15438144376426416,
+        0.15505886883754366
       ],
       "nrmse_by_k": [
-        6.099202847858228,
-        4.431621235991229,
-        6.221918695698916,
-        5.065139964187894,
-        6.427391281608522,
-        5.6903210554673045
+        3.0455331173893154,
+        2.6357630110845025,
+        3.109937298651672,
+        2.9259651345057396,
+        3.2916529303235027,
+        3.2125463851659783
       ],
       "flat_curve_leakage_warning": false
     },
     "surprise_signal": {
-      "mean_error_benign": 0.20655213866875952,
-      "mean_error_pre_attack": 2.8168429079436836,
-      "n_benign": 2150,
-      "n_pre_attack": 1850,
+      "mean_error_benign": 0.22647530457557327,
+      "mean_error_pre_attack": 2.2601773109099517,
+      "n_benign": 2147,
+      "n_pre_attack": 1853,
       "error_rises_before_onset": true
     },
     "nrmse_normalization": {
@@ -67,21 +67,16 @@
       "scale_floor": 0.05,
       "low_variance_features_floored": [
         "syn_ratio",
-        "ack_ratio",
         "rst_ratio",
         "fin_ratio",
         "psh_ratio",
         "urg_ratio",
-        "tcp_window_entropy",
         "frag_flag_rate",
-        "payload_size_entropy",
-        "retrans_count",
         "retrans_rate",
         "local_clustering_coeff",
         "d_syn_ratio",
         "d_retrans_rate",
-        "slope3_syn_ratio",
-        "slope3_dst_port_entropy"
+        "slope3_syn_ratio"
       ]
     }
   }

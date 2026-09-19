@@ -13,7 +13,8 @@ import pytest
 
 from nidra.data.schema import CONTEXT_LENGTH, FEATURE_ORDER, HORIZON_LENGTH
 from nidra.eval.calibrate import save_calibration
-from nidra.serve.predictor import NidraPredictor
+from nidra.explain.counterfactual import COUNTERFACTUAL_LABEL
+from nidra.serve.predictor import MODEL_VERSION, NidraPredictor
 
 
 def test_forecast_output_contract(trained_predictor):
@@ -184,17 +185,79 @@ def test_counterfactual_output_contract(trained_predictor):
     states = windowed["train"].X[0]
     result = predictor.counterfactual(states, feature_name="new_peer_count", clamp_value=0.0)
     assert result["label"] == "model-internal what-if"
-    assert len(result["risk_mean_k"]) == HORIZON_LENGTH
+    assert len(result["counterfactual"]) == HORIZON_LENGTH
+
+
+def test_counterfactual_returns_the_two_curves_the_api_renders(trained_predictor):
+    """The serving plane overlays a baseline curve and a clamped one, reading
+    `original` and `counterfactual` as lists of {k, p_compromise, ci_low,
+    ci_high}. StubPredictor returned exactly that and the API was built
+    against it; NidraPredictor returned `risk_mean_k`/`risk_ci_*_k` arrays
+    instead. Nothing failed — `payload.get("original", [])` is a clean miss —
+    so /api/v1/counterfactual answered 200 with both curves empty.
+
+    A Protocol is `@runtime_checkable` on method NAMES only, which is why
+    swapping the implementation behind it did not catch this. The response
+    shape needs its own test.
+    """
+    predictor, windowed = trained_predictor
+    states = windowed["train"].X[0]
+    payload = predictor.counterfactual(states, feature_name="new_peer_count", clamp_value=0.0)
+
+    assert payload["label"] == COUNTERFACTUAL_LABEL
+    assert payload["feature"] == "new_peer_count"
+    assert payload["model_version"] == MODEL_VERSION
+    for key in ("original", "counterfactual"):
+        curve = payload[key]
+        assert [p["k"] for p in curve] == list(range(1, HORIZON_LENGTH + 1)), key
+        for point in curve:
+            assert 0.0 <= point["ci_low"] <= point["p_compromise"] <= point["ci_high"] <= 1.0
+
+
+def test_the_predictor_names_the_model_it_is(trained_predictor):
+    """`/api/v1/model` reports `predictor.model_version`. Without the
+    property it answered "unknown", so a running deployment could not say
+    which checkpoint was serving it."""
+    predictor, _ = trained_predictor
+    assert predictor.model_version == MODEL_VERSION
 
 
 def test_explain_output_contract(trained_predictor):
     predictor, windowed = trained_predictor
     states = windowed["train"].X[0]
-    result = predictor.explain(states, horizon_k=0)
+    result = predictor.explain(states, horizon_k=1)
     assert "current_risk_attributions" in result
     assert "predicted_stage_attributions" in result
     assert "temporal_saliency" in result
     assert len(result["current_risk_attributions"]) <= 10
+
+
+def test_explain_counts_horizon_steps_from_one_like_the_rest_of_the_protocol(
+    trained_predictor,
+):
+    """`horizon_k` means the same thing here as the `k` on a HorizonPoint and
+    the `k` on /api/v1/explain: step 1 is the first projected window and step
+    K is the last.
+
+    This is the bug's actual root, so it is the thing pinned. NidraPredictor
+    read `horizon_k` as a 0-based tensor index while StubPredictor — which the
+    HTTP layer was written against — read it as 1-based. Nothing converted at
+    the boundary, so asking the real model to explain the end of its own cone
+    indexed one step past the rollout and raised IndexError: a 500 on a
+    correctly formed request, on every /api/v1/explain call.
+    """
+    predictor, windowed = trained_predictor
+    states = windowed["train"].X[0]
+
+    # Both ends of the range are valid...
+    assert predictor.explain(states, horizon_k=1)["horizon_k"] == 1
+    assert predictor.explain(states, horizon_k=HORIZON_LENGTH)["horizon_k"] == HORIZON_LENGTH
+
+    # ...and neither 0 nor K+1 is. ValueError, not IndexError: the API turns
+    # this one into a 422 and lets anything else become a 500.
+    for bad in (0, -1, HORIZON_LENGTH + 1):
+        with pytest.raises(ValueError, match="horizon_k"):
+            predictor.explain(states, horizon_k=bad)
 
 
 def test_scaler_never_refit_by_predictor(trained_predictor):

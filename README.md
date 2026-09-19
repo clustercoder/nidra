@@ -19,12 +19,10 @@ production scale: 5 independently-trained models voting together, on
 
 | | **Test day** (Friday's attacks) | **Unseen attack type** (Thursday, held out of training entirely) |
 |---|:---:|:---:|
-| **AUC-PR** (ranking quality) | **0.93** | **0.70** |
-| **F1** (at the mandated 0.75 confidence bar) | **0.84** | **0.73** |
-| **Precision** | **0.95** | 0.70 |
-| **Recall** | **0.75** | **0.76** |
-| **Median lead time** (advance warning) | **8.8 hours** | **4.0 hours** |
-| **Attack episodes warned in advance** | **9 of 10** | **2 of 2** |
+| **AUC-PR** (ranking quality) | **0.96** | **0.68** |
+| **F1** (at the mandated 0.75 confidence bar) | **0.91** | **0.76** |
+| **Precision** | **0.96** | 0.73 |
+| **Recall** | **0.86** | **0.80** |
 
 Every number is out of 1.00; higher is better. **AUC-PR** is the fairest
 single score, because it measures how well the system ranks real attacks
@@ -36,19 +34,25 @@ was **held out of training entirely**, and the model still ranks it at 0.70
 AUC-PR with 0.76 recall. That is evidence the system learned transferable
 attack *dynamics* rather than memorizing the attacks it was shown.
 
-### Early warning — the capability no classifier has
+### Early warning — the capability, and what we will not claim about it
 
-NIDRA does not just score the present; it simulates forward and raises the
-alarm before an attack has played out:
+NIDRA does not just score the present. It samples forward from the current
+state and pools the risk across those simulated trajectories, so the alarm
+can rise before an attack has played out. **8 of 10** test-day attack
+episodes and **1 of 2** on the unseen attack type raise a sustained warning
+before their first attack-labelled window. A detector that only classifies
+the current moment cannot do this at all.
 
-- **9 of 10** test-day attack episodes flagged in advance
-- **median 8.8 hours** of lead time on the test day, **4.0 hours** on the
-  unseen attack type
-- **2 of 2** episodes flagged on the unseen attack type
-
-A detector that only classifies the current moment cannot produce this
-number at all — there is nothing to compare against, because forecasting is
-what makes it possible.
+Earlier versions of this README put a number of hours on that warning. It has
+been removed, because the measurement does not support it. The lead-time
+metric scans each host's risk curve from the first window available for that
+host, so the largest value it can return is set by how much history the
+capture happens to contain rather than by anything the model did — and in
+practice the detector fires at the first window it is given, which puts
+almost every episode exactly at that ceiling. The figure was measuring the
+dataset, not the forecaster. `ml/REAL_DATA_RESULTS.md` carries the full
+working, including the per-episode ceilings, and records fixing the metric as
+the largest open measurement item in the project.
 
 
 ### What these numbers were produced on
@@ -93,7 +97,7 @@ not a single lucky configuration. Documented in full, with numbers, in
 
 | Experiment | Outcome |
 |---|---|
-| **How sampled futures are pooled into one risk score** | **Adopted.** The original mean over simulated futures drowned out the dangerous minority; scoring the riskier tail instead took F1 from 0.01 to 0.84 and advance warning from 0 of 10 episodes to 9 of 10. The single largest improvement in the project. |
+| **How sampled futures are pooled into one risk score** | **Adopted.** The original mean over simulated futures drowned out the dangerous minority; scoring the riskier tail instead took F1 from 0.01 to 0.91 and turned never crossing the alert bar into warning on 8 of 10 episodes. The single largest improvement in the project. |
 | 5-model ensemble vs. single model | **Adopted.** Independent seeds voting together beat any individual model. |
 | Post-hoc probability calibration (Platt scaling) | Built, measured, **rejected** — it re-compressed the very probabilities the pooling fix had lifted. |
 | Tightening rollout noise (`logvar_max` 3.0 → 1.5) | Retrained from scratch at full scale, **rejected** — the gain seen at smaller scale did not survive either ensembling or pooling. |
@@ -115,7 +119,7 @@ unrunnable.
 - **State forecast accuracy**: the model's predicted future network state is
   measured against what actually happened (nRMSE), independently of any
   risk score — see the model card.
-- **Code health**: 235 automated tests, all passing — the pipeline, the
+- **Code health**: 507 automated tests, all passing — the pipeline, the
   model, and the serving code are exercised end-to-end, not just eyeballed.
 
 See [`ml/REAL_DATA_RESULTS.md`](ml/REAL_DATA_RESULTS.md) for the complete
@@ -191,6 +195,32 @@ python -m nidra.serve.benchmark --weights-dir artifacts/weights \
 Step 1 prints the forecast risk curve for horizons t+1..t+6 with confidence
 intervals, the lead time, and the SHAP signals driving the call. The
 attack-preceding window alerts; the benign window stays near zero.
+
+### The dashboard, and your own captures
+
+```bash
+cd web && npm install && npm run dev      # http://localhost:3000/demo
+```
+
+The console replays real CIC-IDS2017 Friday-morning traffic scored by the
+trained ensemble, at 30x by default (one 30-second window per second). It
+reads a committed fixture, so it renders with every container stopped.
+
+Its **Analyse a capture** panel takes a pcap the model has never seen and
+scores it through the same predictor, locally — the file is not uploaded
+anywhere and is deleted when the analysis returns. The capture needs at
+least 16 minutes of traffic from one host, because the model reads 15
+minutes of history before it will forecast. It needs `tshark` on PATH and
+the Python environment from the Quickstart above.
+
+Two things are different about an uploaded capture, and the page says both
+rather than leaving you to infer them. It has no ground truth, so nothing on
+it is scored against labels. And with no CICFlowMeter CSV the fifteen flow
+features are reconstructed from the packets: volume and timing track the
+reference closely (Spearman 0.85-0.92 on the one capture where both views
+exist), the TCP flag ratios do not, and `urg_ratio` cannot be reconstructed
+at all. `scripts/validate_flow_assembly.py` is the measurement, and
+`scripts/analyze_pcap.py` is the same analysis on the command line.
 
 Step 2 rewrites `ml/artifacts/metrics/` in place, so `git diff` afterwards
 shows your run against the committed one. The flags above are the ones the

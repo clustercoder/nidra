@@ -21,25 +21,47 @@ from nidra.models.world_model import WorldModel
 COUNTERFACTUAL_LABEL = "model-internal what-if"
 
 
+#: Seed used for the sampled trajectories in a what-if comparison. Fixed so
+#: that the baseline and the clamped rollout draw the SAME noise (common
+#: random numbers) and so that re-running a what-if gives the same answer —
+#: see `compare_to_baseline`.
+COUNTERFACTUAL_SEED = 20170707
+
+
 @torch.no_grad()
 def counterfactual_rollout(
     x: np.ndarray,
     model: WorldModel,
-    feature_name: str,
+    feature_name: str | None,
     clamp_value: float,
     K: int = 6,
     n_samples: int = 200,
     stochastic: bool = True,
+    seed: int | None = None,
 ) -> dict:
     """x: [L, F] or [B, L, F], already scaled the same way training data
     was. Clamps `feature_name` to `clamp_value` at the START of the rollout
     AND after every subsequent predicted step, then re-simulates — identical
     machinery to WorldModel.rollout, with one line different, exactly as
     specified in IMPLEMENTATION-ML.md §6(d).
+
+    `feature_name=None` clamps nothing and runs the same code on the same
+    path: that is how `compare_to_baseline` gets a baseline whose only
+    difference from the clamped run is the clamp itself. Producing the
+    baseline from a different function would reintroduce exactly the
+    discrepancy this is meant to remove.
+
+    `seed`, when given, seeds the trajectory sampler. Two calls with the same
+    seed draw the same noise, which is what makes the difference between two
+    curves attributable to the clamp rather than to Monte Carlo error.
     """
-    if feature_name not in FEATURE_ORDER:
-        raise ValueError(f"unknown feature {feature_name!r}; must be one of FEATURE_ORDER")
-    feature_idx = FEATURE_ORDER.index(feature_name)
+    feature_idx: int | None = None
+    if feature_name is not None:
+        if feature_name not in FEATURE_ORDER:
+            raise ValueError(f"unknown feature {feature_name!r}; must be one of FEATURE_ORDER")
+        feature_idx = FEATURE_ORDER.index(feature_name)
+    if seed is not None:
+        torch.manual_seed(seed)
 
     x_t = torch.from_numpy(x).float()
     if x_t.dim() == 2:
@@ -49,7 +71,8 @@ def counterfactual_rollout(
     x_tiled = x_t.repeat_interleave(n_samples, dim=0) if n_samples > 1 else x_t
     h_t, h = model.encoder(x_tiled)
     cur = x_tiled[:, -1, :].clone()
-    cur[:, feature_idx] = clamp_value
+    if feature_idx is not None:
+        cur[:, feature_idx] = clamp_value
 
     traj = []
     for _ in range(K):
@@ -58,7 +81,8 @@ def counterfactual_rollout(
         if stochastic:
             nxt = nxt + torch.randn_like(mu) * (0.5 * logvar).exp()
         nxt = nxt.clamp(-model.state_clamp, model.state_clamp)
-        nxt[:, feature_idx] = clamp_value  # re-clamp after every step
+        if feature_idx is not None:
+            nxt[:, feature_idx] = clamp_value  # re-clamp after every step
         traj.append(nxt)
         h_t, h = model.encoder(nxt.unsqueeze(1), h)
         cur = nxt
@@ -91,19 +115,34 @@ def compare_to_baseline(
     clamp_value: float,
     K: int = 6,
     n_samples: int = 200,
+    seed: int | None = COUNTERFACTUAL_SEED,
 ) -> dict:
     """Runs the normal rollout AND the counterfactual rollout on the same
     input and returns both curves side by side, so the caller (API/UI) can
     overlay them. Both are explicitly labelled — the baseline is not
     "ground truth", it is also a model output.
     """
-    x_batched = x if x.ndim == 3 else x[None, ...]
-    baseline = world_model_forecast(x_batched, model, K=K, n_samples=n_samples)
-    counterfactual = counterfactual_rollout(x, model, feature_name, clamp_value, K=K, n_samples=n_samples)
+    # Both curves come from the same function, on the same code path, seeded
+    # identically — so they draw the same trajectory noise and the only thing
+    # that differs between them is the clamp. Running the baseline through
+    # `world_model_forecast` instead left each curve with its own Monte Carlo
+    # error, which at a step where the clamp's real effect is small is enough
+    # to flip the sign of the difference the caller is being shown.
+    baseline = counterfactual_rollout(
+        x, model, None, 0.0, K=K, n_samples=n_samples, seed=seed,
+    )
+    counterfactual = counterfactual_rollout(
+        x, model, feature_name, clamp_value, K=K, n_samples=n_samples, seed=seed,
+    )
     return {
         "label": COUNTERFACTUAL_LABEL,
         "baseline_risk_mean_k": baseline["risk_mean_k"],
         "counterfactual_risk_mean_k": counterfactual["risk_mean_k"],
+        # The full rollouts too, so a caller that needs the confidence bands
+        # (the serving plane draws them) does not have to re-pair the two runs
+        # itself and risk getting the pairing wrong.
+        "baseline": baseline,
+        "counterfactual": counterfactual,
         "clamped_feature": feature_name,
         "clamp_value": clamp_value,
     }

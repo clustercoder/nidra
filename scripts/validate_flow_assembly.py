@@ -14,10 +14,17 @@ this compares them:
 Per-flow equality is not the target and is not achievable from packets alone
 (CICFlowMeter's splitting depends on internal activity timers). What has to
 hold is that the per-(host, window) feature distributions match, because those
-vectors are what the model actually consumes. The CSV's timestamps are local
-and the packets' are UTC, so windows are not compared pairwise — the
-comparison is between marginal distributions over all windows, which is
-exactly where a systematic shift would show.
+vectors are what the model actually consumes.
+
+Both sides are now on the same clock (windowize.parse_cic_timestamp corrects
+the CSV's local, 12-hour timestamps), so the comparison is PAIRED: the same
+(host, window) computed two ways. That matters, because the two sides do not
+see the same set of hosts — CICFlowMeter publishes flows this reconstruction
+never sources to the same host — and comparing marginal distributions over
+all windows then compares two different populations and reports the
+difference between them as if it were reconstruction error. Unpaired
+marginals are printed too, with the host populations alongside, so the gap
+between the two readings is visible rather than a choice made silently.
 
 Run:  .venv/bin/python scripts/validate_flow_assembly.py
 """
@@ -60,31 +67,70 @@ def windows_from_assembled(packets: pd.DataFrame) -> pd.DataFrame:
     return build_state_rows(flows, packets_w, window_seconds=WINDOW_SECONDS)
 
 
-#: CIC-IDS2017's CICFlowMeter CSVs carry LOCAL timestamps (UTC-3) while the
-#: pcaps carry true UTC epochs, and parse_cic_timestamp reads the CSV as UTC.
-#: Aligning the two costs nothing here and is required for the comparison to
-#: be between the same minutes of traffic. See CSV_UTC_OFFSET_H in
-#: nidra/data/join.py for what this means for the committed training tables.
-CSV_UTC_OFFSET_H = 3
-
-
 def windows_from_csv(csv_path: Path, packets: pd.DataFrame) -> pd.DataFrame:
+    # The CSV clock corrections (local time, 12-hour with no meridiem) are
+    # applied by windowize.parse_cic_timestamp, so both sides of this
+    # comparison are already on the pcaps' UTC timeline — nothing to shift
+    # here. This harness used to add the 3 hours itself; doing that now would
+    # put the reference 3 hours ahead of the packets it is compared against.
     flows_raw, _ = load_cicflowmeter_csv(csv_path)
     flows_w = prepare_flows_for_windowing(flows_raw, WINDOW_SECONDS)
-    flows_w = flows_w.assign(window_ts=flows_w.window_ts + CSV_UTC_OFFSET_H * 3600)
     packets_w = prepare_packets_for_windowing(packets, WINDOW_SECONDS)
     keep = set(packets_w.window_ts.unique())
     flows_w = flows_w[flows_w.window_ts.isin(keep)]
     return build_state_rows(flows_w, packets_w, window_seconds=WINDOW_SECONDS)
 
 
-def compare(reference: pd.DataFrame, assembled: pd.DataFrame) -> pd.DataFrame:
-    """Marginal distribution per feature. `ratio` is assembled/reference on the
-    median; 1.0 is agreement and an order of magnitude is a broken unit."""
-    # Inactive windows are structurally zero on both sides and would drown
-    # any real difference in a sea of agreeing zeros.
-    reference = reference[reference.is_active == 1]
-    assembled = assembled[assembled.is_active == 1]
+ACTIVE_KEY = ["host_id", "window_ts"]
+
+
+def _active(df: pd.DataFrame) -> pd.DataFrame:
+    """Inactive windows are structurally zero on both sides and would drown
+    any real difference in a sea of agreeing zeros."""
+    return df[df.is_active == 1]
+
+
+def pair(reference: pd.DataFrame, assembled: pd.DataFrame) -> pd.DataFrame:
+    """Inner-join the two state tables on (host, window), so every row is one
+    moment computed both ways."""
+    r, a = _active(reference), _active(assembled)
+    return r.merge(a, on=ACTIVE_KEY, how="inner", suffixes=("__ref", "__asm"))
+
+
+def compare_paired(paired: pd.DataFrame) -> pd.DataFrame:
+    """Per feature, over the (host, window) rows both sides produced.
+
+    `median_ratio` is the median of the per-row ratio — not the ratio of the
+    medians, which can look fine while every individual row is wrong.
+    `agree_frac` is the share of rows within 2x, the loosest standard under
+    which a feature is not misleading the model.
+    """
+    rows = []
+    for feat in FLOW_FEATURES:
+        r = paired[f"{feat}__ref"].to_numpy(float)
+        a = paired[f"{feat}__asm"].to_numpy(float)
+        both_zero = (r == 0) & (a == 0)
+        nz = ~both_zero & (r != 0)
+        ratio = np.divide(a[nz], r[nz]) if nz.any() else np.array([np.nan])
+        within = np.abs(np.log2(np.where(ratio > 0, ratio, np.nan))) <= 1.0
+        rows.append({
+            "feature": feat,
+            "n_compared": int(nz.sum()),
+            "both_zero": float(both_zero.mean()),
+            "median_ratio": float(np.nanmedian(ratio)),
+            "p10_ratio": float(np.nanpercentile(ratio, 10)),
+            "p90_ratio": float(np.nanpercentile(ratio, 90)),
+            "agree_within_2x": float(np.nanmean(within)) if nz.any() else np.nan,
+            "spearman": float(pd.Series(r).corr(pd.Series(a), method="spearman")),
+        })
+    return pd.DataFrame(rows)
+
+
+def compare_marginal(reference: pd.DataFrame, assembled: pd.DataFrame) -> pd.DataFrame:
+    """Unpaired marginals, for comparison with the paired table above. A large
+    disagreement here that the paired table does not show is a difference in
+    which hosts each side sees, not reconstruction error."""
+    reference, assembled = _active(reference), _active(assembled)
     rows = []
     for feat in FLOW_FEATURES:
         r, a = reference[feat].to_numpy(float), assembled[feat].to_numpy(float)
@@ -120,17 +166,28 @@ def main() -> None:
 
     assembled = windows_from_assembled(packets)
     reference = windows_from_csv(FLOW_CSV, packets)
+    pd.set_option("display.width", 220, "display.max_columns", 20)
+
+    ref_hosts = set(_active(reference).host_id)
+    asm_hosts = set(_active(assembled).host_id)
     print(f"reference windows: {len(reference):,}   assembled windows: {len(assembled):,}")
-
-    table = compare(reference, assembled)
-    print(f"active windows compared — reference {int((reference.is_active == 1).sum()):,}, "
+    print(f"active windows — reference {int((reference.is_active == 1).sum()):,}, "
           f"assembled {int((assembled.is_active == 1).sum()):,}")
-    pd.set_option("display.width", 200, "display.max_columns", 20)
-    print("\n" + table.to_string(index=False, float_format=lambda v: f"{v:,.4g}"))
+    print(f"hosts with an active window — reference {len(ref_hosts):,}, assembled "
+          f"{len(asm_hosts):,}, shared {len(ref_hosts & asm_hosts):,}")
 
-    bad = table[(table.ratio.notna()) & ((table.ratio > 3) | (table.ratio < 1 / 3))]
-    print("\nfeatures off by more than 3x on the median:",
+    paired = pair(reference, assembled)
+    print(f"\nPAIRED — {len(paired):,} (host, window) moments computed both ways")
+    ptable = compare_paired(paired)
+    print(ptable.to_string(index=False, float_format=lambda v: f"{v:,.4g}"))
+
+    bad = ptable[ptable.agree_within_2x < 0.5]
+    print("\nfeatures agreeing within 2x on fewer than half of paired moments:",
           ", ".join(bad.feature) if len(bad) else "none")
+
+    print("\nUNPAIRED marginals over all active windows (different host "
+          "populations — see the module docstring)")
+    print(compare_marginal(reference, assembled).to_string(index=False, float_format=lambda v: f"{v:,.4g}"))
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import * as React from "react";
 import { Activity, ListChecks, Radar, Server, ShieldAlert, Timer, Waypoints } from "lucide-react";
 
 import { ActivityFeed, type FeedItem } from "@/components/console/activity-feed";
+import { CaptureUpload } from "@/components/console/capture-upload";
 import { DetailDrawer } from "@/components/console/detail-drawer";
 import { ChartLegend, ForecastChart } from "@/components/console/forecast-chart";
 import { PostureHero } from "@/components/console/hero";
@@ -38,10 +39,11 @@ import {
   type ExplainInfo,
   type Forecast,
   type ModelInfo,
+  type UploadedReplay,
 } from "@/lib/demo-replay";
 
 const SPEEDS = [1, 10, 30, 60] as const;
-const DEFAULT_SPEED = 60;
+const DEFAULT_SPEED = 30;
 const RING_CAP = 200;
 const SPARK_WINDOWS = 24;
 /* Deep enough that a change-filtered feed still has something in it during a
@@ -67,6 +69,9 @@ export function DemoConsole({
   explanations,
   sourceSummary,
   initial,
+  uploaded,
+  onAnalysed,
+  onClearUpload,
 }: {
   model: ModelInfo;
   hosts: string[];
@@ -74,6 +79,12 @@ export function DemoConsole({
   explanations: Record<string, ExplainInfo>;
   sourceSummary: string;
   initial: { host?: string; t: number; paused: boolean };
+  /* Present when the console is showing an analysed upload rather than the
+     committed replay. The console renders both identically; this is only what
+     the capture view needs to describe what is on screen. */
+  uploaded?: UploadedReplay | null;
+  onAnalysed?: (replay: UploadedReplay) => void;
+  onClearUpload?: () => void;
 }) {
   const geometry = model.config;
   const windowCount = byHost[hosts[0]]?.length ?? 0;
@@ -100,9 +111,11 @@ export function DemoConsole({
   const [detail, setDetail] = React.useState<{ host: string; index: number } | null>(null);
 
   /* One rAF loop drives the clock: wall time scaled by the replay speed and
-     converted to whole windows, so 60x advances two windows a second rather
-     than re-rendering on every frame. It holds while a record is open —
-     reading a detail whose numbers move underneath you is unusable. */
+     converted to whole windows, so the default 30x advances one 30s window a
+     second rather than re-rendering on every frame. 60x is selectable but not
+     the default — at two windows a second the risk figures move faster than
+     anyone can read them. It holds while a record is open — reading a detail
+     whose numbers move underneath you is unusable. */
   React.useEffect(() => {
     if (!playing || windowCount === 0 || detail) return;
     let raf = 0;
@@ -254,7 +267,25 @@ export function DemoConsole({
           />
 
           <main className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
-            {view === "search" ? (
+            {view === "capture" ? (
+              <>
+                <PageHeader
+                  title="Analyse a capture"
+                  subtitle="Score a pcap the model has never seen, through the same ensemble this console is already running."
+                />
+                <CaptureUpload
+                  active={uploaded ?? null}
+                  onAnalysed={(r) => {
+                    onAnalysed?.(r);
+                    setView("dashboard");
+                  }}
+                  onClear={() => {
+                    onClearUpload?.();
+                    setView("dashboard");
+                  }}
+                />
+              </>
+            ) : view === "search" ? (
               <>
                 <PageHeader
                   title="Search"

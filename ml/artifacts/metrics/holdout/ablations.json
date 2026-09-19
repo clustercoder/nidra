@@ -20,46 +20,46 @@
   "risk_threshold": 0.75,
   "forecast_chunk_size": 500,
   "config_hash": "5f50ab5570322547",
-  "git_commit": "05edaa741b6ae7a549bf6854c452021bb173e3f3",
+  "git_commit": "c8785f2f2d7d4d5b6a66d8b1144f68a1ab2749ce",
   "ablations": {
     "persistence": {
-      "auc_pr_persistence": 0.5581644021687125,
-      "auc_pr_world_model": 0.6349414695610258,
-      "auc_collapse": 0.07677706739231327,
-      "nrmse_persistence_mean": 2.6537224339691687,
-      "nrmse_world_model_mean": 2.3842326865839785,
+      "auc_pr_persistence": 0.5203618857446852,
+      "auc_pr_world_model": 0.6487554741433167,
+      "auc_collapse": 0.12839358839863146,
+      "nrmse_persistence_mean": 2.3252248013959576,
+      "nrmse_world_model_mean": 1.8701349247221697,
       "interpretation": "world model beats persistence"
     },
     "time_shuffle": {
-      "auc_pr_normal_order": 0.6930928913731742,
-      "auc_pr_shuffled_order": 0.6644556537309791,
-      "collapse": 0.028637237642195057,
+      "auc_pr_normal_order": 0.6369042148787605,
+      "auc_pr_shuffled_order": 0.5729305274680314,
+      "collapse": 0.06397368741072906,
       "interpretation": "temporal order matters (collapse observed)"
     },
     "horizon_curve": {
       "auc_pr_by_k": [
-        0.12185279263566469,
-        0.24463525112674073,
-        0.1450722638751658,
-        0.44414852874919775,
-        0.14474975106267482,
-        0.47627567570307955
+        0.1118747017578781,
+        0.2674333594712758,
+        0.08042855801952455,
+        0.1499757487200835,
+        0.07477193106933425,
+        0.1766142316604301
       ],
       "nrmse_by_k": [
-        2.534549377842417,
-        1.8603872010165239,
-        2.6198514776195845,
-        2.0588272348475134,
-        2.687499693322517,
-        2.2594922420934016
+        1.9463967616311852,
+        1.520461156252049,
+        1.94869978595125,
+        1.6334766271387495,
+        2.0423551102746393,
+        1.893197860655198
       ],
       "flat_curve_leakage_warning": false
     },
     "surprise_signal": {
-      "mean_error_benign": 0.18410841431599617,
-      "mean_error_pre_attack": 2.4703698459620607,
-      "n_benign": 3726,
-      "n_pre_attack": 274,
+      "mean_error_benign": 0.17373907021683188,
+      "mean_error_pre_attack": 2.5002170938422212,
+      "n_benign": 3755,
+      "n_pre_attack": 245,
       "error_rises_before_onset": true
     },
     "nrmse_normalization": {
@@ -67,21 +67,16 @@
       "scale_floor": 0.05,
       "low_variance_features_floored": [
         "syn_ratio",
-        "ack_ratio",
         "rst_ratio",
         "fin_ratio",
         "psh_ratio",
         "urg_ratio",
-        "tcp_window_entropy",
         "frag_flag_rate",
-        "payload_size_entropy",
-        "retrans_count",
         "retrans_rate",
         "local_clustering_coeff",
         "d_syn_ratio",
         "d_retrans_rate",
-        "slope3_syn_ratio",
-        "slope3_dst_port_entropy"
+        "slope3_syn_ratio"
       ]
     }
   }

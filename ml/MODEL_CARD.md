@@ -62,6 +62,19 @@ extracted for real packet-level features). Train: Monday (benign) + Tuesday
 See `REAL_DATA_RESULTS.md` §"What changed since Run 1" for exact windowing/
 sample-cap numbers.
 
+**A note on what the earlier checkpoints actually saw.** Every run before
+Run 7 was trained and evaluated on tables in which 11 of the 45 features
+(`ttl_*`, `tcp_window_*`, `frag_flag_rate`, `payload_size_*`, `retrans_*`)
+were zero in ~97% of active windows. CIC-IDS2017's CSVs record the capture
+site's local clock (UTC-3) on a 12-hour dial with no AM/PM marker, and the
+PCAPs carry true UTC, so the flow-to-packet join matched 0-4% of keys
+depending on the day — 0% on all three afternoon day-files. Those runs'
+numbers are not overstated: training and evaluation saw the same zero columns
+and the comparison is internally valid. They are, however, measurements of a
+34-feature model. Run 7 in `REAL_DATA_RESULTS.md` has the correction, the
+per-day match rates, and the guards added so the same class of failure
+cannot be silent again.
+
 ## Measured performance (current best: full-scale, 5-seed ensemble, real CIC-IDS2017)
 
 **In plain English first**: every score below is out of 1.00 — think of it
@@ -88,37 +101,50 @@ serves):
 
 | Baseline | Precision | Recall | F1 | AUC-PR |
 |---|---|---|---|---|
-| Persistence (ensemble) | 0.967 | 0.126 | 0.224 | 0.650 |
-| LR, current state only | 0.944 | 0.632 | 0.758 | 0.817 |
-| LR, flattened 15-min history | 0.968 | 0.659 | 0.785 | 0.863 |
-| Oracle, theoretical ceiling (ensemble) | 0.945 | 0.471 | 0.629 | 0.902 |
-| **World model (ensemble)** | 0.954 | 0.750 | **0.840** | **0.931** |
+| Persistence (ensemble) | 0.956 | 0.166 | 0.282 | 0.701 |
+| LR, current state only | 0.951 | 0.494 | 0.651 | 0.767 |
+| LR, flattened 15-min history | 0.962 | 0.398 | 0.563 | 0.745 |
+| Oracle, theoretical ceiling (ensemble) | 0.933 | 0.577 | 0.713 | 0.878 |
+| **World model (ensemble)** | 0.964 | 0.855 | **0.906** | **0.960** |
 
 **Holdout split (Thursday, unseen attack type), n=4,000:**
 
 | Baseline | Precision | Recall | F1 | AUC-PR |
 |---|---|---|---|---|
-| Persistence (ensemble) | 0.883 | 0.467 | 0.611 | 0.588 |
-| LR, current state only | 0.652 | 0.752 | 0.698 | 0.616 |
-| LR, flattened 15-min history | 0.832 | 0.901 | **0.865** | **0.883** |
-| Oracle, theoretical ceiling (ensemble) | 0.650 | 0.584 | 0.615 | 0.760 |
-| **World model (ensemble)** | 0.699 | 0.763 | 0.729 | 0.701 |
+| Persistence (ensemble) | 0.828 | 0.433 | 0.568 | 0.618 |
+| LR, current state only | 0.761 | 0.780 | 0.770 | 0.748 |
+| LR, flattened 15-min history | 0.850 | 0.853 | **0.851** | **0.872** |
+| Oracle, theoretical ceiling (ensemble) | 0.607 | 0.604 | 0.605 | 0.773 |
+| **World model (ensemble)** | 0.731 | 0.800 | 0.764 | 0.682 |
+
+**These are Run 7 numbers**, measured after correcting the flow-to-packet
+join described above and retraining all five seeds on the repaired tables.
+Against the same evaluation at the same threshold and pooling settings before
+the fix, test F1 went 0.840 → 0.906 and AUC-PR 0.931 → 0.960, with the
+dynamics model's own one-step NRMSE nearly halving (5.78 → 3.10). Holdout is
+mixed: F1 0.729 → 0.764 and recall 0.763 → 0.800, but AUC-PR 0.701 → 0.682.
 
 **Reading these numbers (updated in Run 6)**: earlier versions of this card
 reported near-perfect precision at ~0.5% recall. That was a pooling artifact,
 not a property of the model — the sampled futures were averaged before
 scoring, which washed out the risky minority. Pooling the 85th percentile of
-sampled futures instead takes test F1 from 0.010 to 0.840 and holdout F1 from
-0.014 to 0.729 with AUC-PR flat-to-better, and takes advance warning from 0
-of 10 test episodes to 9 of 10 (median ~8.8h). See REAL_DATA_RESULTS.md Run 6.
+sampled futures instead takes test F1 from 0.010 to 0.906 and holdout F1 from
+0.014 to 0.764 with AUC-PR flat-to-better, and is the difference between never
+crossing the alert bar and warning on 8 of 10 test episodes.
 
 On ranking quality the model leads every baseline on the test split (AUC-PR
-0.931 vs 0.863, F1 0.840 vs 0.785) and still **loses on the holdout split**
-to the flattened-history baseline (AUC-PR 0.701 vs 0.883, F1 0.729 vs 0.865).
+0.960 vs 0.767, F1 0.906 vs 0.651) and still **loses on the holdout split**
+to the flattened-history baseline (AUC-PR 0.682 vs 0.872, F1 0.764 vs 0.851).
 On an attack type it never trained on, a plain logistic regression over 15
 minutes of history remains the better ranker. The world model's distinct
-contribution there is the forecast itself — hours of advance warning, which
-no baseline produces at all.
+contribution there is the forecast itself, which no baseline produces at all.
+
+**Do not quote a lead time in hours from this model.** Run 7 established that
+the lead-time metric scans from each host's first available window, so its
+maximum is fixed by the capture rather than the model, and the detector fires
+at the first window it is given for nearly every episode. The figure earlier
+versions of this card carried (~8.8h) was additionally measured against the
+broken timeline. See REAL_DATA_RESULTS.md Run 7.
 
 A dedicated retrain experiment (`logvar_max=1.5`, tightening the transition
 model's rollout-noise clamp) independently **validated and improved**

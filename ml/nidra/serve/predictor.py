@@ -31,7 +31,7 @@ from nidra.data.schema import (
     validate_state_array_width,
 )
 from nidra.eval.calibrate import apply_platt_by_horizon, calibration_pooling_mismatch, load_calibration
-from nidra.explain.counterfactual import COUNTERFACTUAL_LABEL, counterfactual_rollout
+from nidra.explain.counterfactual import COUNTERFACTUAL_LABEL, compare_to_baseline
 from nidra.explain.saliency import temporal_saliency
 from nidra.explain.shap_runner import explain_current_risk, explain_predicted_stage, load_background, top_signals
 from nidra.models.risk_pooling import pool_ensemble_risk
@@ -41,6 +41,54 @@ from nidra.utils.config import load_config
 logger = logging.getLogger(__name__)
 
 MODEL_VERSION = "nidra-v0.1.0"
+
+#: What `explain` actually does, reported alongside the attributions: three
+#: distinct mechanisms, not one score dressed up as an explanation.
+EXPLAIN_METHOD = "kernel-shap + input-gradient temporal saliency"
+
+
+def _as_distribution(weights: list[float]) -> list[float]:
+    """Per-window saliency as a distribution over the context, summing to 1.
+
+    `temporal_saliency` returns raw gradient magnitudes, whose scale means
+    nothing on its own and differs between requests. The serving contract —
+    and StubPredictor, and the console's bar chart — is a distribution, so the
+    normalization belongs here rather than in each consumer. `driving_window`
+    is an argmax and is unaffected.
+
+    An all-zero saliency (a context the model is entirely insensitive to) has
+    no distribution; it stays all-zero rather than becoming a fabricated
+    uniform one.
+    """
+    values = np.asarray(weights, dtype=float)
+    total = float(values.sum())
+    if values.size == 0 or total <= 0:
+        return [float(v) for v in values]
+    return [float(v) for v in values / total]
+
+
+def _curve_points(rollout: dict) -> list[dict]:
+    """One rollout's per-horizon risk as the curve the serving plane draws.
+
+    `k` counts from 1, matching HorizonPoint and the rest of the Predictor
+    protocol. The band is clipped into [0, 1] and ordered, because a
+    confidence interval that brackets its own point estimate is the only kind
+    the UI can draw — sampling noise at small n can otherwise put a quantile
+    marginally the wrong side of the mean.
+    """
+    mean = np.asarray(rollout["risk_mean_k"][0], dtype=float)
+    low = np.asarray(rollout["risk_ci_low_k"][0], dtype=float)
+    high = np.asarray(rollout["risk_ci_high_k"][0], dtype=float)
+    points = []
+    for k in range(len(mean)):
+        p = float(np.clip(mean[k], 0.0, 1.0))
+        points.append({
+            "k": k + 1,
+            "p_compromise": p,
+            "ci_low": float(np.clip(min(low[k], p), 0.0, 1.0)),
+            "ci_high": float(np.clip(max(high[k], p), 0.0, 1.0)),
+        })
+    return points
 
 
 class NidraPredictor:
@@ -295,11 +343,7 @@ class NidraPredictor:
 
         background = self._shap_background(scaled)
         attributions = explain_current_risk(scaled[-1], background, self.models[0], nsamples=100)
-        signals = [
-            {"name": a["feature"], "shap_value": a["shap_value"], "direction": a["direction"],
-             "display": self._human_readable_signal(a)}
-            for a in top_signals(attributions, n=5)
-        ]
+        signals = self._signals(attributions, n=5)
 
         saliency = temporal_saliency(self.models[0], scaled, target_feature=FEATURE_ORDER[0], horizon_k=0, K=self.K)
 
@@ -317,33 +361,82 @@ class NidraPredictor:
             "n_trajectories": rollout["n_trajectories"],
         }
 
+    @property
+    def model_version(self) -> str:
+        """Which checkpoint is answering. Part of the Predictor protocol:
+        /api/v1/model reports it, and without it a running deployment cannot
+        say what is serving it."""
+        return MODEL_VERSION
+
     def counterfactual(self, states: np.ndarray, feature_name: str, clamp_value: float) -> dict:
         """Clamp one named feature to `clamp_value` for the entire rollout
-        and re-simulate. Explicitly labelled 'model-internal what-if' — see
-        explain/counterfactual.py. Never call this an intervention."""
+        and re-simulate, returning the clamped curve NEXT TO the unclamped
+        one. Explicitly labelled 'model-internal what-if' — see
+        explain/counterfactual.py. Never call this an intervention.
+
+        Both curves come back as `[{k, p_compromise, ci_low, ci_high}, ...]`,
+        k counting from 1, which is the shape the serving plane overlays and
+        the same shape StubPredictor returns. Returning the raw
+        `risk_mean_k`/`risk_ci_*_k` arrays instead is a clean miss against
+        `payload.get("original", [])`, so /api/v1/counterfactual answered 200
+        with two empty curves and nothing raised.
+
+        The baseline is a model output too, not ground truth — it is the same
+        rollout with nothing clamped, run at the same sample count so the two
+        curves are comparable.
+        """
         scaled = self._validate_and_scale(states)
         if feature_name not in FEATURE_ORDER:
             raise ValueError(f"unknown feature {feature_name!r}")
         clamped_scaled_value = self._scale_single_feature_value(feature_name, clamp_value)
 
-        result = counterfactual_rollout(
+        # compare_to_baseline runs both rollouts on one code path under one
+        # seed, so the two curves share their trajectory noise and the gap
+        # between them is the clamp rather than Monte Carlo error. Drawing the
+        # baseline separately made that gap about 7x more variable across
+        # seeds than the curve itself — enough to flip its sign at a step
+        # where the clamp's real effect is small.
+        paired = compare_to_baseline(
             scaled, self.models[0], feature_name, clamped_scaled_value,
             K=self.K, n_samples=self.n_samples_per_member,
         )
+        baseline, clamped = paired["baseline"], paired["counterfactual"]
         return {
             "label": COUNTERFACTUAL_LABEL,
+            "feature": feature_name,
+            # Kept under its old name too: `clamped_feature` is what the
+            # ml-side callers and REAL_DATA_RESULTS.md already read.
             "clamped_feature": feature_name,
             "clamp_value": clamp_value,
-            "risk_mean_k": result["risk_mean_k"][0].tolist(),
-            "risk_ci_low_k": result["risk_ci_low_k"][0].tolist(),
-            "risk_ci_high_k": result["risk_ci_high_k"][0].tolist(),
+            "model_version": MODEL_VERSION,
+            "original": _curve_points(baseline),
+            "counterfactual": _curve_points(clamped),
         }
 
     def explain(self, states: np.ndarray, horizon_k: int) -> dict:
         """Full attribution bundle for one host/window: SHAP on observed
         risk, temporal saliency, and SHAP on the predicted stage at
         `horizon_k`. Three distinct mechanisms, kept distinct in the
-        response — see IMPLEMENTATION-ML.md §6."""
+        response — see IMPLEMENTATION-ML.md §6.
+
+        `horizon_k` counts horizon steps from 1, matching the `k` on every
+        HorizonPoint a forecast returns, the `k` query parameter on
+        /api/v1/explain, and StubPredictor — one numbering across the whole
+        Predictor protocol. The rollout tensor is indexed from 0, and the
+        conversion is this method's business, not its caller's.
+
+        This used to be the one place that read `horizon_k` as a 0-based
+        index. Nothing converted at the boundary, so every /api/v1/explain
+        call indexed one step past the rollout and raised IndexError from
+        inside it — a 500 for a request that was correctly formed. The bound
+        below raises ValueError instead, which the API already translates
+        into a 422 for a step that really is out of range.
+        """
+        if not 1 <= horizon_k <= self.K:
+            raise ValueError(
+                f"horizon_k must be in 1..{self.K}, got {horizon_k}"
+            )
+        step_index = horizon_k - 1
         scaled = self._validate_and_scale(states)
         background = self._shap_background(scaled)
 
@@ -353,23 +446,41 @@ class NidraPredictor:
             out = self.models[0].rollout(
                 torch.from_numpy(scaled).float().unsqueeze(0), K=self.K, n_samples=1, stochastic=False,
             )
-        predicted_state = out.states[0, 0, horizon_k, :].numpy()
+        predicted_state = out.states[0, 0, step_index, :].numpy()
         with torch.no_grad():
             _, stage_probs = self.models[0].score_states(torch.from_numpy(predicted_state).float().unsqueeze(0))
         predicted_stage_idx = int(stage_probs.argmax(dim=-1).item())
         stage_attributions = explain_predicted_stage(predicted_state, background, self.models[0], predicted_stage_idx, nsamples=100)
 
         saliency_results = {
-            feat: temporal_saliency(self.models[0], scaled, target_feature=feat, horizon_k=horizon_k, K=self.K)
+            feat: temporal_saliency(self.models[0], scaled, target_feature=feat, horizon_k=step_index, K=self.K)
             for feat in [a["feature"] for a in current_risk_attributions[:3]]
         }
 
+        # The serving plane reads `top_signals`, `driving_window` and
+        # `window_importance` — the same names `forecast` returns them under.
+        # Leaving them out made /api/v1/explain answer with an empty signal
+        # list and a window_importance of [], which is an explanation that
+        # explains nothing, and pushed the mapping out into every caller.
+        leading = self._signals(current_risk_attributions, n=10)
+        leading_saliency = saliency_results.get(
+            leading[0]["name"] if leading else "", {}
+        )
         return {
-            "current_risk_attributions": top_signals(current_risk_attributions, n=10),
+            "current_risk_attributions": leading,
+            "top_signals": leading,
+            "window_importance": _as_distribution(leading_saliency.get("window_importance", [])),
+            "driving_window": int(leading_saliency.get("driving_window", 0)),
             "predicted_stage": STAGE_LABELS[predicted_stage_idx],
             "predicted_stage_attributions": top_signals(stage_attributions, n=10),
             "temporal_saliency": saliency_results,
             "horizon_k": horizon_k,
+            # Which model produced this attribution, and how. Omitting them
+            # left /api/v1/explain answering "unknown" for both, so a response
+            # could not be tied back to the checkpoint that made it.
+            "method": EXPLAIN_METHOD,
+            "model_version": MODEL_VERSION,
+            "schema_ver": SCHEMA_VERSION,
         }
 
     def _shap_background(self, scaled_history: np.ndarray) -> np.ndarray:
@@ -388,6 +499,23 @@ class NidraPredictor:
         dummy[0, idx] = raw_value
         scaled = self.scaler.transform(dummy)
         return float(scaled[0, idx])
+
+    def _signals(self, attributions: list[dict], n: int) -> list[dict]:
+        """SHAP attributions in the shape the serving plane's
+        `SignalAttribution` expects: `name`, not the ML side's `feature`, plus
+        display copy.
+
+        Shared by `forecast` and `explain` rather than written out in each.
+        It was inline in `forecast` only, so `explain` returned the raw
+        attributions and the API's `SignalAttribution.model_validate` failed
+        on the missing `name` — two producers of one contract, one of which
+        did not know about it.
+        """
+        return [
+            {"name": a["feature"], "shap_value": a["shap_value"],
+             "direction": a["direction"], "display": self._human_readable_signal(a)}
+            for a in top_signals(attributions, n=n)
+        ]
 
     @staticmethod
     def _human_readable_signal(attribution: dict) -> str:

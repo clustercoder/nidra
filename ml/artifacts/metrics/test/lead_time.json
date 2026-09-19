@@ -1,68 +1,70 @@
 {
   "split": "test",
   "seed": 0,
+  "n_samples": 200,
+  "n_trajectories": 1000,
+  "max_eval_samples": 4000,
+  "n_eval_rows": 4000,
+  "ensemble_seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "risk_pooling": {
+    "method": "quantile",
+    "quantile": 0.85,
+    "head_reduction": "before_pooling"
+  },
+  "risk_threshold": 0.75,
+  "forecast_chunk_size": 500,
+  "config_hash": "5f50ab5570322547",
+  "git_commit": "c8785f2f2d7d4d5b6a66d8b1144f68a1ab2749ce",
   "raw": {
-    "median_lead_time_s": 31830.0,
+    "median_lead_time_s": 4305.0,
     "lead_time_distribution_s": [
-      29970.0,
-      32970.0,
-      31830.0,
-      36330.0,
-      33240.0,
-      10290.0,
-      33630.0,
-      31770.0,
-      26670.0
+      720.0,
+      4140.0,
+      2610.0,
+      7410.0,
+      4470.0,
+      24660.0,
+      4770.0,
+      2970.0
     ],
     "n_episodes": 10,
-    "n_no_warning": 1,
-    "fraction_no_warning": 0.1
+    "n_no_warning": 2,
+    "fraction_no_warning": 0.2
   },
   "calibrated": {
-    "median_lead_time_s": 31770.0,
-    "lead_time_distribution_s": [
-      29940.0,
-      32970.0,
-      31740.0,
-      36330.0,
-      33090.0,
-      10080.0,
-      33630.0,
-      31770.0,
-      26610.0
-    ],
+    "median_lead_time_s": null,
+    "lead_time_distribution_s": [],
     "n_episodes": 10,
-    "n_no_warning": 1,
-    "fraction_no_warning": 0.1
+    "n_no_warning": 10,
+    "fraction_no_warning": 1.0
   },
   "ensemble": {
-    "median_lead_time_s": 31830.0,
+    "median_lead_time_s": 4320.0,
     "lead_time_distribution_s": [
-      29970.0,
-      32970.0,
-      31830.0,
-      36330.0,
-      33240.0,
-      10290.0,
-      33630.0,
-      31350.0,
-      26640.0
+      750.0,
+      4170.0,
+      2610.0,
+      7470.0,
+      4470.0,
+      24750.0,
+      4770.0,
+      2970.0
     ],
     "n_episodes": 10,
-    "n_no_warning": 1,
-    "fraction_no_warning": 0.1
+    "n_no_warning": 2,
+    "fraction_no_warning": 0.2
   },
   "ensemble_calibrated": {
-    "median_lead_time_s": 27030.0,
-    "lead_time_distribution_s": [
-      26250.0,
-      23370.0,
-      31470.0,
-      27630.0,
-      27030.0
-    ],
+    "median_lead_time_s": null,
+    "lead_time_distribution_s": [],
     "n_episodes": 10,
-    "n_no_warning": 5,
-    "fraction_no_warning": 0.5
+    "n_no_warning": 10,
+    "fraction_no_warning": 1.0
   }
 }

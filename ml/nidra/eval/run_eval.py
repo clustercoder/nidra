@@ -386,7 +386,8 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
 
     # --- Calibration (Brier/reliability) ---
     logger.info("running calibration")
-    calibration = calibration_by_horizon(X_eval, eval_arrays.future_is_attack, model, n_samples=n_samples)
+    calibration = calibration_by_horizon(X_eval, eval_arrays.future_is_attack, model,
+                                          n_samples=n_samples, chunk_size=forecast_chunk_size)
     calibration_out = {**run_params, "calibration": calibration}
     if calibration_params is not None:
         from nidra.eval.metrics import brier_score, reliability_diagram

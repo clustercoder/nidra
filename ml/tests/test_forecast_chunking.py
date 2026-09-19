@@ -105,3 +105,34 @@ def test_calibration_is_applied_once_on_the_full_array_not_per_chunk():
     # risk_over_horizon must be derived from the CALIBRATED per-k scores.
     np.testing.assert_allclose(chunked["risk_over_horizon"], chunked["risk_mean_k"].max(axis=1),
                                rtol=1e-6, atol=1e-6)
+
+
+def test_calibration_passes_the_chunk_size_through(monkeypatch):
+    """`forecast_chunk_size` exists because the forecast functions tile the
+    whole batch by n_samples in ONE allocation, and a large split at a high
+    sample count is then OOM-killed by the OS with no Python traceback.
+
+    Every eval call site threads it through except this one, which is how a
+    full production eval died 16 minutes in: 4,000 rows x 200 samples
+    materialized at once during the calibration pass. An unchunked call here
+    is not slower, it is fatal, so the parameter has to arrive.
+    """
+    seen = {}
+
+    def spy(X, model, K, n_samples=200, **kw):
+        seen["chunk_size"] = kw.get("chunk_size", "NOT PASSED")
+        n = X.shape[0]
+        return {"risk_mean_k": np.zeros((n, K)), "risk_ci_low_k": np.zeros((n, K)),
+                "risk_ci_high_k": np.zeros((n, K)), "risk_over_horizon": np.zeros(n)}
+
+    import nidra.eval.calibration as calmod
+    monkeypatch.setattr(calmod, "world_model_forecast", spy)
+
+    calmod.calibration_by_horizon(
+        np.zeros((8, 3, 45), dtype="float32"),
+        np.zeros((8, 6), dtype=int),
+        model=None,
+        n_samples=4,
+        chunk_size=2,
+    )
+    assert seen["chunk_size"] == 2

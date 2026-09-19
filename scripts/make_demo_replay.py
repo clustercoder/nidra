@@ -35,6 +35,8 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
 from nidra.data.schema import CONTEXT_LENGTH, FEATURE_ORDER, HORIZON_LENGTH  # noqa: E402
+from nidra.train.pipeline import day_cache_path, declared_packets_tag  # noqa: E402
+from nidra.utils.config import load_config as load_ml_config  # noqa: E402
 from nidra.utils.seed import set_seed  # noqa: E402
 from nidra_common.config import get_config  # noqa: E402
 from nidra_common.schemas import SCHEMA_VERSION, Forecast  # noqa: E402
@@ -49,7 +51,7 @@ OUT = REPO / "web" / "src" / "fixtures" / "demo-replay.json"
 #: quiet into compromise inside one 48-window view, and because several other
 #: hosts on the same segment stay benign throughout — which is what makes the
 #: quiet rows meaningful rather than decorative.
-DAY = "friday_morning__w30__m36__Friday-WorkingHours_packets.parquet__capNone.parquet"
+DAY_KEY = "friday_morning"
 VICTIM = "192.168.10.9"
 N_WINDOWS = 48
 #: Display windows before the victim's first attack-labelled window. The console
@@ -166,7 +168,15 @@ def build(limit: int | None = None) -> None:
         raise SystemExit("predictor.impl must be 'nidra' — this script exists to show the real model")
 
     predictor = load_predictor()
-    df = pd.read_parquet(REPO / "ml" / "artifacts" / "processed" / DAY)
+    # The cached table's filename is derived through the same function that
+    # writes it, never spelled out here: a second copy of the cache key goes
+    # stale silently the next time the key changes.
+    ml_cfg = load_ml_config(str(REPO / "ml" / "config" / "default.yaml"))
+    day_meta = ml_cfg["dataset"]["days"][DAY_KEY]
+    day_file = day_cache_path(REPO / "ml" / "artifacts" / "processed", DAY_KEY,
+                               ml_cfg["windowing"], ml_cfg["dataset"].get("mvp_row_cap_per_day"),
+                               declared_packets_tag(day_meta))
+    df = pd.read_parquet(day_file)
 
     victim_df = host_frame(df, VICTIM)
     if not contiguous(victim_df.window_ts.to_numpy()):
@@ -180,7 +190,7 @@ def build(limit: int | None = None) -> None:
     if len(quiet) < 3:
         raise SystemExit(f"only found {len(quiet)} quiet hosts spanning the window")
     hosts = [VICTIM, *quiet]
-    print(f"day        : {DAY.split('__')[0]}")
+    print(f"day        : {DAY_KEY}  ({day_file.name})")
     print(f"victim     : {VICTIM} (first attack-labelled window at display index {LEAD_IN})")
     print(f"quiet      : {', '.join(quiet)}")
     print(f"windows    : {n} x {len(hosts)} hosts = {n * len(hosts)} forecasts")
@@ -200,7 +210,8 @@ def build(limit: int | None = None) -> None:
             feats = g[list(FEATURE_ORDER)].to_numpy(dtype=np.float64)
             for i, f in enumerate(series):
                 end = offset + i
-                e = predictor.explain(feats[end - CONTEXT_LENGTH + 1: end + 1], horizon_k=HORIZON_LENGTH - 1)
+                # horizon_k counts from 1, so the last step of the cone is K.
+                e = predictor.explain(feats[end - CONTEXT_LENGTH + 1: end + 1], horizon_k=HORIZON_LENGTH)
                 sal = e.get("temporal_saliency", {})
                 first_feat = next(iter(sal.values()), {}) if isinstance(sal, dict) else {}
                 explanations[f"{host}@{f['origin_ts']}"] = {
@@ -233,7 +244,7 @@ def build(limit: int | None = None) -> None:
                 "is synthesised or scripted, including where the model is wrong."
             ),
             "episode": {
-                "day": DAY.split("__")[0],
+                "day": DAY_KEY,
                 "attack": "Botnet ARES",
                 "stage": "c2",
                 "stage_in_training_data": False,

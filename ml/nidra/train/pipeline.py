@@ -18,7 +18,7 @@ from nidra.data.labels import attach_risk_label, label_stage_table
 from nidra.data.normalize import FeatureScaler
 from nidra.data.schema import CONTEXT_LENGTH, HORIZON_LENGTH
 from nidra.data.splits import SplitResult, assert_no_episode_leakage, assert_no_temporal_overlap, build_splits
-from nidra.data.windowize import windowize_day
+from nidra.data.windowize import CIC2017_TIMEBASE_TAG, windowize_day
 from nidra.utils.config import resolve_path
 
 logger = logging.getLogger(__name__)
@@ -90,11 +90,14 @@ def day_cache_path(processed_dir: str | Path, day_key: str, windowing_cfg: dict,
     """Cache key encodes everything that changes the resulting table: window
     geometry, the host-count filter, packet availability (a day gains real
     packet features the moment its PCAP is extracted — the cache must not
-    keep serving the old flow-only table), and the row cap."""
+    keep serving the old flow-only table), the row cap, and the flow timebase
+    (CIC2017_TIMEBASE_TAG — the CSV clock corrections in
+    windowize.parse_cic_timestamp decide which packets a flow window meets at
+    all, so they change every packet-derived column in the table)."""
     return Path(processed_dir) / (
         f"{day_key}__w{windowing_cfg['window_seconds']}"
         f"__m{windowing_cfg['min_windows_per_host']}"
-        f"__{packets_tag}__cap{row_cap}.parquet"
+        f"__{packets_tag}__cap{row_cap}__{CIC2017_TIMEBASE_TAG}.parquet"
     )
 
 

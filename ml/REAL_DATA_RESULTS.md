@@ -36,35 +36,42 @@ is the number to compare across rows.
 
 | System | Precision | Recall | F1 | AUC-PR |
 |---|:---:|:---:|:---:|:---:|
-| Assume nothing changes (ensemble) | 0.967 | 0.126 | 0.224 | 0.650 |
-| Simple lookup, this instant only | 0.944 | 0.632 | 0.758 | 0.817 |
-| Simple lookup, last 15 min of history | 0.968 | 0.659 | 0.785 | 0.863 |
-| **NIDRA — world model (ensemble)** | 0.950 | 0.744 | **0.835** | **0.926** |
-| Perfect-hindsight cheat score (ensemble) | 0.945 | 0.471 | 0.629 | 0.902 |
+| Assume nothing changes (ensemble) | 0.956 | 0.166 | 0.282 | 0.701 |
+| Simple lookup, this instant only | 0.951 | 0.494 | 0.651 | 0.767 |
+| Simple lookup, last 15 min of history | 0.962 | 0.398 | 0.563 | 0.745 |
+| **NIDRA — world model (ensemble)** | 0.964 | 0.855 | **0.906** | **0.960** |
+| Perfect-hindsight cheat score (ensemble) | 0.933 | 0.577 | 0.713 | 0.878 |
 
 **Holdout split (Thursday — an attack type NIDRA never saw in training), n=4,000:**
 
 | System | Precision | Recall | F1 | AUC-PR |
 |---|:---:|:---:|:---:|:---:|
-| Assume nothing changes (ensemble) | 0.883 | 0.467 | 0.611 | 0.588 |
-| Simple lookup, this instant only | 0.652 | 0.752 | 0.698 | 0.616 |
-| Simple lookup, last 15 min of history | 0.832 | 0.901 | **0.865** | **0.883** |
-| **NIDRA — world model (ensemble)** | 0.682 | 0.759 | 0.718 | 0.691 |
-| Perfect-hindsight cheat score (ensemble) | 0.650 | 0.584 | 0.615 | 0.760 |
+| Assume nothing changes (ensemble) | 0.828 | 0.433 | 0.568 | 0.618 |
+| Simple lookup, this instant only | 0.761 | 0.780 | 0.770 | 0.748 |
+| Simple lookup, last 15 min of history | 0.850 | 0.853 | **0.851** | **0.872** |
+| **NIDRA — world model (ensemble)** | 0.731 | 0.800 | 0.764 | 0.682 |
+| Perfect-hindsight cheat score (ensemble) | 0.607 | 0.604 | 0.605 | 0.773 |
 
 **The recall problem is fixed (Run 6).** Earlier versions of this scorecard
 showed near-perfect precision at ~0.5-1% recall, because the sampled futures
 were averaged together before scoring, washing out the minority of imagined
 futures that actually cross the alert bar. Pooling the riskier tail instead
-(85th percentile) takes test F1 from 0.010 to 0.835 and holdout F1 from 0.014
-to 0.718, while AUC-PR holds or improves. Advance warning changed with it:
-from 0 of 10 test episodes warned to **9 of 10, median ~8.8 hours**.
+(85th percentile) takes test F1 from 0.010 to 0.906 and holdout F1 from 0.014
+to 0.764, while AUC-PR holds or improves. Advance warning changed with it too,
+from 0 of 10 test episodes warned to 8 of 10 — but see Run 7 on why no number
+of *hours* is quoted for that warning any more.
+
+**The numbers above are Run 7's**, measured after correcting a flow-to-packet
+join that had left eleven of the forty-five features zero in ~97% of active
+windows. Every table further down this document that predates Run 7 describes
+a model effectively trained on 34 features; those sections are kept unedited
+for provenance, not as current results.
 
 **Where NIDRA wins and where it loses**: on the test split it leads every
-baseline on both AUC-PR (0.926 vs. the strongest baseline's 0.863) and F1
-(0.835 vs. 0.785). On the holdout split it does **not** — "Simple lookup,
-last 15 min of history" scores AUC-PR 0.883 against NIDRA's 0.691 and F1
-0.865 against 0.718. Run 6's pooling fix did not close that gap. An earlier version of this section claimed NIDRA led every
+baseline on both AUC-PR (0.960 vs. the strongest baseline's 0.767) and F1
+(0.906 vs. 0.651), and the margin widened considerably with Run 7. On the
+holdout split it does **not** — "Simple lookup, last 15 min of history"
+scores AUC-PR 0.872 against NIDRA's 0.682 and F1 0.851 against 0.764. Run 6's pooling fix did not close that gap. An earlier version of this section claimed NIDRA led every
 baseline on *both* splits and singled out holdout as the most important
 one; that was wrong, contradicted by this document's own tables directly
 above, and it inverted the project's own rule (`eval/baselines.py`: "If the
@@ -76,6 +83,13 @@ with lead time (hours of advance warning — see the lead-time sections) and
 zero false alarms at the mandated threshold, neither of which the history
 baseline offers at all; what it does not yet provide is better ranking on
 an unseen attack type. Both halves of that are load-bearing.
+
+One correction to the sentence above, from Run 7: "hours of advance warning"
+overstates what the lead-time measurement supports. The detector fires at the
+first window each host gives it, which puts nearly every episode at the
+ceiling set by that host's available history rather than at a distance the
+model chose. The forecast is still the thing the baselines cannot do; the
+hours are not a measured property of it.
 
 ### The tuning experiment (`logvar_max=1.5`), single model, before vs. after
 
@@ -107,17 +121,445 @@ benefits overlap rather than stack).
 
 ### Other measured numbers, plainly
 
-- **Speed**: ~137ms per forecast on ordinary CPU hardware, comfortably
+- **Speed**: ~115ms per forecast on ordinary CPU hardware, comfortably
   under the 300ms budget for feeling instant.
-- **Early warning**: real advance notice before an attack fully unfolds
-  (minutes to hours) when a warning does fire — though it doesn't yet
-  fire that early warning for every attack at the strict alert bar; see
-  "Lead time" in each Run section below.
-- **Code health**: 166 automated tests, all passing.
+- **Early warning**: a sustained warning before the first attack-labelled
+  window on 8 of 10 test episodes — though it doesn't fire for every attack
+  at the strict alert bar, and the *amount* of warning is not currently
+  measurable; see Run 7's lead-time section for why.
+- **Code health**: 276 automated tests, all passing.
 
 ---
 
-## Run 3 (current): full-scale production config, 5-seed ensemble, 500k/50k samples
+## Run 7 (current): the flow/packet join was three hours and twelve hours out, and 11 of 45 features were ~always zero
+
+Every number in Runs 1-6 was measured on training and evaluation data in which
+eleven of the forty-five features were zero in ~97% of active windows. The
+measurements were internally valid — training and eval saw the same zero
+columns, so nothing published was overstated — but the model had effectively
+been learning from 34 features, not 45.
+
+### What was wrong
+
+CIC-IDS2017 publishes two views of the same capture, and this project uses
+both: CICFlowMeter CSVs for the fifteen flow features, and its own
+tshark-extracted packet parquet for eleven packet features. The two are joined
+on `(host_id, window_ts)` (`nidra/data/join.py`). The join was matching almost
+nothing, because the CSV timestamps are wrong in two independent ways and
+`parse_cic_timestamp` read them literally:
+
+1. **Local time, not UTC.** The capture site is UNB in Fredericton, on Atlantic
+   Daylight Time (UTC-3) in July 2017. The CSVs print that local wall clock.
+   The PCAPs carry true UTC epochs.
+2. **A 12-hour clock with no AM/PM marker.** An afternoon day-file writes 13:00
+   as `1:00`. Read literally, every afternoon capture lands in the small hours
+   and can never meet its own packets.
+
+Neither defect raises anything. The timestamps stay well-formed and plausible;
+they just describe the wrong instant, the left join finds no packet aggregate,
+and `build_state_rows` zero-fills the packet columns exactly as it is designed
+to for a day with no PCAP at all.
+
+The second defect is total and unambiguous for this dataset: across all eight
+day-files the hours present are exactly `{8..12}` and `{1..5}` — 6 and 7 never
+occur — so `hour <= 7` is PM and nothing is a judgement call.
+
+### Match rate, per day, before and after
+
+Share of flow `(host, window)` keys that meet any packet from the same host and
+window:
+
+| day | before | after |
+|---|---:|---:|
+| monday | 2.5% | **99.6%** |
+| tuesday | 1.9% | 79.9% |
+| wednesday | 2.6% | 80.2% |
+| thursday_web | 4.3% | 79.0% |
+| thursday_infiltration | **0.0%** | 81.3% |
+| friday_morning | 3.7% | 79.2% |
+| friday_portscan | **0.0%** | 76.9% |
+| friday_ddos | **0.0%** | 76.7% |
+
+The three afternoon day-files were at exactly zero: every packet feature in
+`thursday_infiltration`, `friday_portscan` and `friday_ddos` was zero for every
+window, in both training and evaluation. Monday reaching 99.6% rather than ~80%
+is the expected shape — it is one continuous capture whose CSV covers the whole
+day, where the other seven are day-files slicing a capture and lose the edges.
+
+### Effect on the feature table (Monday, share of ACTIVE windows nonzero)
+
+| feature | before | after |
+|---|---:|---:|
+| ttl_mean | 0.029 | 0.995 |
+| ttl_var | 0.004 | 0.113 |
+| tcp_window_mean | 0.024 | 0.977 |
+| tcp_window_entropy | 0.020 | 0.740 |
+| payload_size_mean | 0.027 | 0.837 |
+| payload_size_var | 0.023 | 0.824 |
+| payload_size_p95 | 0.026 | 0.830 |
+| payload_size_entropy | 0.023 | 0.824 |
+| retrans_count | 0.011 | 0.300 |
+| retrans_rate | 0.011 | 0.300 |
+| frag_flag_rate | 0.000 | 0.002 |
+
+The fifteen flow features are unchanged to three decimal places, as expected —
+the correction shifts every flow by the same amount, so which window a flow
+lands in relative to other flows does not move.
+
+Two side effects worth recording:
+
+- **Row counts fell by roughly a third** on the three days whose flow and packet
+  ranges previously disagreed (Monday 3.10M -> 1.94M rows). Those rows were
+  all-zero windows in the union of a flow range and a packet range that were
+  eleven hours apart. They were padding produced by the bug, not data.
+- **Labels are intact.** Attack-labelled rows are identical on every day
+  (tuesday 127, wednesday 86, thursday_web 68, thursday_infiltration 28,
+  friday_morning 648, friday_portscan 27, friday_ddos 22) and risk-positive
+  windows changed only on wednesday (236 -> 230, six at the edge of the range).
+  This was checked before retraining precisely because a label change would
+  have made the new numbers incomparable to the old ones.
+
+### The retrained dynamics NLL goes UP, and that is the expected direction
+
+Seed 0 early-stopped at epoch 16 with best `val_multistep_nll` **-1.2305**,
+against **-1.448 to -1.463** for the five pre-correction seeds. Read at face
+value that is a regression. It is not, and the reason matters enough to write
+down before anyone quotes the comparison.
+
+`gaussian_nll` is `0.5 * (logvar + err^2 / var)`, averaged over batch AND
+feature dims, with `logvar` clamped at `logvar_min = -6.0`. A feature that is
+CONSTANT is free: the transition head drives its predicted variance to the
+floor and collects `0.5 * -6.0 = -3.0` on that dimension regardless of what
+the encoder learned. Eleven of forty-five dimensions were constant-zero in
+~97% of active windows, which shifts a 45-dim mean by `11/45 * -3.0 = -0.733`.
+
+| | dims averaged | reported | over its genuinely-varying dims |
+|---|:---:|:---:|:---:|
+| pre-correction | 45, 11 of them constant | **-1.455** | -0.955 (34 dims) |
+| Run 7 | 45, all real | **-1.2305** | -1.2305 (45 dims) |
+
+So the corrected-data model predicts eleven more genuinely-varying dimensions
+*and* scores better per real dimension. The headline number rose because the
+free credit disappeared with the dead columns.
+
+The variance those columns gained, on Monday's active windows, is the direct
+evidence they were not predictable before:
+
+| feature | variance before | after | x |
+|---|---:|---:|---:|
+| ttl_mean | 271 | 6,353 | 23 |
+| tcp_window_mean | 6.48e6 | 7.83e7 | 12 |
+| payload_size_mean | 1,698 | 1.12e5 | 66 |
+| payload_size_p95 | 1.65e4 | 6.73e5 | 41 |
+| retrans_count | 23.9 | 1,488 | 62 |
+| retrans_rate | 2.78e-4 | 6.00e-3 | 22 |
+| tcp_window_entropy | 0.0104 | 0.168 | 16 |
+| payload_size_entropy | 0.0228 | 0.240 | 11 |
+| ttl_var | 8.85e4 | 5.13e5 | 5.8 |
+| payload_size_var | 1.22e10 | 9.23e10 | 7.6 |
+| frag_flag_rate | 4.90e-8 | 2.25e-7 | 4.6 |
+
+The decomposition above is a plausibility check, not a proof — it assumes the
+34 flow and graph dimensions score comparably across the two runs. **Dynamics
+NLL is not comparable across this change at all**, because the prediction
+target itself changed. The comparison that counts is downstream: test and
+holdout F1 and AUC-PR, below.
+
+### The correction also repaired the train/val split, which had been an artifact
+
+`val_fraction_of_train_time: 0.15` takes the trailing 15% of the DISTINCT
+window timestamps across the train days. The phantom padding removed ~1,355 of
+those windows (4,318 -> 2,963), which moved the cut by nearly nine hours and
+changed which traffic is trained on:
+
+| | cut (UTC) | train | val |
+|---|---|---|---|
+| before | 2017-07-05 **07:35:30** | mon 0p, tue 262p, wed **54p** | wed **182p** |
+| after | 2017-07-05 **16:28:00** | mon 0p, tue 262p, wed **176p** | wed **54p** |
+
+07:35 UTC is 04:35 local, hours before that day's capture opens at 09:00 —
+the old cut fell *inside the phantom padding*. The effect was that Wednesday's
+1.5M padding rows absorbed the train side of the boundary and validation
+received essentially all of Wednesday's real attack traffic. What was
+documented as a trailing-time-block split was in practice closer to holding out
+a whole day, by accident.
+
+The new cut, 16:28 UTC = 13:28 local, is a real mid-afternoon Wednesday
+boundary. Consequences, both worth stating plainly:
+
+- **Training gained 39% more positives** (316 -> 438) and now sees most of
+  Wednesday's DoS/Heartbleed episodes rather than almost none of them.
+- **Validation lost 70% of its positives** (182 -> 54). This is the whole
+  explanation for the head's validation AUC-PR falling from 0.4998-0.6192 to
+  0.0141-0.0247 across the five seeds: it is computed over a different slice
+  with a third of the positives, so the two figures are not comparable and the
+  drop is not evidence of a worse model. `selection_metric` is
+  `weighted_val_loss`, not `val_auc_pr` — for the reasons in Run 6, where
+  selecting on validation AUC-PR was measured and rejected — so the head epoch
+  is not chosen on this number either way.
+
+**54 positives is thin for selecting a head epoch, and that is a real risk
+rather than a resolved one.** Raising `val_fraction_of_train_time` would buy
+positives at the cost of training data and would require another full retrain,
+so it is not being changed on a hunch. The evidence that decides whether the
+current split is adequate is the test and holdout performance below, which is
+measured on splits this change did not touch: the test and holdout day-files
+are whole days, and their row counts and labels are byte-identical before and
+after the correction.
+
+### Three integration defects the same session surfaced
+
+Not data bugs, but they were live in the serving plane and none of them
+failed loudly. All three come from the same root: `services.inference.Predictor`
+is a `@runtime_checkable` Protocol, which checks method NAMES and nothing
+else, so swapping `StubPredictor` for `NidraPredictor` behind it type-checked
+while the two disagreed about what they returned. The API had been written
+against the stub. They surfaced only once Redis and Postgres were up, because
+every test that would have caught them needs both.
+
+1. **`/api/v1/explain` raised IndexError on every call.** `horizon_k` meant
+   "step, counting from 1" in `StubPredictor`, the `k` query parameter and
+   every `HorizonPoint`; it meant "0-based tensor index" in
+   `NidraPredictor`. Nothing converted, so asking for the end of the cone
+   indexed one step past the rollout — a 500 on a correctly formed request.
+   Settled on the 1-based numbering the rest of the product already uses,
+   with the conversion inside `NidraPredictor.explain` and an explicit bound
+   that raises `ValueError` (which the API already turns into a 422) instead
+   of `IndexError`.
+2. **`/api/v1/counterfactual` answered 200 with two empty curves.** The
+   endpoint reads `original` and `counterfactual` as lists of
+   `{k, p_compromise, ci_low, ci_high}`. `NidraPredictor.counterfactual`
+   returned `risk_mean_k`/`risk_ci_low_k`/`risk_ci_high_k` arrays and no
+   baseline at all, so `payload.get("original", [])` was a clean miss. It now
+   runs the unclamped rollout alongside the clamped one at the same sample
+   count and returns both in the shape the overlay draws.
+3. **`/api/v1/model` reported `model_version: "unknown"`.**
+   `NidraPredictor` had the constant but no `model_version` property, so a
+   running deployment could not say which checkpoint was serving it.
+   `explain` was omitting `method` and `model_version` from its payload for
+   the same reason.
+4. **`/api/v1/explain` returned an explanation with no signals in it.** The
+   response reads `top_signals`, `driving_window` and `window_importance`;
+   `explain` returned the attributions under `current_risk_attributions`,
+   in the ML side's own `feature` spelling rather than the API's `name`, and
+   emitted no window importance at all. The translation existed — written
+   inline inside `forecast`, where `explain` could not reach it. It is now one
+   `_signals` helper both call. `window_importance` is also normalized to a
+   distribution at this boundary, which is what the contract and the console's
+   bar chart both assume; `temporal_saliency` keeps its raw magnitudes.
+
+Backend suite with infrastructure up: 71 failed / 145 errors before (Docker
+was down and nobody had run it with containers since the integration), then 6
+real failures once it was up, now 0.
+
+### A fifth defect, and a measurement worth keeping
+
+The what-if endpoint drew its two curves from two INDEPENDENT sampled
+rollouts. The difference it reported as "the effect of clamping this feature"
+therefore carried the Monte Carlo error of both, and the variance of a
+difference of independent draws is the sum of their variances — so the gap
+was about 1.4x MORE variable than either curve on its own. At a step where
+the clamp's real effect is small, that is enough to flip its sign. Both
+rollouts now run on one code path under one seed (common random numbers),
+which drops the across-seed spread of the gap by ~7x (0.0205 -> 0.0028 on a
+tiny-model probe) while leaving the curves themselves unchanged, and makes a
+re-run of the same what-if reproducible.
+
+While fixing it, a directional check that had passed against `StubPredictor`
+started failing against the trained model, and the reason is worth recording
+rather than tuning away:
+
+| input | clamping `syn_ratio` to 0 |
+|---|---|
+| real CIC-IDS2017 (192.168.10.9, Friday morning) | risk **falls** at all 6 steps, -0.00002 to -0.006 |
+| the API test's synthetic escalation fixture | risk **rises** at all 6 steps, +0.004 to +0.011 |
+
+Consistent in both directions, so not noise. The fixture ramps `syn_ratio`,
+`out_degree`, `new_peer_count` and `bytes_total` together; zeroing `syn_ratio`
+alone asks the model about heavy fan-out with no SYNs at all, which no
+training window contains. It is an off-distribution probe, and the model's
+answer to one is not evidence about the model. The directional assertion was
+removed from the endpoint's contract test for that reason — the test now
+checks that the clamp moves the curve, not which way — and the honest version
+of the claim is the real-data row above.
+
+### Two guards added, because both failures were silent
+
+- The windowed-table cache key now carries the flow timebase
+  (`CIC2017_TIMEBASE_TAG`, `artifacts/processed/..._utc12h.parquet`). Nothing
+  else in that key would have changed, so a stale table would have been served
+  silently to the retrain.
+- The saved scaler records the timebase it was fit on, and
+  `prepare_training_data` refits rather than reusing one that does not match.
+  This caught a live instance: the first retrain attempt loaded the old
+  RobustScaler, which was fit when those eleven columns were ~all zero and
+  therefore had a degenerate spread for exactly the columns the fix had just
+  populated. It logged one ordinary line and would have trained the whole
+  ensemble on a mangled input space. An artifact with no stamp is treated as a
+  mismatch, since everything saved before this check predates the correction.
+
+### The capture now lands on the clock the dataset says it was captured on
+
+This is the check that decides whether the correction is right, and it needs
+no model at all. Each day's window timestamps, converted back to the capture
+site's local time:
+
+| Day | Before | After |
+|---|---|---|
+| monday | 07-02 22:00 -> 07-03 09:59 (12.0h) | 07-03 08:56 -> 17:01 (8.1h) |
+| tuesday | 07-03 22:00 -> 07-04 09:59 (12.0h) | 07-04 08:53 -> 17:00 (8.1h) |
+| wednesday | 07-04 22:00 -> 07-05 09:59 (12.0h) | 07-05 08:42 -> 17:10 (8.5h) |
+| thursday_web | 07-06 05:59 -> 09:59 (4.0h) | 07-06 08:59 -> 12:59 (4.0h) |
+| thursday_infiltration | 07-05 22:00 -> 07-06 02:04 | 07-06 13:00 -> 17:04 |
+| friday_morning | 07-07 05:59 -> 09:59 | 07-07 08:59 -> 12:59 |
+| friday_portscan | 07-06 22:00 -> 07-07 00:29 | 07-07 13:00 -> 15:29 |
+| friday_ddos | 07-07 00:30 -> 02:02 | 07-07 15:30 -> 17:02 |
+
+Three things fall into place at once. Every full day now spans roughly 09:00
+to 17:00, which is the capture window UNB documents. Each afternoon file
+starts exactly where its morning counterpart ends — `thursday_web` runs to
+12:59 and `thursday_infiltration` picks up at 13:00, `friday_morning` to
+12:59 and `friday_portscan` at 13:00 — with no gap and no overlap. And the
+afternoon files are on the right calendar day, which before they were not:
+`thursday_infiltration` had been sitting on 07-05, a full day before the
+Thursday morning file it continues.
+
+The "before" column is the defect stated in its plainest form. Every full day
+spanned exactly 12.0 hours straddling midnight. That is not a capture. That is
+a 12-hour dial read as if it were a 24-hour one.
+
+### Test split: the correction improves every headline number
+
+Measured on the same 4,000 stratified rows at the same `risk_threshold=0.75`
+and the same `q=0.85` `before_pooling` quantile pooling, against the metrics
+committed before the fix. The two runs carry 1,850 and 1,853 positives
+respectively, so the populations are comparable and the F1s can be read
+against each other directly.
+
+| Metric (pooled 5-seed ensemble, test) | Before | After |
+|---|---|---|
+| F1 | 0.8399 | **0.9065** |
+| AUC-PR | 0.9309 | **0.9601** |
+| Precision | 0.9540 | 0.9641 |
+| Recall | 0.7503 | **0.8554** |
+| FPR | 0.0312 | 0.0275 |
+| Dynamics NRMSE (mean over k) | 5.7808 | **3.0961** |
+| Mean Brier | 0.1365 | 0.1533 |
+
+The NRMSE is the number to trust most here. It is one-step-ahead state
+prediction error, with no risk head, no threshold and no pooling in the path,
+so it measures the dynamics model and nothing else — and it nearly halved.
+That is the packet features arriving.
+
+Two changes in the *shape* of the results matter more than the headline F1,
+because both were open items this document had flagged as unexplained:
+
+| Horizon k | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| AUC-PR before | 0.300 | 0.171 | 0.307 | 0.241 | 0.340 | 0.282 |
+| AUC-PR after | 0.249 | 0.186 | 0.158 | 0.152 | 0.154 | 0.155 |
+| NRMSE before | 6.099 | 4.432 | 6.222 | 5.065 | 6.427 | 5.690 |
+| NRMSE after | 3.046 | 2.636 | 3.110 | 2.926 | 3.292 | 3.213 |
+
+Before, AUC-PR did not decay with horizon — it oscillated on a two-step
+parity, which is not how a forecaster behaves and which §5 of Run 3 recorded
+as unexplained. After, it decays monotonically from k=1 and flattens, which
+is what a forecast losing information with distance looks like. The NRMSE
+parity oscillation is still visible but its range fell from 2.00 to 0.65.
+Neither was fixed deliberately; both were downstream of the join.
+
+Mean Brier moved the other way, 0.1365 to 0.1533. Better discrimination,
+slightly worse probability calibration. Reported, not explained.
+
+**The time-shuffle ablation still shows no collapse** (0.9071 in order vs
+0.8994 shuffled, a collapse of 0.008). The model is still reading per-window
+features rather than temporal structure. The correction did not change this,
+and it remains the most significant open question about the architecture. The
+one thing that did change is the sign: before the fix, shuffling made the
+model *better* (collapse -0.009), which was nonsense. Now it makes it very
+slightly worse, which is at least the right direction for an effect of zero.
+
+### Holdout split: mixed, and the world model still loses to a linear baseline
+
+| Metric (pooled ensemble, holdout) | Before | After |
+|---|---|---|
+| F1 | 0.7295 | 0.7641 |
+| AUC-PR | 0.7005 | 0.6823 |
+| Recall | 0.7628 | 0.8000 |
+| Dynamics NRMSE | 2.3842 | **1.8701** |
+| Mean Brier | 0.0270 | **0.0190** |
+| Time-shuffle collapse | 0.0286 | 0.0640 |
+
+F1, recall, NRMSE, Brier and the time-shuffle collapse all improve; AUC-PR
+gets slightly worse. The positive count moved more here than on test (274 to
+245 of 4,000), so this comparison is looser than the test one.
+
+`lr_flattened_history` scores F1 0.8513 on holdout against the ensemble's
+0.7641. **The world model still does not beat a logistic regression on
+flattened history on the holdout split.** That was true before the fix and it
+is true after. On test the picture is the opposite and always was — 0.9065
+against 0.6506 — which is consistent with the holdout split (Thursday
+Web-Attacks plus Infiltration) containing attack types the training days do
+not cover.
+
+### The lead-time metric is saturated, and the 8.8-hour figure was an artifact
+
+This is the finding that changes what can be claimed, and it goes the
+unflattering way.
+
+`lead_time_for_episode` scans a host's risk curve from its *first* pre-onset
+window. The largest value it can return for an episode is therefore fixed by
+how much history that host happens to have before its onset — it is a
+property of the split, not of the model. Comparing what the model scored
+against that per-episode ceiling:
+
+| | Ceilings | Measured (ensemble) |
+|---|---|---|
+| Before | 10290, 26670, 29970, 31770, 31890, 32970, 33270, 33630, 36330 | 10290, 26640, 29970, 31350, 31830, 32970, 33240, 33630, 36330 |
+| After | 750, 2610, 2970, 3810, 4170, 4470, 4830, 7470, 24750 | 750, 2610, 2970, —, 4170, 4470, 4770, 7470, 24750 |
+
+Before the fix, nine of nine episodes sat at or within one or two windows of
+their ceiling. After, seven of eight warned episodes sit exactly on it and
+the eighth is two windows late. **In both runs the detector fires at the
+first window it is given.** A lead time produced that way measures available
+history, not advance warning, and no version of this number should be read as
+the system having predicted an attack that far ahead.
+
+The published 8.8-hour median had a second problem on top of that one. It was
+measured against the broken timeline, in which Friday appeared to span 11.98
+hours; the real span is 8.05. The largest figure in that distribution, 36,330s,
+is a 10.1-hour warning inside an 8-hour capture — impossible on its face, and
+a number that should have been caught by inspection before it was published.
+
+The corrected medians are 4,320s (test, 8 of 10 episodes warned) and 18,210s
+(holdout, 1 of 2). They are honest about the timeline but they are still
+ceiling-bound, so the headline claim has been removed from `README.md` rather
+than restated with new numbers. Fixing the metric means either giving each
+host a fixed-length pre-onset lookback or reporting the ratio to the ceiling;
+neither is done here, and this is now the largest open measurement item in
+this document.
+
+### The Platt-calibrated variants are degenerate at the 0.75 threshold
+
+`world_model_calibrated` F1 falls from 0.8288 to 0.0032 on test and from
+0.6885 to 0.0000 on holdout; the calibrated lead-time detector fires zero
+warnings on both splits. The calibrated *ranking* is intact — AUC-PR 0.9569
+on test — so the fit has not broken; its outputs simply no longer reach 0.75.
+The ensemble calibrated path was already degenerate before the fix (F1
+0.0668), which Run 3's addendum recorded as an open item. This makes the same
+problem worse and extends it to the single-seed path. The shipped predictor
+does not use the calibrated head, so nothing served is affected.
+
+### Serving latency
+
+20 calls through `NidraPredictor`: mean 115.0ms, median 114.7ms, p95 117.0ms,
+max 117.6ms, against the 300ms budget. Unchanged in character from Run 3
+despite the extra populated features, which is expected — the feature count
+was always 45; eleven of them were merely zero.
+
+---
+
+## Run 3 (superseded): full-scale production config, 5-seed ensemble, 500k/50k samples
 
 This supersedes Run 2 below as the current, best-supported result. Run 2's
 content is kept unmodified further down for provenance. This is the first

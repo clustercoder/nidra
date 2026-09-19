@@ -18,15 +18,47 @@ and the CICFlowMeter CSV are available:
     pair plus protocol, and "forward" is whichever endpoint sent first.
   * A 5-tuple recurs many times in one capture. In the calibration slice a
     single tuple carried 370 packets across 728 seconds, which CICFlowMeter
-    reports as many separate flows. Packets are therefore split on TCP
-    teardown (FIN/RST) and on an idle timeout, not collapsed into one
-    long-lived flow — collapsing them would inflate `flow_duration_mean` and
-    deflate `active_flow_count` for every window the host appears in.
+    reports as many separate flows.
+
+Three splitting rules follow, each measured off the published CSVs rather
+than inferred from CICFlowMeter's source:
+
+  * The timeout caps a flow's TOTAL duration at 120s, measured from its first
+    packet — not its idle gap. Of Friday morning's 191,033 flows the longest
+    runs 119.999993s and none exceed 120s; the same holds for Monday
+    (529,918) and the Friday port scan (286,467). An idle-gap rule cannot
+    produce that ceiling, and using one let chatty connections run for the
+    whole capture.
+  * A single FIN does not end a flow. A graceful close is two FINs, one per
+    direction, and the ACKs between them belong to the same flow. An RST does
+    end it immediately.
+  * A flow of one packet is never published. Across those same three
+    captures — over a million flows — not one has a single packet. Emitting
+    them adds a population of zero-duration, zero-byte flows the model never
+    saw, which drags every per-window median toward zero.
+
+Two more, about the columns themselves:
+
+  * The `*_flag_count` columns hold PRESENCE, not a count, despite the name.
+    Every one of SYN/ACK/PSH/FIN/RST/URG in the published CSVs takes only the
+    values 0 and 1, over flows whose real ACK counts run into the hundreds.
+  * A flow opened by the timeout keeps the ORIGINAL direction; only a
+    teardown re-reads it. Otherwise every continuation segment that happens to
+    start with a server packet has its direction flipped, and the reference's
+    strong client-sends-little/receives-a-lot asymmetry disappears.
+
+One column cannot be reconstructed: `urg_flag_count` is nonzero in 9.5% of
+reference flows while the capture those flows come from contains ~90 URG
+packets in 9.9 million. The bit is not in the traffic, so this is an artifact
+of CICFlowMeter's own URG accounting (`Fwd URG Flags` and `Bwd URG Flags` are
+0 on every row of the same file). It is emitted as 0 here rather than
+reverse-engineered, and `urg_ratio` is therefore the one flow feature an
+assembled capture cannot supply — see `scripts/validate_flow_assembly.py`.
 
 Exact per-flow agreement with CICFlowMeter is not achievable from packets
-alone (its splitting also depends on internal activity timers), and is not
-the target. What matters is that the per-(host, window) aggregates this
-feeds are distributed like the ones the model trained on; see
+alone (its activity timers also affect its output), and is not the target.
+What matters is that the per-(host, window) aggregates this feeds are
+distributed like the ones the model trained on; see
 `scripts/validate_flow_assembly.py`.
 """
 
@@ -43,8 +75,17 @@ logger = logging.getLogger(__name__)
 FIN, SYN, RST, PSH, ACK, URG = "fin", "syn", "rst", "psh", "ack", "urg"
 FLAG_BITS: dict[str, int] = {FIN: 0x01, SYN: 0x02, RST: 0x04, PSH: 0x08, ACK: 0x10, URG: 0x20}
 
-#: CICFlowMeter's default idle timeout, in seconds.
-DEFAULT_IDLE_TIMEOUT_S = 120.0
+#: CICFlowMeter's flow timeout: the maximum TOTAL duration of one flow,
+#: measured from its first packet. See the module docstring for the
+#: measurement that fixes this at 120s and rules out an idle-gap reading.
+DEFAULT_FLOW_TIMEOUT_S = 120.0
+
+#: Flows with fewer than this many packets are not published, matching
+#: CICFlowMeter — see the module docstring.
+MIN_PACKETS_PER_FLOW = 2
+
+#: FIN packets needed to close a flow: one per direction on a graceful close.
+FIN_CLOSES_FLOW_AT = 2
 
 FLOW_COLUMNS = [
     "src_ip", "dst_ip", "src_port", "dst_port", "protocol", "timestamp",
@@ -83,24 +124,51 @@ def _flow_key(p: pd.DataFrame) -> pd.Series:
     return pd.Series(lo, index=p.index) + "|" + pd.Series(hi, index=p.index) + "|" + p.ip_proto.fillna(0).astype("int64").astype(str)
 
 
-def _segment_ids(times: np.ndarray, closed: np.ndarray, idle_timeout_s: float) -> np.ndarray:
-    """Split one connection's packets into flows.
+def _segment_ids(times: np.ndarray, fin: np.ndarray, rst: np.ndarray,
+                  flow_timeout_s: float) -> tuple[np.ndarray, np.ndarray]:
+    """Split one connection's time-ordered packets into flows.
 
-    A new flow starts when the gap since the previous packet exceeds the idle
-    timeout, or when the previous packet tore the connection down (FIN/RST) —
-    the next packet on a reused tuple is a new connection, not a continuation.
+    A new flow starts when this packet is more than `flow_timeout_s` after the
+    CURRENT flow's first packet, or when the previous packet closed the
+    connection — an RST, or the second FIN. Carrying the flow's own start time
+    forward is why this cannot be a `np.cumsum` over per-packet gaps: each
+    split moves the reference point the next comparison is made against.
+
+    Returns `(segment, direction_epoch)`. The second only advances on a
+    teardown: a timeout opens a new flow that inherits the old one's sense of
+    which side is "forward" (see the module docstring), so every segment in
+    one direction epoch reads its direction from that epoch's first packet.
     """
-    if len(times) == 0:
-        return np.empty(0, dtype="int64")
-    gap = np.diff(times, prepend=times[0])
-    new_flow = gap > idle_timeout_s
-    new_flow[1:] |= closed[:-1]
-    new_flow[0] = False
-    return np.cumsum(new_flow)
+    n = len(times)
+    if n == 0:
+        return np.empty(0, dtype="int64"), np.empty(0, dtype="int64")
+    seg_out = np.empty(n, dtype="int64")
+    dir_out = np.empty(n, dtype="int64")
+    seg = 0
+    direction_epoch = 0
+    start = times[0]
+    fin_seen = 0
+    closed = False
+    for i in range(n):
+        if closed or times[i] - start > flow_timeout_s:
+            seg += 1
+            if closed:
+                direction_epoch += 1
+            start = times[i]
+            fin_seen = 0
+            closed = False
+        seg_out[i] = seg
+        dir_out[i] = direction_epoch
+        if rst[i]:
+            closed = True
+        elif fin[i]:
+            fin_seen += 1
+            closed = fin_seen >= FIN_CLOSES_FLOW_AT
+    return seg_out, dir_out
 
 
 def assemble_flows(packets: pd.DataFrame,
-                    idle_timeout_s: float = DEFAULT_IDLE_TIMEOUT_S) -> pd.DataFrame:
+                    flow_timeout_s: float = DEFAULT_FLOW_TIMEOUT_S) -> pd.DataFrame:
     """Packets (as produced by `pcap_extract`) -> one row per flow, carrying
     the columns `windowize.aggregate_flows` consumes."""
     if packets is None or len(packets) == 0:
@@ -117,22 +185,27 @@ def assemble_flows(packets: pd.DataFrame,
     bits = decode_flag_bits(p.get("tcp_flags", pd.Series("", index=p.index)))
     for name, arr in bits.items():
         p[f"_{name}"] = arr
-    p["_closed"] = p["_fin"] | p["_rst"]
 
     p["_key"] = _flow_key(p)
     p = p.sort_values(["_key", "frame_time_epoch"], kind="mergesort").reset_index(drop=True)
 
-    seg = np.concatenate([
-        _segment_ids(g.frame_time_epoch.to_numpy(), g._closed.to_numpy(), idle_timeout_s)
+    parts = [
+        _segment_ids(g.frame_time_epoch.to_numpy(), g._fin.to_numpy(), g._rst.to_numpy(),
+                      flow_timeout_s)
         for _, g in p.groupby("_key", sort=False)
-    ]) if len(p) else np.empty(0, dtype="int64")
+    ]
+    seg = np.concatenate([a for a, _ in parts]) if parts else np.empty(0, dtype="int64")
+    dir_epoch = np.concatenate([b for _, b in parts]) if parts else np.empty(0, dtype="int64")
     p["_flow"] = p["_key"] + "#" + pd.Series(seg, index=p.index).astype(str)
+    p["_dir_epoch"] = p["_key"] + "#" + pd.Series(dir_epoch, index=p.index).astype(str)
 
-    # Forward = the direction of the flow's first packet.
-    first = p.groupby("_flow", sort=False).head(1)[["_flow", "ip_src", "src_port", "ip_dst", "dst_port"]]
+    # Forward = the direction of the first packet of the DIRECTION EPOCH, so a
+    # flow opened by the timeout keeps the direction of the one it continues.
+    first = p.groupby("_dir_epoch", sort=False).head(1)[
+        ["_dir_epoch", "ip_src", "src_port", "ip_dst", "dst_port"]]
     first = first.rename(columns={"ip_src": "_f_src", "src_port": "_f_sport",
                                    "ip_dst": "_f_dst", "dst_port": "_f_dport"})
-    p = p.merge(first, on="_flow", how="left")
+    p = p.merge(first, on="_dir_epoch", how="left")
     p["_is_fwd"] = (p.ip_src == p._f_src) & (p.src_port == p._f_sport)
 
     p["_fwd_len"] = np.where(p._is_fwd, p.payload_len.fillna(0.0), 0.0)
@@ -149,9 +222,11 @@ def assemble_flows(packets: pd.DataFrame,
         _n=("_is_fwd", "size"),
         total_len_fwd=("_fwd_len", "sum"),
         total_len_bwd=("_bwd_len", "sum"),
-        syn_flag_count=("_syn", "sum"), ack_flag_count=("_ack", "sum"),
-        rst_flag_count=("_rst", "sum"), fin_flag_count=("_fin", "sum"),
-        psh_flag_count=("_psh", "sum"), urg_flag_count=("_urg", "sum"),
+        # "count" in the CSV's column names means presence — see the module
+        # docstring for the measurement. `max` over booleans is that.
+        syn_flag_count=("_syn", "max"), ack_flag_count=("_ack", "max"),
+        rst_flag_count=("_rst", "max"), fin_flag_count=("_fin", "max"),
+        psh_flag_count=("_psh", "max"), urg_flag_count=("_urg", "max"),
     ).reset_index(drop=True)
 
     out["total_bwd_packets"] = out["_n"] - out["total_fwd_packets"]
@@ -172,5 +247,8 @@ def assemble_flows(packets: pd.DataFrame,
               "rst_flag_count", "fin_flag_count", "psh_flag_count", "urg_flag_count"):
         out[c] = out[c].astype("int64")
 
-    logger.info("assemble_flows: %d packets -> %d flows", len(p), len(out))
-    return out[FLOW_COLUMNS]
+    n_all = len(out)
+    out = out[out["_n"] >= MIN_PACKETS_PER_FLOW]
+    logger.info("assemble_flows: %d packets -> %d flows (%d one-packet flows dropped)",
+                len(p), len(out), n_all - len(out))
+    return out[FLOW_COLUMNS].reset_index(drop=True)

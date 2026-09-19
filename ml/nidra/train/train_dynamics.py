@@ -21,6 +21,7 @@ from torch.utils.data import DataLoader
 from nidra.data.dataset import WorldModelDataset, build_windowed_arrays
 from nidra.data.normalize import FeatureScaler
 from nidra.data.schema import CONTEXT_LENGTH, HORIZON_LENGTH
+from nidra.data.windowize import CIC2017_TIMEBASE_TAG
 from nidra.explain.shap_runner import build_shap_background, save_background
 from nidra.models.world_model import WorldModel
 from nidra.train.losses import dynamics_loss, teacher_forcing_schedule
@@ -43,6 +44,38 @@ def resolve_sample_caps(cfg: dict, max_train_samples: int | None,
     resolved_train = max_train_samples if max_train_samples is not None else training_data.get("max_train_samples")
     resolved_val = max_val_samples if max_val_samples is not None else training_data.get("max_val_samples")
     return resolved_train, resolved_val
+
+
+def _scaler_matches_data(meta_path: Path) -> bool:
+    """Is a saved scaler safe to reuse for the data now in hand?
+
+    Reuse across ENSEMBLE SEEDS is required — five members must share one input
+    space. Reuse across a change to the DATA is silently wrong, and this is
+    what tells the two apart.
+
+    The flow timebase is the stamp because it is the thing that has actually
+    changed the input distribution: correcting the CSV clock (see
+    windowize.parse_cic_timestamp) turned 11 of the 45 features from
+    ~always-zero into populated ones. A RobustScaler fit on the zero version
+    has a degenerate spread for exactly those columns, and reusing it neither
+    errors nor looks wrong in a log line — it just trains the model on a
+    mangled input space. An artifact with no stamp predates the correction, so
+    a missing key is a mismatch rather than a pass.
+    """
+    try:
+        meta = json.loads(Path(meta_path).read_text())
+    except (OSError, json.JSONDecodeError):
+        logger.warning("scaler metadata at %s is unreadable — refitting", meta_path)
+        return False
+    found = meta.get("flow_timebase")
+    if found == CIC2017_TIMEBASE_TAG:
+        return True
+    logger.warning(
+        "saved scaler was fit on flow timebase %r, this run is %r — refitting rather "
+        "than scaling the corrected features by a spread measured before the fix",
+        found, CIC2017_TIMEBASE_TAG,
+    )
+    return False
 
 
 def prepare_training_data(cfg: dict, max_train_samples: int | None, max_val_samples: int | None, subsample_seed: int = 0):
@@ -71,13 +104,19 @@ def prepare_training_data(cfg: dict, max_train_samples: int | None, max_val_samp
 
     scaler_path = scaler_dir / "robust_scaler.joblib"
     meta_path = scaler_dir / "scaler_metadata.json"
-    if scaler_path.exists() and meta_path.exists():
+    if scaler_path.exists() and meta_path.exists() and _scaler_matches_data(meta_path):
         logger.info("loading existing scaler (fit once across the ensemble, never refit per seed)")
         scaler = FeatureScaler.load(scaler_path, meta_path)
     else:
         logger.info("fitting scaler on TRAIN split only (%d train samples)", len(windowed["train"].X))
         scaler = fit_scaler(windowed["train"])
-        scaler.save(scaler_path, meta_path, extra_metadata={"n_train_samples": int(len(windowed["train"].X))})
+        scaler.save(scaler_path, meta_path, extra_metadata={
+            "n_train_samples": int(len(windowed["train"].X)),
+            "flow_timebase": CIC2017_TIMEBASE_TAG,
+        })
+        # A background built from the previous scaler's output is in the
+        # previous input space; it has to go with the scaler that made it.
+        (scaler_dir / "shap_background.npy").unlink(missing_ok=True)
 
     background_path = scaler_dir / "shap_background.npy"
     if not background_path.exists():
