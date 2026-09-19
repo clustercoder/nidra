@@ -7,9 +7,13 @@
 env: dev
 
 # --- world-model geometry (must match the trained artifacts) ---
-window_delta: 30        # seconds per window
-context_L: 30           # windows of history fed to the encoder (15 min)
-horizon_K: 6            # windows forecast forward (3 min)
+# Δ=60 s is canonical from 2026-09-20 (DECISIONS.md D102, D112): CIC-IDS2017 flow
+# timestamps are minute-resolution, so 30 s windows produced an artificial empty
+# state every other window. The ML config (ml/config/default.yaml) is the source;
+# these values mirror it and the serving plane refuses artifacts that disagree.
+window_delta: 60        # seconds per window
+context_L: 30           # windows of history fed to the encoder (30 min)
+horizon_K: 6            # windows forecast forward (6 min)
 n_features: 45          # len(FEATURE_ORDER)
 
 # --- risk / episode semantics ---

@@ -192,16 +192,16 @@ pytest tests/test_leakage.py  # run after ANY pipeline change
 ## Key parameters
 
 ```yaml
-window_delta: 30      # seconds
-context_L: 30         # windows (15 min history)
-horizon_K: 6          # windows (3 min forecast)
+window_delta: 60      # seconds (canonical since 2026-09-20 — D102; Δ=30 is frozen under tag baseline-delta30-run7)
+context_L: 30         # windows (30 min history)
+horizon_K: 6          # windows (6 min forecast)
 n_features: 45
 ensemble_seeds: [0, 1, 2, 3, 4]
-risk_threshold: 0.75
+risk_threshold: 0.75  # the mandated threshold is REPORTED; the served threshold is selected on validation (operating_point.json)
 lead_time_m: 2        # consecutive windows above threshold
 ```
 
-Changing `window_delta` or `context_L` invalidates every trained artifact and every recorded metric. If you change one, say so explicitly and re-run the full evaluation — do not compare across configurations.
+Changing `window_delta` or `context_L` invalidates every trained artifact and every recorded metric. If you change one, say so explicitly and re-run the full evaluation — do not compare across configurations. The Δ=30 numbers in `REAL_DATA_RESULTS.md` Runs 1–7 were measured on a balanced evaluation subsample (prevalence ≈0.46) with a pooling quantile chosen on test; from Run 8 on, every number is natural-prevalence with the operating point frozen on validation (`ml/nidra/eval/benchmark.py`). The two are not comparable and must not be placed in one table without saying so.
 
 ---
 

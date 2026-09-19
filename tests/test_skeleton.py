@@ -30,7 +30,7 @@ def test_package_imports(name: str) -> None:
 
 def test_config_defaults() -> None:
     cfg = load_config()
-    assert cfg["window_delta"] == 30
+    assert cfg["window_delta"] == 60  # Δ=60 s canonical since 2026-09-20 (DECISIONS.md D102)
     assert cfg["context_L"] == 30
     assert cfg["horizon_K"] == 6
     assert cfg["n_features"] == 45

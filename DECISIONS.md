@@ -1221,3 +1221,21 @@ and the legacy `risk_calibration.json` when present. The trajectory pooling is o
 implementation shared by the benchmark and the predictor, so the served number is the
 measured one. The Δ=30 config's `risk_pooling_quantile: 0.85` was chosen by looking at
 test and holdout F1; that path is no longer how a threshold or pooling is chosen.
+
+**D112 — Geometry: L=30 windows (30 min) of history, K=6 windows (6 min) of horizon at
+Δ=60 s.** Controlled comparison on the Δ=60 validation benchmark, seed 0, one head recipe
+(D108), same evaluation set: L=15/K=3 gave published-label AP 0.682 against 0.686 for
+persistence (risk head on S_t) and 0.687 for persistence + learned noise — no world-model
+contribution at the risk level; state skill vs persistence 0.47 (ridge two-lag 0.64).
+L=30/K=6 gave 0.761 against 0.713 / 0.751, ΔAP over persistence +0.048 [−0.03, +0.28]
+(two validation episodes, so the interval is wide), state skill 0.50 (ridge 0.65), and the
+same per-horizon risk AP at k ≤ 3 (0.79/0.92/0.78 vs 0.81/0.80/0.78). The longer context
+is where the learned mean shows any effect, and the six-minute horizon is the one the
+problem statement's lead-time claim needs; the cost is 2× training time and a stage
+forecast that decays from 0.66 top-1 at k=1 to 0.01 at k=6 on attack futures (reported).
+The Stage-5 loss variants are screened at L=15/K=3 (half the cost per run) and the chosen
+variant is then trained at L=30/K=6 for production — the assumption that a loss change
+transfers across the two geometries is stated here, not hidden. Also fixed on the same
+evidence: quantile pooling at q ≥ 0.85 (the Δ=30 shipped statistic) scores 0.13–0.16
+natural-prevalence AP on validation against 0.68–0.76 for mean / P(trajectory > 0.5)
+pooling — the tail statistic is dominated by silent hosts under natural prevalence.

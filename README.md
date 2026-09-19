@@ -132,9 +132,9 @@ for a compact technical summary including limitations and intended use.
 ```
 raw telemetry (PCAP via tshark + CICFlowMeter CSV)
     -> per-host, per-30s-window state vector (45 features)
-    -> GRU encoder over 30 windows (15 min) of history
+    -> GRU encoder over 30 windows (30 min at Δ=60 s) of history
     -> Gaussian transition model: predicts the NEXT-STATE DELTA
-    -> recursive 6-step (3 min) rollout, feeding predictions back in
+    -> recursive 6-step (6 min) rollout, feeding predictions back in
        as if they were real observations
     -> frozen risk head scores the simulated future
     -> 5-model ensemble, ~1000 sampled trajectories -> forecast with
