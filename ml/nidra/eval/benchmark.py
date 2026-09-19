@@ -294,7 +294,8 @@ def run(cfg: dict, split: str, seeds: list[int], n_samples: int, out_dir: Path, 
     record = experiment_record(cfg, stage="benchmark", split=split, seeds=seeds, threshold=threshold,
                                pooling=op["pooling"], calibration={"source": op_source},
                                metrics=results, extra={"n_samples_per_member": n_samples, "n_trajectories": n_samples * len(seeds),
-                                                       "eval_seed": eval_seed, "caps": caps})
+                                                       "eval_seed": eval_seed, "caps": caps,
+                                                       "config_overrides": cfg.get("_config_overrides", [])})
     out_dir.mkdir(parents=True, exist_ok=True)
     write_json(out_dir / "benchmark.json", record)
     # the per-row scores, for plots and for re-analysis without re-rolling
@@ -352,11 +353,18 @@ def main() -> None:
     parser.add_argument("--gru-classifier", default=None)
     parser.add_argument("--no-ablations", action="store_true")
     parser.add_argument("--threads", type=int, default=6)
+    parser.add_argument("--set", dest="overrides", action="append", default=[],
+                        help="config override key.path=value (e.g. windowing.horizon_length=6 for a K-extension check; "
+                             "labels.risk_threshold_windows must be set to match)")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     torch.set_num_threads(args.threads)
 
     cfg = load_config(args.config)
+    if args.overrides:
+        from nidra.scripts.run_experiment import apply_overrides
+        cfg = apply_overrides(cfg, args.overrides)
+        cfg["_config_overrides"] = list(args.overrides)
     seeds = [int(s) for s in args.seeds.split(",")] if args.seeds else list(cfg["ensemble"]["seeds"])
     n_samples = args.n_samples or int(cfg["rollout"].get("n_samples_per_member", 100))
     out_dir = Path(args.out_dir) if args.out_dir else resolve_path(cfg, cfg["artifacts"]["metrics_dir"]) / args.split
