@@ -79,25 +79,37 @@ def capture_day(window_ts: pd.Series) -> pd.Series:
     return (window_ts.astype("int64") // 86_400).astype("int64")
 
 
-def _trailing_block_cutoff(block: pd.DataFrame, val_fraction: float) -> int:
-    """Cutoff timestamp for one contiguous block, nudged earlier to the start
-    of any episode it would otherwise cut through."""
+DEFAULT_PRE_ONSET_MARGIN_S = 1800  # the 30-minute pre-onset span the benchmark evaluates lead time on
+
+
+def _trailing_block_cutoff(block: pd.DataFrame, val_fraction: float,
+                           pre_onset_margin_s: int = DEFAULT_PRE_ONSET_MARGIN_S) -> int:
+    """Cutoff timestamp for one contiguous block, nudged earlier so that no
+    episode straddles it AND no episode starts within `pre_onset_margin_s`
+    after it. The margin keeps an episode's run-up on the same side as the
+    episode: with the cut at the onset itself, the last K training windows
+    before a validation episode are genuine pre-onset windows that the
+    per-split label recomputation marks negative, and the validation split
+    has no pre-onset rows to measure lead time on."""
     unique_ts = np.sort(block["window_ts"].unique())
     cutoff_idx = int(len(unique_ts) * (1 - val_fraction))
     cutoff_idx = min(max(cutoff_idx, 0), len(unique_ts) - 1)
     cutoff = int(unique_ts[cutoff_idx])
 
     episodes = find_episodes(block)
-    straddling = episodes[(episodes["start_ts"] < cutoff) & (episodes["end_ts"] >= cutoff)]
-    if not straddling.empty:
-        new_cutoff = int(straddling["start_ts"].min())
-        logger.info("temporal_train_val_split: nudging cutoff %s -> %s to avoid splitting an episode", cutoff, new_cutoff)
-        cutoff = new_cutoff
+    if not episodes.empty:
+        near = episodes[(episodes["start_ts"] - pre_onset_margin_s < cutoff) & (episodes["end_ts"] >= cutoff)]
+        if not near.empty:
+            new_cutoff = max(int(near["start_ts"].min()) - int(pre_onset_margin_s), int(unique_ts[0]))
+            logger.info("temporal_train_val_split: nudging cutoff %s -> %s (episode at %s; margin %ds)",
+                        cutoff, new_cutoff, int(near["start_ts"].min()), pre_onset_margin_s)
+            cutoff = new_cutoff
     return cutoff
 
 
 def temporal_train_val_split(train_df: pd.DataFrame, val_fraction: float,
-                             per_day: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
+                             per_day: bool = True,
+                             pre_onset_margin_s: int = DEFAULT_PRE_ONSET_MARGIN_S) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Contiguous trailing time-block validation split with episode-boundary
     nudging: if the fraction-based cutoff falls inside a live episode, the
     cutoff moves earlier to that episode's start so no episode straddles
@@ -107,7 +119,7 @@ def temporal_train_val_split(train_df: pd.DataFrame, val_fraction: float,
         return train_df, train_df
 
     if not per_day:
-        cutoff = _trailing_block_cutoff(train_df, val_fraction)
+        cutoff = _trailing_block_cutoff(train_df, val_fraction, pre_onset_margin_s)
         train_part = train_df[train_df["window_ts"] < cutoff].reset_index(drop=True)
         val_part = train_df[train_df["window_ts"] >= cutoff].reset_index(drop=True)
         return train_part, val_part
@@ -116,7 +128,7 @@ def temporal_train_val_split(train_df: pd.DataFrame, val_fraction: float,
     is_val = np.zeros(len(train_df), dtype=bool)
     for day in np.unique(days):
         mask = (days == day).to_numpy()
-        cutoff = _trailing_block_cutoff(train_df.loc[mask], val_fraction)
+        cutoff = _trailing_block_cutoff(train_df.loc[mask], val_fraction, pre_onset_margin_s)
         is_val |= mask & (train_df["window_ts"].to_numpy() >= cutoff)
     train_part = train_df.loc[~is_val].reset_index(drop=True)
     val_part = train_df.loc[is_val].reset_index(drop=True)
@@ -131,6 +143,7 @@ def build_splits(
     val_fraction: float,
     val_block_per_day: bool = True,
     horizon_k: int | None = None,
+    pre_onset_margin_s: int = DEFAULT_PRE_ONSET_MARGIN_S,
 ) -> SplitResult:
     """day_tables: mapping of config day-key -> labelled state table for that
     day (output of labels.attach_risk_label). Concatenates by role, then
@@ -149,7 +162,8 @@ def build_splits(
     test_all = _concat(test_days)
     holdout_all = _concat(holdout_days)
 
-    train_part, val_part = temporal_train_val_split(train_all, val_fraction, per_day=val_block_per_day)
+    train_part, val_part = temporal_train_val_split(train_all, val_fraction, per_day=val_block_per_day,
+                                                    pre_onset_margin_s=pre_onset_margin_s)
     if horizon_k is not None:
         from nidra.data.labels import reattach_risk_label
         train_part = reattach_risk_label(train_part, horizon_k) if not train_part.empty else train_part

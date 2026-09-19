@@ -106,6 +106,13 @@ splits:
   # attack type. See nidra/data/splits.py. risk_label is recomputed inside
   # each of train and val after the cut so no label crosses the boundary.
   val_fraction_of_train_time: 0.30
+  # The cut is nudged earlier so that no episode starts within this many
+  # minutes after it: an episode's run-up stays on the episode's side of
+  # the boundary (otherwise the last K training windows before a validation
+  # episode are pre-onset windows labelled negative, and validation has no
+  # pre-onset rows to measure lead time on). Matches the benchmark's
+  # pre-onset span.
+  pre_onset_margin_minutes: 30
   val_block_per_day: true
 
 # ---------------------------------------------------------------------------

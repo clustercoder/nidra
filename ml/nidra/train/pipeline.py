@@ -231,6 +231,7 @@ def build_all_splits(cfg: dict) -> SplitResult:
         val_fraction=splits_cfg["val_fraction_of_train_time"],
         val_block_per_day=bool(splits_cfg.get("val_block_per_day", True)),
         horizon_k=K,
+        pre_onset_margin_s=int(splits_cfg.get("pre_onset_margin_minutes", 30)) * 60,
     )
     assert_no_temporal_overlap(splits)
     assert_no_episode_leakage(splits)

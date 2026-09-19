@@ -1,9 +1,9 @@
 {
   "stage": "data_audit",
-  "recorded_at": "2026-09-19T19:03:15Z",
-  "git_commit": "31b1eeddf41932401d2eb689b92469a081a87462",
+  "recorded_at": "2026-09-19T20:16:33Z",
+  "git_commit": "fa67988911a7e3136acdcbf34864eccd02233e25",
   "config_path": "config/default.yaml",
-  "config_hash": "b9d04c029f0a8274",
+  "config_hash": "9d622606f6db087f",
   "schema_version": "1.0",
   "n_features": 45,
   "geometry": {
@@ -226,28 +226,28 @@
   "metrics": {
     "train": {
       "name": "train",
-      "rows": 2355066,
-      "hosts": 6465,
+      "rows": 2274548,
+      "hosts": 6413,
       "window_seconds": 60,
       "window_ts_all_aligned": true,
       "sub_window_offsets_present": [
         0
       ],
       "time_span_hours": 53.68333333333333,
-      "active_rate": 0.05968962228659409,
-      "all_zero_row_rate": 0.9124517104828485,
+      "active_rate": 0.06023174714272902,
+      "all_zero_row_rate": 0.9115362700633268,
       "attack_windows": 139,
       "attack_windows_active": 139,
       "attacked_hosts": [
         "172.16.0.1"
       ],
       "stage_counts": {
-        "benign": 2354927,
+        "benign": 2274409,
         "exfil": 75,
         "initial_access": 64
       },
       "risk_positive": 179,
-      "natural_prevalence": 7.600636245438557e-05,
+      "natural_prevalence": 7.86969542959744e-05,
       "episodes": {
         "merge_gap_windows": 5,
         "n": 5,
@@ -278,32 +278,32 @@
           "<=30min": 69
         }
       },
-      "packet_features_populated_rate_on_active": 0.9965142666088083,
-      "flow_features_populated_rate_on_active": 0.5154048074665832
+      "packet_features_populated_rate_on_active": 0.9965255474452555,
+      "flow_features_populated_rate_on_active": 0.5152408759124087
     },
     "val": {
       "name": "val",
-      "rows": 813183,
-      "hosts": 5120,
+      "rows": 893701,
+      "hosts": 5224,
       "window_seconds": 60,
       "window_ts_all_aligned": true,
       "sub_window_offsets_present": [
         0
       ],
       "time_span_hours": 50.56666666666667,
-      "active_rate": 0.07587836932154263,
-      "all_zero_row_rate": 0.9004566007897361,
+      "active_rate": 0.07304008835169705,
+      "all_zero_row_rate": 0.9038671770536231,
       "attack_windows": 74,
       "attack_windows_active": 74,
       "attacked_hosts": [
         "172.16.0.1"
       ],
       "stage_counts": {
-        "benign": 813109,
+        "benign": 893627,
         "initial_access": 74
       },
-      "risk_positive": 88,
-      "natural_prevalence": 0.00010821672366490691,
+      "risk_positive": 94,
+      "natural_prevalence": 0.0001051805917191544,
       "episodes": {
         "merge_gap_windows": 5,
         "n": 2,
@@ -317,22 +317,22 @@
         "raw_contiguous_runs": 12
       },
       "label_composition": {
-        "n_positive": 88,
+        "n_positive": 94,
         "inside_running_episode": 82,
-        "inside_running_episode_fraction": 0.9318181818181818,
-        "pre_onset_within_K": 6,
+        "inside_running_episode_fraction": 0.8723404255319149,
+        "pre_onset_within_K": 12,
         "n_true_onsets": 2,
         "pre_onset_windows_available": {
-          "<=1min": 1,
-          "<=3min": 3,
-          "<=5min": 5,
-          "<=10min": 10,
-          "<=15min": 15,
-          "<=30min": 30
+          "<=1min": 2,
+          "<=3min": 6,
+          "<=5min": 10,
+          "<=10min": 20,
+          "<=15min": 30,
+          "<=30min": 60
         }
       },
-      "packet_features_populated_rate_on_active": 0.9962724664927151,
-      "flow_features_populated_rate_on_active": 0.5232970844205306
+      "packet_features_populated_rate_on_active": 0.9962620258594277,
+      "flow_features_populated_rate_on_active": 0.5232091427170783
     },
     "test": {
       "name": "test",
@@ -482,8 +482,8 @@
     },
     "host_overlap": {
       "train_test": 1696,
-      "train_holdout": 1913,
-      "train_val": 4907
+      "train_holdout": 1910,
+      "train_val": 4959
     }
   }
 }

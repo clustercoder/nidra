@@ -74,3 +74,18 @@ def test_assert_no_episode_leakage_detects_synthetic_violation():
         splits = SplitResult(train=train, val=val_corrupted, test=pd.DataFrame(), holdout=pd.DataFrame())
         with pytest.raises(AssertionError):
             assert_no_episode_leakage(splits)
+
+
+def test_cutoff_keeps_the_pre_onset_run_up_with_the_episode():
+    """An episode starting shortly after the fraction cut moves the cut
+    earlier by the pre-onset margin, so its run-up lands in validation."""
+    from nidra.data.splits import _trailing_block_cutoff
+    day = _labelled_day(n_windows=200, portscan_start=165, portscan_len=10)
+    onset = int(day.loc[day["stage_label"] != "benign", "window_ts"].min())
+    plain = _trailing_block_cutoff(day, val_fraction=0.2, pre_onset_margin_s=0)
+    with_margin = _trailing_block_cutoff(day, val_fraction=0.2, pre_onset_margin_s=600)
+    assert plain <= onset
+    assert with_margin == onset - 600
+    train, val = temporal_train_val_split(day, val_fraction=0.2, per_day=False, pre_onset_margin_s=600)
+    scanner_val = val[(val["host_id"] == "10.0.0.1")]
+    assert scanner_val["window_ts"].min() == onset - 600
