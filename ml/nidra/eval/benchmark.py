@@ -314,15 +314,17 @@ def print_summary(results: dict[str, Any], split: str) -> None:
     det = results["task_A_detection"]["systems"]
     print(f"\n== benchmark {split}: {results['eval_set']['n_rows']} rows, prevalence {results['eval_set']['natural_prevalence_published']:.5f}, "
           f"operating point {results['operating_point']['pooling_key']} thr={results['operating_point']['threshold_used']:.3f}")
-    print(f"{'system':32s} {'AP-nat':>8s} {'CI':>16s} {'ROC':>6s} {'P@thr':>6s} {'R@thr':>6s} {'F1':>6s} {'FA-act':>7s} | det AP  | onset AP 3/5/10/15")
+    print(f"{'system':32s} {'AP-nat':>8s} {'CI':>17s} {'ROC':>6s} {'P@thr':>6s} {'R@thr':>6s} {'F1':>6s} {'FA-act':>7s} | det AP  | onset AP 3/5/10/15")
     for name in sorted(pub, key=lambda n: -np.nan_to_num(pub[n]["auc_pr"], nan=-1)):
         r = pub[name]
         ci = r.get("auc_pr_bootstrap")
         ci_s = f"[{ci['ci_low']:.3f},{ci['ci_high']:.3f}]" if ci else ""
+        if ci and ci.get("n_positive_clusters", 99) < 5:
+            ci_s = f"{ci_s}*"  # * = fewer than 5 positive clusters: cluster interval is not informative
         at = r["at_threshold"]
         onset = " ".join(f"{results['task_B_onset_forecast'][h]['systems'][name]['auc_pr']:.3f}" for h in ("3", "5", "10", "15")
                          if name in results["task_B_onset_forecast"][h]["systems"])
-        print(f"{name:32s} {r['auc_pr']:8.3f} {ci_s:>16s} {r['roc_auc']:6.3f} {at['precision']:6.3f} {at['recall']:6.3f} {at['f1']:6.3f} "
+        print(f"{name:32s} {r['auc_pr']:8.3f} {ci_s:>17s} {r['roc_auc']:6.3f} {at['precision']:6.3f} {at['recall']:6.3f} {at['f1']:6.3f} "
               f"{r.get('active_benign_false_alarm_rate', float('nan')):7.3f} | {det[name]['auc_pr']:6.3f}  | {onset}")
     sf = results["state_forecast"]
     print("state skill vs persistence:", {k: round(v, 3) for k, v in sf["skill_vs_persistence"].items()},

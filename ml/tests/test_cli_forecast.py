@@ -81,3 +81,20 @@ def test_cli_end_to_end_on_csv(trained_predictor, tmp_path):
     assert len(alerts) <= 3
     for a in alerts:
         assert "risk_curve" in a and "progression" in a
+
+
+def test_html_report_renders_from_a_run(trained_predictor, tmp_path):
+    from nidra.cli.report_html import render
+    predictor, _ = trained_predictor
+    flows = make_synthetic_flows(n_hosts=2, n_windows=60, window_seconds=predictor.cfg["windowing"]["window_seconds"],
+                                 portscan_start_window=45, portscan_len=8)
+    csv = _write_cic_csv(tmp_path / "flows.csv", flows)
+    args = argparse.Namespace(
+        pcap=None, csv=str(csv), out=str(tmp_path / "out"), config=predictor.cfg.get("_config_path"),
+        weights_dir=str(predictor._weights_dir), scaler_dir=str(predictor._scaler_path.parent), seeds=[0],
+        samples=4, chunk=16, max_origins=None, max_alerts=2, work_dir=None, no_cic_clock_correction=True,
+    )
+    run(args)
+    page = render(tmp_path / "out")
+    assert "<svg" in page and "Projected stage sequence" in page or "Alerts (0" in page
+    assert "model-internal" in page

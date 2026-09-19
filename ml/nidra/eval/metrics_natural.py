@@ -156,13 +156,24 @@ def cluster_bootstrap(
         return {"point": point, "ci_low": float("nan"), "ci_high": float("nan"), "std": float("nan"), "n_resamples": 0}
     d = np.asarray(draws)
     return {"point": point, "ci_low": float(np.percentile(d, 2.5)), "ci_high": float(np.percentile(d, 97.5)),
-            "std": float(d.std()), "n_resamples": int(len(d))}
+            "std": float(d.std()), "n_resamples": int(len(d)), "n_clusters": int(len(uniq))}
 
 
 def bootstrap_ap(y: np.ndarray, s: np.ndarray, w: np.ndarray, clusters: np.ndarray,
                  n_resamples: int = 300, seed: int = 0) -> dict[str, float]:
+    """Cluster (episode/host) bootstrap of the weighted AP, plus the number
+    of clusters that carry a positive: with two positive clusters the
+    resampled AP is 0 or 1 most of the time and the interval says nothing —
+    `n_positive_clusters` is reported so a reader can tell. A row-level
+    bootstrap (independent windows, optimistic) is given alongside for the
+    splits where the cluster interval is degenerate."""
     y, s, w = _clean(y, s, w)
-    return cluster_bootstrap(lambda idx: weighted_ap(y[idx], s[idx], w[idx]), clusters, n_resamples, seed)
+    out = cluster_bootstrap(lambda idx: weighted_ap(y[idx], s[idx], w[idx]), clusters, n_resamples, seed)
+    cl = np.asarray(clusters)
+    out["n_positive_clusters"] = int(len(np.unique(cl[y == 1]))) if len(cl) == len(y) else -1
+    rows = cluster_bootstrap(lambda idx: weighted_ap(y[idx], s[idx], w[idx]), np.arange(len(y)), n_resamples, seed)
+    out["row_level"] = {"ci_low": rows["ci_low"], "ci_high": rows["ci_high"], "std": rows["std"]}
+    return out
 
 
 def bootstrap_ap_difference(y: np.ndarray, s_a: np.ndarray, s_b: np.ndarray, w: np.ndarray, clusters: np.ndarray,
