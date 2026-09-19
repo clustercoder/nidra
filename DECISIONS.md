@@ -1183,3 +1183,41 @@ against the true future; free-running MSE, persistence MSE, skill and 90% band c
 horizon are logged every epoch. `val_multistep_nll` remains available for reproducing the
 Δ=30 artifacts. Loss options `beta_nll`, `mse_aux_weight`, `nonsilent_sample_weight` are
 off by default and only turned on by a recorded experiment.
+
+**D108 — Risk head: imbalanced BCE with pos_weight, Gaussian input noise σ=0.3 in scaled
+space, selected on validation natural-prevalence AP; stage head selected separately on
+validation macro-F1; independent optimizers.** Five recipes were trained on one dynamics
+checkpoint (geomA_L15K3, seed 0) and benchmarked on the Δ=60 validation set (head on
+observed states at natural prevalence / world-model path): imbalanced+noise 0.655/0.660,
+balanced no noise 0.599/0.638, balanced+noise 0.378/0.505, balanced with pos_repeat 5 and
+lr 3e-4 0.566/0.601, the Δ=30 recipe 0.630/0.686. With 147 training positives every recipe
+peaks within the first epochs; balanced sampling (each positive 20×/epoch) overfits fastest.
+The recipe was chosen on the head's own validation statistic, not on the world-model path,
+so the head decision does not lean on the dynamics. Validation holds two episodes, so these
+are one-seed numbers without a usable cluster interval; that is stated wherever they are
+cited. `risk_sampling: balanced` stays available for reproduction.
+
+**D109 — Onset targets are explicit and shared: P(an episode BEGINS within h min | S_t) for
+h ∈ {1,3,5,10,15,30}, defined only at origins outside any episode.** `nidra/data/onset.py`
+computes episode geometry once for the training arrays and the evaluation set (Task B), so
+the two cannot disagree about "onset". A frozen `OnsetHead` (own artifact) is trained on
+observed states as the explicit supervised baseline for Task B and reported as
+`onset_head_direct`. On CIC-IDS2017 it has 69 pre-onset training windows within 30 min and
+reaches validation AP at the prevalence level (≈3e-5 at 5 min): from the current state alone
+an onset is not predictable on this data. That is reported as a finding, not tuned away.
+Rows inside an episode are never onset positives (an ongoing attack is not a forecast).
+
+**D110 — ATT&CK mapping is a curated table, generated into docs, never learned.**
+`nidra/data/attack_mapping.py`: stage bucket → tactic(s) with a per-bucket note on what
+network telemetry can resolve; CIC-IDS2017 label → technique(s) of the tool the dataset
+authors ran. `docs/ATTACK_MAPPING.md` is generated from it and a test keeps them equal.
+The `exfil` bucket contains only DoS/DDoS in this dataset and the table says so; a predicted
+stage sequence is emitted as "projected stage sequence (model-internal)".
+
+**D111 — Serving applies the operating point frozen on validation.** `operating_point.json`
+(pooling statistic, per-horizon Platt calibration, F1-optimal threshold, all chosen by
+`nidra.eval.benchmark --split val --select-operating-point`) overrides the config's pooling
+and the legacy `risk_calibration.json` when present. The trajectory pooling is one numpy
+implementation shared by the benchmark and the predictor, so the served number is the
+measured one. The Δ=30 config's `risk_pooling_quantile: 0.85` was chosen by looking at
+test and holdout F1; that path is no longer how a threshold or pooling is chosen.
