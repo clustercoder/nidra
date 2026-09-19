@@ -15,7 +15,7 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
-from nidra.data.schema import CONTEXT_LENGTH, FEATURE_ORDER, HORIZON_LENGTH, STAGE_INDEX
+from nidra.data.schema import CONTEXT_LENGTH, FEATURE_INDEX, FEATURE_ORDER, HORIZON_LENGTH, STAGE_INDEX
 from nidra.data.splits import find_episodes
 
 
@@ -53,6 +53,111 @@ def _episode_id_at(lookup: dict, host: str, ts: int) -> int:
     return -1
 
 
+@dataclass
+class CandidateTable:
+    """Pass 1 of sample construction: every valid origin as cheap scalars,
+    plus the per-host columnar arrays pass 2 slices from. Nothing [L,F]-
+    shaped is materialized here."""
+    per_host: dict                      # host -> (feats, stage_idx, is_attack, window_ts, stage_label, risk_label)
+    host: np.ndarray                    # [C] str
+    t: np.ndarray                       # [C] int, row index inside the host's sequence
+    risk_label: np.ndarray              # [C] int
+    origin_active: np.ndarray           # [C] bool, is_active at t
+    origin_attack: np.ndarray           # [C] bool, stage at t != benign
+    origin_ts: np.ndarray               # [C] int64
+
+    def __len__(self) -> int:
+        return len(self.t)
+
+
+def enumerate_candidates(labelled_state_table: pd.DataFrame, L: int, K: int) -> CandidateTable:
+    """Every valid sample origin in the table (index i with L-1 <= i <= n-1-K
+    inside each host's contiguous sequence) as per-candidate scalars."""
+    feature_cols = FEATURE_ORDER
+    active_idx = FEATURE_INDEX["is_active"]
+    df = labelled_state_table.sort_values(["host_id", "window_ts"]).reset_index(drop=True)
+    per_host: dict = {}
+    hosts, ts_idx, risks, actives, attacks, origin_ts = [], [], [], [], [], []
+    for host, g in df.groupby("host_id", sort=False):
+        g = g.reset_index(drop=True)
+        # Extract every per-row field as a numpy array ONCE per host, outside
+        # the sample loop — O(n_samples) scalar pandas lookups do not scale to
+        # a real day's worth of windows.
+        feats = g[feature_cols].to_numpy(dtype="float32")
+        stage_idx = g["stage_label"].map(STAGE_INDEX).to_numpy(dtype="int64")
+        is_attack = (g["stage_label"] != "benign").to_numpy(dtype="int64")
+        window_ts_arr = g["window_ts"].to_numpy(dtype="int64")
+        stage_label_arr = g["stage_label"].to_numpy()
+        risk_label_arr = g["risk_label"].to_numpy(dtype="int64")
+        per_host[host] = (feats, stage_idx, is_attack, window_ts_arr, stage_label_arr, risk_label_arr)
+        n = len(g)
+        if n - K < L - 1 + 1:
+            continue
+        t = np.arange(L - 1, n - K)
+        hosts.append(np.full(len(t), host, dtype=object))
+        ts_idx.append(t)
+        risks.append(risk_label_arr[t])
+        actives.append(feats[t, active_idx] > 0)
+        attacks.append(is_attack[t] > 0)
+        origin_ts.append(window_ts_arr[t])
+    if not ts_idx:
+        empty_i = np.zeros(0, dtype="int64")
+        return CandidateTable(per_host, np.array([], dtype=object), empty_i, empty_i, np.zeros(0, bool), np.zeros(0, bool), empty_i)
+    return CandidateTable(
+        per_host,
+        np.concatenate(hosts), np.concatenate(ts_idx), np.concatenate(risks).astype("int64"),
+        np.concatenate(actives), np.concatenate(attacks), np.concatenate(origin_ts).astype("int64"),
+    )
+
+
+def materialize(candidates: CandidateTable, select: np.ndarray, L: int, K: int,
+                episode_lookup: dict | None = None) -> WindowedArrays:
+    """Pass 2: slice the [L,F] history and [K,F] future for the selected
+    candidate indices only."""
+    if episode_lookup is None:
+        episode_lookup = {}
+    X_list, Y_list, future_stage_list, future_attack_list = [], [], [], []
+    host_list, origin_ts_list, episode_id_list, stage_list, risk_list = [], [], [], [], []
+    for i in select:
+        host, t = candidates.host[i], int(candidates.t[i])
+        feats, stage_idx, is_attack, window_ts_arr, stage_label_arr, risk_label_arr = candidates.per_host[host]
+        X_list.append(feats[t - L + 1 : t + 1])
+        Y_list.append(feats[t + 1 : t + 1 + K])
+        future_stage_list.append(stage_idx[t + 1 : t + 1 + K])
+        future_attack_list.append(is_attack[t + 1 : t + 1 + K])
+        host_list.append(host)
+        origin_ts = int(window_ts_arr[t])
+        origin_ts_list.append(origin_ts)
+        episode_id_list.append(_episode_id_at(episode_lookup, host, origin_ts))
+        stage_list.append(stage_label_arr[t])
+        risk_list.append(int(risk_label_arr[t]))
+    if not X_list:
+        return _empty_arrays(L, K)
+    return WindowedArrays(
+        X=np.stack(X_list),
+        Y=np.stack(Y_list),
+        host_id=np.array(host_list),
+        origin_ts=np.array(origin_ts_list, dtype="int64"),
+        episode_id=np.array(episode_id_list, dtype="int64"),
+        stage_label=np.array(stage_list),
+        risk_label=np.array(risk_list, dtype="int64"),
+        future_stage_idx=np.stack(future_stage_list),
+        future_is_attack=np.stack(future_attack_list),
+    )
+
+
+def _empty_arrays(L: int, K: int) -> WindowedArrays:
+    return WindowedArrays(
+        X=np.zeros((0, L, len(FEATURE_ORDER)), dtype="float32"),
+        Y=np.zeros((0, K, len(FEATURE_ORDER)), dtype="float32"),
+        host_id=np.array([]), origin_ts=np.array([], dtype="int64"),
+        episode_id=np.array([], dtype="int64"), stage_label=np.array([]),
+        risk_label=np.array([], dtype="int64"),
+        future_stage_idx=np.zeros((0, K), dtype="int64"),
+        future_is_attack=np.zeros((0, K), dtype="int64"),
+    )
+
+
 def build_windowed_arrays(
     labelled_state_table: pd.DataFrame,
     L: int = CONTEXT_LENGTH,
@@ -74,49 +179,20 @@ def build_windowed_arrays(
     first (~35GB) before discarding most of them is what OOM-kills a
     16GB-RAM machine, even when the caller only wanted a bounded sample of
     them. Cheap per-row scalars (host, t, risk_label) are enumerated for
-    every candidate first; only the selected subset's history/future
-    windows are ever sliced out of the per-host feature arrays."""
-    feature_cols = FEATURE_ORDER
+    every candidate first (`enumerate_candidates`); only the selected
+    subset's history/future windows are ever sliced out (`materialize`)."""
     if labelled_state_table.empty:
-        return WindowedArrays(
-            X=np.zeros((0, L, len(feature_cols)), dtype="float32"),
-            Y=np.zeros((0, K, len(feature_cols)), dtype="float32"),
-            host_id=np.array([]), origin_ts=np.array([], dtype="int64"),
-            episode_id=np.array([], dtype="int64"), stage_label=np.array([]),
-            risk_label=np.array([], dtype="int64"),
-            future_stage_idx=np.zeros((0, K), dtype="int64"),
-            future_is_attack=np.zeros((0, K), dtype="int64"),
-        )
+        return _empty_arrays(L, K)
 
     df = labelled_state_table.sort_values(["host_id", "window_ts"]).reset_index(drop=True)
     episode_lookup = _episode_lookup(df)
+    candidates = enumerate_candidates(df, L, K)
+    if len(candidates) == 0:
+        return _empty_arrays(L, K)
 
-    # Pass 1: enumerate every valid sample origin as cheap scalars only — no
-    # [L,F] slicing yet. Per-host columnar arrays are kept (O(total rows x
-    # F), not O(candidates x L x F)) so pass 2 can slice only what survives
-    # selection.
-    per_host_arrays: dict = {}
-    candidates: list[tuple] = []  # (host, t, risk_label)
-    for host, g in df.groupby("host_id", sort=False):
-        g = g.reset_index(drop=True)
-        # Extract every per-row field as a numpy array ONCE per host, outside
-        # the sample loop. The original version called g.loc[t, ...] per
-        # sample — fine at synthetic-fixture scale, but O(n_samples) scalar
-        # pandas lookups do not scale to a real day's worth of windows
-        # (hundreds of thousands of samples per host across a corpus).
-        feats = g[feature_cols].to_numpy(dtype="float32")
-        stage_idx = g["stage_label"].map(STAGE_INDEX).to_numpy(dtype="int64")
-        is_attack = (g["stage_label"] != "benign").to_numpy(dtype="int64")
-        window_ts_arr = g["window_ts"].to_numpy(dtype="int64")
-        stage_label_arr = g["stage_label"].to_numpy()
-        risk_label_arr = g["risk_label"].to_numpy(dtype="int64")
-        per_host_arrays[host] = (feats, stage_idx, is_attack, window_ts_arr, stage_label_arr, risk_label_arr)
-        n = len(g)
-        for t in range(L - 1, n - K):
-            candidates.append((host, t, int(risk_label_arr[t])))
-
+    select = np.arange(len(candidates))
     if max_samples is not None and len(candidates) > max_samples:
-        risk_arr = np.array([c[2] for c in candidates])
+        risk_arr = candidates.risk_label
         rng = np.random.default_rng(seed)
         pos_idx = np.where(risk_arr == 1)[0]
         neg_idx = np.where(risk_arr == 0)[0]
@@ -127,46 +203,9 @@ def build_windowed_arrays(
             neg_sample = rng.choice(neg_idx, size=min(n_neg, len(neg_idx)), replace=False)
             keep = np.concatenate([pos_idx, neg_sample])
         rng.shuffle(keep)
-        candidates = [candidates[i] for i in keep]
+        select = keep
 
-    # Pass 2: materialize only the selected candidates' [L,F]/[K,F] slices.
-    X_list, Y_list, future_stage_list, future_attack_list = [], [], [], []
-    host_list, origin_ts_list, episode_id_list, stage_list, risk_list = [], [], [], [], []
-    for host, t, _ in candidates:
-        feats, stage_idx, is_attack, window_ts_arr, stage_label_arr, risk_label_arr = per_host_arrays[host]
-        X_list.append(feats[t - L + 1 : t + 1])
-        Y_list.append(feats[t + 1 : t + 1 + K])
-        future_stage_list.append(stage_idx[t + 1 : t + 1 + K])
-        future_attack_list.append(is_attack[t + 1 : t + 1 + K])
-        host_list.append(host)
-        origin_ts = int(window_ts_arr[t])
-        origin_ts_list.append(origin_ts)
-        episode_id_list.append(_episode_id_at(episode_lookup, host, origin_ts))
-        stage_list.append(stage_label_arr[t])
-        risk_list.append(int(risk_label_arr[t]))
-
-    if not X_list:
-        return WindowedArrays(
-            X=np.zeros((0, L, len(feature_cols)), dtype="float32"),
-            Y=np.zeros((0, K, len(feature_cols)), dtype="float32"),
-            host_id=np.array([]), origin_ts=np.array([], dtype="int64"),
-            episode_id=np.array([], dtype="int64"), stage_label=np.array([]),
-            risk_label=np.array([], dtype="int64"),
-            future_stage_idx=np.zeros((0, K), dtype="int64"),
-            future_is_attack=np.zeros((0, K), dtype="int64"),
-        )
-
-    return WindowedArrays(
-        X=np.stack(X_list),
-        Y=np.stack(Y_list),
-        host_id=np.array(host_list),
-        origin_ts=np.array(origin_ts_list, dtype="int64"),
-        episode_id=np.array(episode_id_list, dtype="int64"),
-        stage_label=np.array(stage_list),
-        risk_label=np.array(risk_list, dtype="int64"),
-        future_stage_idx=np.stack(future_stage_list),
-        future_is_attack=np.stack(future_attack_list),
-    )
+    return materialize(candidates, select, L, K, episode_lookup)
 
 
 def subsample_stratified_by_risk(arrays: WindowedArrays, max_n: int | None, seed: int = 0) -> WindowedArrays:

@@ -54,10 +54,12 @@ def dataset_version(cfg: dict, hash_processed: bool = True) -> dict[str, Any]:
     from nidra.train.pipeline import day_cache_path, declared_packets_tag
     from nidra.utils.config import resolve_path
 
-    dataset_cfg = cfg["dataset"]
+    dataset_cfg = cfg.get("dataset")
+    if not dataset_cfg or "days" not in dataset_cfg:
+        return {"name": "unspecified (no dataset block in config)", "flow_timebase": _flow_timebase_tag(), "days": {}}
     flow_dir = Path(dataset_cfg["cic2017_flow_dir"]).expanduser()
     packets_dir = Path(dataset_cfg.get("packets_dir") or dataset_cfg["cic2017_flow_dir"]).expanduser()
-    processed_dir = resolve_path(cfg, cfg["artifacts"]["processed_dir"])
+    processed_dir = resolve_path(cfg, cfg.get("artifacts", {}).get("processed_dir", "artifacts/processed"))
     row_cap = dataset_cfg.get("mvp_row_cap_per_day")
 
     days: dict[str, Any] = {}

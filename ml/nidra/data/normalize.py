@@ -193,15 +193,31 @@ class FeatureScaler:
     def dropped_features(self) -> list[str]:
         return [f for f, k in zip(FEATURE_ORDER, self.kinds) if k == "drop"]
 
-    def transform(self, X: np.ndarray) -> np.ndarray:
-        if not self.fitted:
-            raise RuntimeError("FeatureScaler.transform called before fit()/load() — never refit at serving time")
-        self._check_width(X)
+    #: Rows transformed per pass. The training arrays are ~500k x L x 45
+    #: float32; a whole-array float64 intermediate would be ~11 GB for L=30.
+    _TRANSFORM_CHUNK_ROWS = 20_000
+
+    def _transform_block(self, X: np.ndarray) -> np.ndarray:
         Xt = self._stabilize(X)
         Xs = (Xt - self.center_) / self.scale_
         Xs = np.clip(Xs, self.clip_min, self.clip_max)
         Xs[..., ~self.model_mask] = 0.0
-        return Xs
+        return Xs.astype("float32")
+
+    def transform(self, X: np.ndarray) -> np.ndarray:
+        """Scaled float32 array of the same shape. Processed in row chunks so
+        the float64 intermediate never exceeds a few hundred MB."""
+        if not self.fitted:
+            raise RuntimeError("FeatureScaler.transform called before fit()/load() — never refit at serving time")
+        self._check_width(X)
+        X = np.asarray(X)
+        if X.ndim <= 1 or X.shape[0] <= self._TRANSFORM_CHUNK_ROWS:
+            return self._transform_block(X)
+        out = np.empty(X.shape, dtype="float32")
+        for lo in range(0, X.shape[0], self._TRANSFORM_CHUNK_ROWS):
+            hi = min(lo + self._TRANSFORM_CHUNK_ROWS, X.shape[0])
+            out[lo:hi] = self._transform_block(X[lo:hi])
+        return out
 
     def inverse_transform(self, X_scaled: np.ndarray) -> np.ndarray:
         """Undo `transform` for reporting a predicted state in raw units.

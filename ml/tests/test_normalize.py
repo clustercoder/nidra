@@ -148,7 +148,9 @@ def test_inverse_transform_roundtrips():
     scaler = FeatureScaler(clip_min=-1e9, clip_max=1e9).fit(X)
     kept = scaler.model_mask
     X_back = scaler.inverse_transform(scaler.transform(X))
-    np.testing.assert_allclose(X_back[:, kept], X[:, kept], rtol=1e-6, atol=1e-6)
+    # transform returns float32 (the model's dtype); the round trip is exact
+    # to float32 precision of the raw magnitudes
+    np.testing.assert_allclose(X_back[:, kept], X[:, kept], rtol=2e-5, atol=1e-4)
 
 
 def test_inverse_transform_bounds_log_feature_blowup():

@@ -67,7 +67,7 @@ def _sigmoid(x: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-x))
 
 
-def fit_platt(probs: np.ndarray, labels: np.ndarray) -> dict:
+def fit_platt(probs: np.ndarray, labels: np.ndarray, sample_weight: np.ndarray | None = None) -> dict:
     """Fits `sigmoid(a * logit(probs) + b)` to `labels` via a 1-D logistic
     regression on `logit(probs)` (standard Platt scaling). Falls back to the
     identity transform (a=1, b=0) if `labels` has only one class present —
@@ -75,6 +75,12 @@ def fit_platt(probs: np.ndarray, labels: np.ndarray) -> dict:
     a 2-class fit is undefined there; this is reported in the returned dict
     (`"degenerate": True`) rather than silently returned as if it were a
     real fit.
+
+    `sample_weight` (the natural-prevalence weights of a stratified
+    evaluation set, see eval/eval_set.py) makes the fitted intercept describe
+    the split's real base rate rather than the sampled one — without it a
+    calibration fit on a 10%-prevalence sample says "0.7" where the true
+    frequency is a few percent.
     """
     labels = np.asarray(labels).astype(int)
     n = len(labels)
@@ -85,7 +91,7 @@ def fit_platt(probs: np.ndarray, labels: np.ndarray) -> dict:
 
     x = _logit(np.asarray(probs)).reshape(-1, 1)
     clf = LogisticRegression(max_iter=2000)
-    clf.fit(x, labels)
+    clf.fit(x, labels, sample_weight=None if sample_weight is None else np.asarray(sample_weight, dtype="float64"))
     a = float(clf.coef_[0, 0])
     b = float(clf.intercept_[0])
     if a <= 0:
@@ -104,7 +110,8 @@ def apply_platt(probs: np.ndarray, params: dict) -> np.ndarray:
     return _sigmoid(params["a"] * _logit(probs) + params["b"])
 
 
-def fit_platt_by_horizon(risk_mean_k: np.ndarray, future_is_attack: np.ndarray) -> list[dict]:
+def fit_platt_by_horizon(risk_mean_k: np.ndarray, future_is_attack: np.ndarray,
+                         sample_weight: np.ndarray | None = None) -> list[dict]:
     """risk_mean_k, future_is_attack: [N, K]. Returns one fitted-Platt dict
     per horizon k — calibration is fit separately per k because the
     per-horizon Brier/reliability numbers already show materially different
@@ -113,7 +120,7 @@ def fit_platt_by_horizon(risk_mean_k: np.ndarray, future_is_attack: np.ndarray) 
     rather than correct for it.
     """
     K = risk_mean_k.shape[1]
-    return [fit_platt(risk_mean_k[:, k], future_is_attack[:, k]) for k in range(K)]
+    return [fit_platt(risk_mean_k[:, k], future_is_attack[:, k], sample_weight=sample_weight) for k in range(K)]
 
 
 def apply_platt_by_horizon(risk_mean_k: np.ndarray, params_by_k: list[dict]) -> np.ndarray:
