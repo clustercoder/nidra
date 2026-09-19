@@ -7,6 +7,7 @@ forecast quality.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -273,3 +274,48 @@ def test_scaler_never_refit_by_predictor(trained_predictor):
     _ = predictor.forecast(np.random.randn(CONTEXT_LENGTH, 45).astype("float32"),
                             host_id="h", origin_ts=datetime.now(timezone.utc))
     np.testing.assert_array_equal(center_before, predictor.scaler.center_)
+
+
+def test_operating_point_file_drives_pooling_calibration_and_threshold(trained_predictor, tmp_path):
+    """When operating_point.json sits next to the weights, serving pools with
+    its statistic, calibrates with its per-horizon Platt params, and uses
+    its threshold — the benchmark's frozen decision, not the config's."""
+    import json
+    from nidra.serve.predictor import NidraPredictor
+    from nidra.eval.operating_point import OPERATING_POINT_FILENAME
+
+    predictor, windowed = trained_predictor
+    K = predictor.K
+    op = {
+        "selected_on": "val", "selected_at": "2026-09-20T00:00:00Z",
+        "pooling": {"method": "median", "quantile": None, "horizon_reduction": "integrated"},
+        "pooling_key": "median|q=-|integrated",
+        "calibration": {"params_by_k": [{"a": 1.0, "b": 0.0, "n": 10, "degenerate": False}] * K},
+        "threshold": {"f1_optimal_calibrated": 0.42, "mandated": 0.75},
+    }
+    op_path = predictor_weights_dir(predictor) / OPERATING_POINT_FILENAME
+    op_path.write_text(json.dumps(op))
+    try:
+        p2 = NidraPredictor(weights_dir=op_path.parent, scaler_path=predictor_scaler_path(predictor),
+                            config_path=predictor.cfg.get("_config_path"), seeds=[0])
+        assert p2.operating_point is not None
+        assert p2.risk_pooling_method == "median" and p2.horizon_reduction == "integrated"
+        assert p2.risk_threshold == pytest.approx(0.42)
+        states = windowed["train"].X[0]
+        out = p2.forecast(states, host_id="h", origin_ts=datetime(2017, 7, 4, 9, 0, tzinfo=timezone.utc))
+        curve = out["risk_curve"]
+        assert len(curve["p_attack_at_k"]) == K and curve["calibrated"] is True
+        assert curve["threshold"] == pytest.approx(0.42)
+        assert curve["horizon_reduction"] == "integrated"
+        assert out["operating_point"]["pooling_key"] == "median|q=-|integrated"
+        assert 0.0 <= curve["p_attack_within_horizon"] <= 1.0
+    finally:
+        op_path.unlink()
+
+
+def predictor_weights_dir(predictor) -> Path:
+    return Path(predictor._weights_dir)
+
+
+def predictor_scaler_path(predictor) -> Path:
+    return Path(predictor._scaler_path)

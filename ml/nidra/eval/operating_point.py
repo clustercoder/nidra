@@ -32,6 +32,8 @@ from nidra.eval.eval_set import EvalSet
 from nidra.eval.metrics_natural import best_f1_threshold, weighted_ap
 from nidra.eval.systems import ScoreBundle
 
+OPERATING_POINT_FILENAME = "operating_point.json"
+
 POOLING_CANDIDATES: list[dict[str, Any]] = [
     {"method": "mean", "quantile": None, "horizon_reduction": "max"},
     {"method": "mean", "quantile": None, "horizon_reduction": "integrated"},

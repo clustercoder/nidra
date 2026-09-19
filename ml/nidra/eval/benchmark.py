@@ -40,6 +40,7 @@ from nidra.eval.eval_set import EvalSet, build_eval_set
 from nidra.eval.metrics import brier_score, reliability_diagram
 from nidra.eval.metrics_natural import bootstrap_ap, bootstrap_ap_difference, summarize_scores, weighted_ap
 from nidra.eval.operating_point import (
+    OPERATING_POINT_FILENAME,
     apply_operating_point,
     load_operating_point,
     pooling_key,
@@ -227,7 +228,7 @@ def run(cfg: dict, split: str, seeds: list[int], n_samples: int, out_dir: Path, 
         if split != "val":
             raise ValueError("the operating point is selected on the validation split only")
         op = select_operating_point(bundle, ev, mandated_threshold=threshold_mandated)
-        op_path = operating_point_path or (resolve_path(cfg, cfg["artifacts"]["weights_dir"]) / "operating_point.json")
+        op_path = operating_point_path or (resolve_path(cfg, cfg["artifacts"]["weights_dir"]) / OPERATING_POINT_FILENAME)
         save_operating_point(op, op_path)
         logger.info("selected operating point %s, threshold %.3f (val F1 %.3f) -> %s", op["pooling_key"],
                     op["threshold"]["f1_optimal_calibrated"], op["threshold"]["val_f1_calibrated"], op_path)
@@ -357,7 +358,7 @@ def main() -> None:
     seeds = [int(s) for s in args.seeds.split(",")] if args.seeds else list(cfg["ensemble"]["seeds"])
     n_samples = args.n_samples or int(cfg["rollout"].get("n_samples_per_member", 100))
     out_dir = Path(args.out_dir) if args.out_dir else resolve_path(cfg, cfg["artifacts"]["metrics_dir"]) / args.split
-    op_path = Path(args.operating_point) if args.operating_point else resolve_path(cfg, cfg["artifacts"]["weights_dir"]) / "operating_point.json"
+    op_path = Path(args.operating_point) if args.operating_point else resolve_path(cfg, cfg["artifacts"]["weights_dir"]) / OPERATING_POINT_FILENAME
     caps = {}
     if args.active_negative_cap is not None:
         caps["active_negative"] = args.active_negative_cap

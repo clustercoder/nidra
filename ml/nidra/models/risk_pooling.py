@@ -21,9 +21,34 @@ separability that the ranking didn't already have.
 
 from __future__ import annotations
 
+import numpy as np
 import torch
 
 VALID_METHODS = ("mean", "quantile")
+# The full candidate set the operating point is selected from on validation
+# (eval/operating_point.py); serving pools with whichever one was frozen.
+VALID_NP_METHODS = ("mean", "median", "quantile", "max", "p_above_half")
+
+
+def pool_trajectories_np(risk: np.ndarray, method: str, quantile: float | None = None, axis: int = 1) -> np.ndarray:
+    """numpy twin of `pool_risk_over_samples` covering every candidate the
+    operating point can name. `risk`: per-trajectory (head-averaged) risk
+    with the trajectory dimension at `axis`. One implementation for the
+    benchmark (eval/systems.py) and serving (serve/predictor.py)."""
+    r = np.asarray(risk, dtype="float32")
+    if method == "mean":
+        return r.mean(axis=axis)
+    if method == "median":
+        return np.median(r, axis=axis)
+    if method == "quantile":
+        if quantile is None:
+            raise ValueError("quantile pooling needs a quantile")
+        return np.quantile(r, float(quantile), axis=axis)
+    if method == "max":
+        return r.max(axis=axis)
+    if method == "p_above_half":
+        return (r >= 0.5).mean(axis=axis)
+    raise ValueError(f"unknown pooling method {method!r}, expected one of {VALID_NP_METHODS}")
 
 
 def pool_risk_over_samples(

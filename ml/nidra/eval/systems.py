@@ -31,6 +31,7 @@ from sklearn.linear_model import LogisticRegression, Ridge
 from nidra.data.dataset import WindowedArrays
 from nidra.data.normalize import FeatureScaler
 from nidra.eval.eval_set import EvalSet
+from nidra.models.risk_pooling import pool_trajectories_np
 from nidra.models.world_model import WorldModel
 
 logger = logging.getLogger(__name__)
@@ -60,18 +61,8 @@ class ScoreBundle:
     # ---------------------------------------------------------------- pooling
     def pooled(self, method: str, quantile: float = 0.85, traj: np.ndarray | None = None) -> np.ndarray:
         """[N, K] pooled risk per horizon from the cached trajectories."""
-        r = (self.risk_traj if traj is None else traj).astype("float32")
-        if method == "mean":
-            return r.mean(axis=1)
-        if method == "median":
-            return np.median(r, axis=1)
-        if method == "quantile":
-            return np.quantile(r, quantile, axis=1)
-        if method == "max":
-            return r.max(axis=1)
-        if method == "p_above_half":
-            return (r >= 0.5).mean(axis=1)
-        raise ValueError(f"unknown pooling method {method!r}")
+        r = self.risk_traj if traj is None else traj
+        return pool_trajectories_np(r, method, quantile, axis=1)
 
     @staticmethod
     def over_horizon(risk_k: np.ndarray, reduction: str = "max", k_eval: int | None = None) -> np.ndarray:

@@ -34,6 +34,8 @@ from nidra.eval.calibrate import apply_platt_by_horizon, calibration_pooling_mis
 from nidra.explain.counterfactual import COUNTERFACTUAL_LABEL, compare_to_baseline
 from nidra.explain.saliency import temporal_saliency
 from nidra.data.attack_mapping import map_stage_distribution, progression_summary
+from nidra.eval.operating_point import OPERATING_POINT_FILENAME, load_operating_point
+from nidra.models.risk_pooling import pool_trajectories_np
 from nidra.explain.shap_runner import explain_current_risk, explain_predicted_stage, load_background, top_signals
 from nidra.models.risk_pooling import pool_ensemble_risk
 from nidra.models.world_model import WorldModel
@@ -112,6 +114,8 @@ class NidraPredictor:
 
         weights_dir = Path(weights_dir)
         scaler_path = Path(scaler_path)
+        self._weights_dir = weights_dir
+        self._scaler_path = scaler_path
         metadata_path = scaler_path.parent / "scaler_metadata.json"
         self.scaler = FeatureScaler.load(scaler_path, metadata_path)
 
@@ -158,6 +162,28 @@ class NidraPredictor:
         self.risk_pooling_head_reduction = self.cfg["rollout"].get(
             "risk_pooling_head_reduction", "before_pooling"
         )
+        self.horizon_reduction = "max"
+
+        # The frozen operating point (eval/operating_point.py): pooling
+        # statistic, per-horizon Platt calibration and decision threshold,
+        # all selected on the VALIDATION split by nidra.eval.benchmark and
+        # written next to the weights. When it exists it overrides the
+        # config's pooling and the legacy risk_calibration.json path, so the
+        # served number is exactly the one the benchmark measured.
+        self.operating_point: dict | None = None
+        op_path = weights_dir / OPERATING_POINT_FILENAME
+        if op_path.exists():
+            op = load_operating_point(op_path)
+            if op.get("selected_on") != "val":
+                raise RuntimeError(f"operating point at {op_path} was not selected on validation ({op.get('selected_on')!r})")
+            self.operating_point = op
+            self.risk_pooling_method = op["pooling"]["method"]
+            self.risk_pooling_quantile = op["pooling"].get("quantile")
+            self.horizon_reduction = op["pooling"].get("horizon_reduction", "max")
+            self.risk_pooling_head_reduction = "before_pooling"
+            self.risk_threshold = float(op["threshold"]["f1_optimal_calibrated"])
+            logger.info("NidraPredictor: operating point %s from %s (threshold %.3f, mandated %.2f)",
+                        op.get("pooling_key"), op_path, self.risk_threshold, float(op["threshold"].get("mandated", 0.75)))
 
         # Post-hoc calibration (nidra.scripts.fit_calibration) is OFF BY
         # DEFAULT — pass apply_calibration=True to opt in. This is a
@@ -179,7 +205,13 @@ class NidraPredictor:
         # artifacts. The file is still loaded (if present) and the flag is
         # still supported for evaluation/comparison either way.
         self._calibration = None
-        if apply_calibration:
+        if self.operating_point is not None:
+            params = self.operating_point["calibration"]["params_by_k"]
+            if any(p.get("degenerate") for p in params):
+                logger.warning("NidraPredictor: operating-point calibration is degenerate at some horizon; "
+                               "serving the raw pooled score there")
+            self._calibration = params
+        elif apply_calibration:
             calibration_loaded = load_calibration(weights_dir / "risk_calibration.json")
             self._calibration = calibration_loaded[0] if calibration_loaded else None
             # Serving must refuse a calibration fit against different pooling
@@ -267,12 +299,18 @@ class NidraPredictor:
 
         q_low = self.cfg["rollout"]["ci_low_quantile"]
         q_high = self.cfg["rollout"]["ci_high_quantile"]
-        risk_mean_k = pool_ensemble_risk(
-            per_head_risk, sample_dim=2, head_dim=0, method=self.risk_pooling_method,
-            quantile=self.risk_pooling_quantile, head_reduction=self.risk_pooling_head_reduction,
-        )[0].numpy()
+        if self.operating_point is not None:
+            # head-mean per trajectory, then the frozen statistic — the
+            # benchmark's exact reduction (eval/systems.py ScoreBundle.pooled)
+            risk_mean_k = pool_trajectories_np(risk[0].numpy(), self.risk_pooling_method, self.risk_pooling_quantile, axis=0)
+        else:
+            risk_mean_k = pool_ensemble_risk(
+                per_head_risk, sample_dim=2, head_dim=0, method=self.risk_pooling_method,
+                quantile=self.risk_pooling_quantile, head_reduction=self.risk_pooling_head_reduction,
+            )[0].numpy()
         risk_ci_low_k = risk.quantile(q_low, dim=1)[0].numpy()
         risk_ci_high_k = risk.quantile(q_high, dim=1)[0].numpy()
+        risk_raw_k = risk_mean_k.copy()
         if self._calibration is not None:
             # Calibrate p_compromise (and its CI band) — see __init__ and
             # eval/calibrate.py. Monotonic, so it never changes WHICH
@@ -284,6 +322,8 @@ class NidraPredictor:
         return {
             "predicted_states_mean": pooled_states.mean(dim=1)[0].numpy(),   # [K, F]
             "risk_mean_k": risk_mean_k,                                      # [K]
+            "risk_raw_k": risk_raw_k,                                        # [K] before calibration
+            "risk_traj_std_k": risk.std(dim=1)[0].numpy(),                   # [K] spread across trajectories
             "risk_ci_low_k": risk_ci_low_k,
             "risk_ci_high_k": risk_ci_high_k,
             "stage_mean_k": stage.mean(dim=1)[0].numpy(),                     # [K, n_stages]
@@ -341,8 +381,9 @@ class NidraPredictor:
                 "predicted_features": predicted_features,
             })
 
-        lead_time_s = self._lead_time_from_curve(horizons, window_seconds)
+        lead_time_s = self._lead_time_from_curve(horizons, window_seconds, threshold=self.risk_threshold)
         progression = progression_summary([h["stage_dist"] for h in horizons], window_seconds)
+        risk_curve = self._risk_curve(rollout, window_seconds)
 
         background = self._shap_background(scaled)
         attributions = explain_current_risk(scaled[-1], background, self.models[0], nsamples=100)
@@ -357,13 +398,45 @@ class NidraPredictor:
             "lead_time_s": lead_time_s,
             "observed_stage": observed_stage,
             "observed_risk": observed_risk,
+            "risk_curve": risk_curve,
             "progression": progression,
+            "operating_point": self._operating_point_summary(),
             "top_signals": signals,
             "driving_window": saliency["driving_window"],
             "model_version": MODEL_VERSION,
             "schema_ver": SCHEMA_VERSION,
             "n_trajectories": rollout["n_trajectories"],
         }
+
+    def _risk_curve(self, rollout: dict, window_seconds: int) -> dict:
+        """The multi-horizon risk curve with uncertainty: per horizon the
+        pooled (calibrated when an operating point exists) probability that
+        t+k is an attack window, its trajectory band, and the composite
+        "any attack within the horizon" score that the threshold applies to."""
+        p_k = np.clip(np.asarray(rollout["risk_mean_k"], dtype="float64"), 0.0, 1.0)
+        composite = float(p_k.max()) if self.horizon_reduction == "max" else float(1.0 - np.prod(1.0 - p_k))
+        return {
+            "horizon_seconds": [int(window_seconds * (k + 1)) for k in range(self.K)],
+            "p_attack_at_k": [float(v) for v in p_k],
+            "p_attack_at_k_raw": [float(v) for v in rollout["risk_raw_k"]],
+            "band_low": [float(v) for v in rollout["risk_ci_low_k"]],
+            "band_high": [float(v) for v in rollout["risk_ci_high_k"]],
+            "trajectory_std": [float(v) for v in rollout["risk_traj_std_k"]],
+            "p_attack_within_horizon": composite,
+            "horizon_reduction": self.horizon_reduction,
+            "threshold": float(self.risk_threshold),
+            "above_threshold": bool(composite >= self.risk_threshold),
+            "calibrated": self._calibration is not None,
+        }
+
+    def _operating_point_summary(self) -> dict:
+        if self.operating_point is None:
+            return {"source": "config", "pooling_key": f"{self.risk_pooling_method}|q={self.risk_pooling_quantile}",
+                    "threshold": float(self.risk_threshold), "calibrated": self._calibration is not None}
+        op = self.operating_point
+        return {"source": "operating_point.json (selected on val)", "pooling_key": op.get("pooling_key"),
+                "threshold": float(self.risk_threshold), "threshold_mandated": float(op["threshold"].get("mandated", 0.75)),
+                "selected_at": op.get("selected_at"), "calibrated": True}
 
     @property
     def model_version(self) -> str:
