@@ -408,6 +408,69 @@ class NidraPredictor:
             "n_trajectories": rollout["n_trajectories"],
         }
 
+    @torch.no_grad()
+    def forecast_batch(self, states_batch: np.ndarray, chunk: int = 128, n_samples_per_member: int | None = None) -> dict:
+        """Risk curves for many contexts at once — the offline file pipeline
+        (nidra.cli.forecast) and anything else that scores a whole capture.
+        No explanations, no ATT&CK text: the same rollout, pooling,
+        calibration and threshold as forecast(), vectorised.
+
+        states_batch: [N, L, F] raw, oldest-first. Returns arrays:
+        p_attack_at_k [N, K] (calibrated when an operating point exists),
+        p_attack_at_k_raw, band_low/high [N, K], p_within_horizon [N],
+        above_threshold [N], stage_mean_k [N, K, n_stages]."""
+        states_batch = np.asarray(states_batch, dtype="float32")
+        if states_batch.ndim != 3 or states_batch.shape[1] != self.L:
+            raise ValueError(f"expected [N, {self.L}, F], got {states_batch.shape}")
+        validate_state_array_width(states_batch.shape[2])
+        if not np.isfinite(states_batch).all():
+            raise ValueError("states_batch contains NaN or Inf")
+        n_samples = n_samples_per_member or self.n_samples_per_member
+        q_low = self.cfg["rollout"]["ci_low_quantile"]
+        q_high = self.cfg["rollout"]["ci_high_quantile"]
+        N = states_batch.shape[0]
+        out_p, out_raw, out_lo, out_hi, out_stage = [], [], [], [], []
+        for lo in range(0, N, chunk):
+            xb = torch.from_numpy(self.scaler.transform(states_batch[lo:lo + chunk].reshape(-1, states_batch.shape[2]))
+                                  .reshape(-1, self.L, states_batch.shape[2])).float()
+            B = xb.shape[0]
+            all_states = [m.rollout(xb, K=self.K, n_samples=n_samples, stochastic=True).states for m in self.models]
+            pooled = torch.cat(all_states, dim=1)                              # [B, S, K, F]
+            S = pooled.shape[1]
+            flat = pooled.reshape(B * S, self.K, -1)
+            risks, stages = [], []
+            for m in self.models:
+                r, st = m.score_states(flat)
+                risks.append(r.reshape(B, S, self.K))
+                stages.append(st.reshape(B, S, self.K, -1))
+            risk = torch.stack(risks).mean(0)                                  # [B, S, K] head-mean per trajectory
+            stage = torch.stack(stages).mean(0).mean(1)                        # [B, K, n_stages]
+            if self.operating_point is not None:
+                pk = pool_trajectories_np(risk.numpy(), self.risk_pooling_method, self.risk_pooling_quantile, axis=1)
+            else:
+                pk = pool_ensemble_risk(torch.stack(risks), sample_dim=2, head_dim=0, method=self.risk_pooling_method,
+                                        quantile=self.risk_pooling_quantile, head_reduction=self.risk_pooling_head_reduction).numpy()
+            raw = pk.copy()
+            lo_b = risk.quantile(q_low, dim=1).numpy()
+            hi_b = risk.quantile(q_high, dim=1).numpy()
+            if self._calibration is not None:
+                pk = apply_platt_by_horizon(pk, self._calibration)
+                lo_b = apply_platt_by_horizon(lo_b, self._calibration)
+                hi_b = apply_platt_by_horizon(hi_b, self._calibration)
+            out_p.append(pk); out_raw.append(raw); out_lo.append(lo_b); out_hi.append(hi_b); out_stage.append(stage.numpy())
+        p_k = np.clip(np.concatenate(out_p), 0.0, 1.0)
+        if self.horizon_reduction == "max":
+            composite = p_k.max(axis=1)
+        else:
+            composite = 1.0 - np.prod(1.0 - p_k, axis=1)
+        return {
+            "p_attack_at_k": p_k, "p_attack_at_k_raw": np.concatenate(out_raw),
+            "band_low": np.concatenate(out_lo), "band_high": np.concatenate(out_hi),
+            "p_within_horizon": composite, "above_threshold": composite >= self.risk_threshold,
+            "stage_mean_k": np.concatenate(out_stage), "threshold": float(self.risk_threshold),
+            "calibrated": self._calibration is not None, "n_trajectories": int(len(self.models) * n_samples),
+        }
+
     def _risk_curve(self, rollout: dict, window_seconds: int) -> dict:
         """The multi-horizon risk curve with uncertainty: per horizon the
         pooled (calibrated when an operating point exists) probability that

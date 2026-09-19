@@ -319,3 +319,18 @@ def predictor_weights_dir(predictor) -> Path:
 
 def predictor_scaler_path(predictor) -> Path:
     return Path(predictor._scaler_path)
+
+
+def test_forecast_batch_matches_single_forecast_geometry(trained_predictor):
+    predictor, windowed = trained_predictor
+    batch = windowed["train"].X[:4]
+    out = predictor.forecast_batch(batch, chunk=3, n_samples_per_member=8)
+    K = predictor.K
+    assert out["p_attack_at_k"].shape == (4, K)
+    assert out["band_low"].shape == (4, K) and out["band_high"].shape == (4, K)
+    assert out["stage_mean_k"].shape[:2] == (4, K)
+    assert out["p_within_horizon"].shape == (4,)
+    assert np.all((out["p_attack_at_k"] >= 0) & (out["p_attack_at_k"] <= 1))
+    assert np.all(out["p_within_horizon"] >= out["p_attack_at_k"].max(axis=1) - 1e-6)
+    with pytest.raises(ValueError):
+        predictor.forecast_batch(batch[:, :-1, :])
