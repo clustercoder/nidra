@@ -116,7 +116,7 @@ export function CaptureUpload({
             <p className="text-console-muted text-xs">
               Runs locally through the same model this console is already
               showing. The file is not uploaded anywhere and is deleted when the
-              analysis finishes. Up to 200 MB; needs at least 15 minutes of
+              analysis finishes. Up to 200 MB; needs at least 30 minutes of
               traffic from one host, which is the model&apos;s context window.
             </p>
           </div>

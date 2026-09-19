@@ -34,7 +34,7 @@ predictor:
   # model loads, inference runs, and every feature is normalised wrong.
   # ml/artifacts/ is tracked in this repo and is the only copy.
   weights_dir: ml/artifacts/weights
-  scaler_path: ml/artifacts/scaler/robust_scaler.joblib
+  scaler_path: ml/artifacts/scaler/feature_scaler.json   # FeatureScaler v2 (DECISIONS.md D106); robust_scaler.joblib is the frozen Δ=30 artifact
   # A DIFFERENT file from this one, deliberately: NidraPredictor needs the nested
   # training/model/rollout config nidra.utils.config.load_config() reads (cfg["model"],
   # cfg["ensemble"], cfg["rollout"], ...), not this file's flat backend tunables. The two

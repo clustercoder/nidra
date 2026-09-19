@@ -77,7 +77,7 @@ const TABS: Tab[] = [
     nodes: [
       {
         icon: "L=30",
-        label: "15-min context",
+        label: "30-min context",
         sublabel: "30 windows",
         color: "blue",
       },

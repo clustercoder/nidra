@@ -19,9 +19,9 @@ export function Hero() {
                 it happens
               </h1>
               <p className="text-gray-black text-xl leading-[1.6]">
-                Every 30 seconds NIDRA turns each host&apos;s traffic into 45
+                Every 60 seconds NIDRA turns each host&apos;s traffic into 45
                 numbers. It has learned how those numbers move, so it can run
-                them forward three minutes and say where the host is heading.
+                them forward six minutes and say where the host is heading.
                 In the Wednesday replay that was{" "}
                 <strong className="font-semibold">
                   90 seconds of warning before the scan became an intrusion

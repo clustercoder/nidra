@@ -266,7 +266,7 @@ export function Experiments() {
           <div className="flex flex-col items-stretch justify-center gap-4 px-6 md:flex-row">
             <div className="flex items-center gap-5 rounded-lg bg-white px-6 py-5">
               <span className="font-headings text-primary-blue text-3xl font-semibold">
-                3 min
+                6 min
               </span>
               <div className="text-gray-dark text-base">
                 <div className="text-gray-black-soft font-semibold">
@@ -277,7 +277,7 @@ export function Experiments() {
             </div>
             <div className="flex items-center gap-5 rounded-lg bg-white px-6 py-5">
               <span className="font-headings text-primary-blue text-3xl font-semibold">
-                30 s
+                60 s
               </span>
               <div className="text-gray-dark text-base">
                 <div className="text-gray-black-soft font-semibold">
