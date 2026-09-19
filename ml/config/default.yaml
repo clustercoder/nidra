@@ -61,10 +61,18 @@ dataset:
 # Windowing / state geometry
 # ---------------------------------------------------------------------------
 windowing:
-  window_seconds: 30      # Delta
-  context_length: 30      # L (15 min of history)
-  horizon_length: 6       # K (3 min forecast)
-  min_windows_per_host: 36  # L + K; hosts with fewer windows are dropped
+  # Delta = 60 s: the CIC-IDS2017 TrafficLabelling CSVs print minute-resolution
+  # timestamps (no seconds field), so any shorter window can only ever be
+  # populated at the :00 offset — at Delta=30 every :30 window was an
+  # artificial all-zero state, half of all risk positives were those empty
+  # windows, and persistence error oscillated with parity. See
+  # reports/NIDRA_REEVALUATION_2026-09-19.md §4.1 / §18. Changing Delta
+  # invalidates every trained artifact and recorded metric (CLAUDE.md); the
+  # Delta=30 record lives under git tag baseline-delta30-run7.
+  window_seconds: 60      # Delta
+  context_length: 30      # L (30 min of history at Delta=60)
+  horizon_length: 6       # K (6 min forecast at Delta=60)
+  min_windows_per_host: 36  # L + K; hosts with fewer windows are dropped when a split is built
   clustering_degree_cap: 200  # sample cap for local_clustering_coeff on dense nodes
 
 # ---------------------------------------------------------------------------
@@ -89,7 +97,16 @@ splits:
   train_days: [monday, tuesday, wednesday]
   test_days: [friday_morning, friday_portscan, friday_ddos]
   holdout_days: [thursday_web, thursday_infiltration]
-  val_fraction_of_train_time: 0.15   # contiguous trailing time-block of train, not random
+  # Validation = a contiguous trailing time-block of EACH training day
+  # (never random), with the cut nudged earlier so no attack episode
+  # straddles it. Per-day rather than one block off the concatenated
+  # timeline: the days are consecutive, so a single trailing block was just
+  # the end of Wednesday and validation held one Heartbleed episode on one
+  # host — every model-selection decision rested on 54 positives of one
+  # attack type. See nidra/data/splits.py. risk_label is recomputed inside
+  # each of train and val after the cut so no label crosses the boundary.
+  val_fraction_of_train_time: 0.30
+  val_block_per_day: true
 
 # ---------------------------------------------------------------------------
 # Model architecture
@@ -236,7 +253,7 @@ eval:
   # max_eval_samples=4000 — see REAL_DATA_RESULTS.md). Chunking is an exact
   # refactor (every reduction is per-row); null means one single pass.
   forecast_chunk_size: 500
-  window_seconds: 30
+  window_seconds: 60
 
 # ---------------------------------------------------------------------------
 # Explainability

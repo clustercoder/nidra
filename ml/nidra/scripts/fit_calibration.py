@@ -22,11 +22,10 @@ import numpy as np
 
 from nidra.data.dataset import build_windowed_arrays, subsample_stratified_by_risk
 from nidra.data.normalize import FeatureScaler
-from nidra.data.schema import CONTEXT_LENGTH, HORIZON_LENGTH
 from nidra.eval.baselines import ensemble_world_model_forecast
 from nidra.eval.calibrate import fit_platt_by_horizon, pooling_signature, save_calibration
 from nidra.eval.run_eval import _build_model
-from nidra.train.pipeline import build_all_splits, scale_arrays
+from nidra.train.pipeline import build_all_splits, geometry_from_config, scale_arrays
 from nidra.utils.config import load_config, resolve_path
 
 logger = logging.getLogger(__name__)
@@ -40,7 +39,7 @@ def fit_and_save(
     scaler_dir = resolve_path(cfg, cfg["artifacts"]["scaler_dir"])
     seeds = seeds if seeds is not None else cfg["ensemble"]["seeds"]
 
-    scaler = FeatureScaler.load(scaler_dir / "robust_scaler.joblib", scaler_dir / "scaler_metadata.json")
+    scaler = FeatureScaler.load(scaler_dir / "feature_scaler.json", scaler_dir / "scaler_metadata.json")
     models = []
     for seed in seeds:
         path = weights_dir / f"model_seed_{seed}.pt"
@@ -61,6 +60,7 @@ def fit_and_save(
     # splits, including the uncapped multi-million-window train split — a
     # 10+ minute cost for no benefit to this script.
     splits = build_all_splits(cfg)
+    _, CONTEXT_LENGTH, HORIZON_LENGTH = geometry_from_config(cfg)
     val = build_windowed_arrays(splits.val, L=CONTEXT_LENGTH, K=HORIZON_LENGTH)
     if len(val.X) == 0:
         raise RuntimeError("validation split is empty — cannot fit calibration without held-out labels")

@@ -13,11 +13,14 @@ def test_align_window_is_absolute_epoch_aligned_not_relative_to_first_event():
     # — alignment must not depend on which series' first timestamp anchors it.
     epochs_a = pd.Series([1000.0, 1015.0, 1029.9])
     epochs_b = pd.Series([1000.5, 1010.0])
-    wa = align_window(epochs_a, WINDOW_SECONDS)
-    wb = align_window(epochs_b, WINDOW_SECONDS)
+    wa = align_window(epochs_a, 30)
+    wb = align_window(epochs_b, 30)
     # floor(1000/30)*30=990, floor(1015/30)*30=990, floor(1029.9/30)*30=1020
     assert list(wa) == [990, 990, 1020]
     assert list(wb) == [990, 990]
+    # and at the canonical 60 s window: floor(1000/60)*60=960, floor(1029.9/60)*60=1020
+    assert list(align_window(epochs_a, WINDOW_SECONDS)) == [960, 960, 1020]
+    assert list(align_window(pd.Series([1080.0, 1139.9, 1140.0]), WINDOW_SECONDS)) == [1080, 1080, 1140]
 
 
 def test_parse_cic_timestamp_returns_correct_epoch_seconds_regardless_of_pandas_datetime_resolution():

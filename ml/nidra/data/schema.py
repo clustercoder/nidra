@@ -68,23 +68,62 @@ assert len(set(FEATURE_ORDER)) == 45, "FEATURE_ORDER contains duplicate feature 
 
 FEATURE_INDEX: dict[str, int] = {name: i for i, name in enumerate(FEATURE_ORDER)}
 
-# Features that are strictly non-negative counts/magnitudes and heavy-tailed;
-# log1p is applied to these before RobustScaler fitting (see normalize.py).
-LOG1P_FEATURES: list[str] = [
-    "bytes_total",
-    "active_flow_count",
-    "out_degree",
-    "new_peer_count",
-    "retrans_count",
-]
-for f in LOG1P_FEATURES:
-    assert f in FEATURE_INDEX, f"LOG1P_FEATURES entry {f!r} not in FEATURE_ORDER"
+# Per-feature preprocessing (see normalize.py for what each kind does):
+#   log1p  — non-negative, heavy-tailed counts / bytes / durations / variances
+#   asinh  — SIGNED heavy-tailed quantities (backward deltas and slopes of counts)
+#   zscore — unbounded or wide-range but not heavy-tailed (TTL, entropies, their deltas)
+#   unit   — already on a bounded [0,1] / [-1,1] scale (rates, fractions, is_active); left as is
+# Constant and exact-duplicate features are detected at fit time on the
+# training data and dropped there, not declared here — the data decides.
+# The choice per feature is checked, not assumed: nidra/data/preprocessing_audit.py
+# measures skew and clip saturation before/after and flags any feature whose
+# declared kind is not the best of {none, log1p, asinh} on the training rows.
+FEATURE_TRANSFORMS: dict[str, str] = {
+    # flow aggregates
+    "syn_ratio": "unit", "ack_ratio": "unit", "rst_ratio": "unit", "fin_ratio": "unit",
+    "psh_ratio": "unit", "urg_ratio": "unit",
+    "bytes_total": "log1p", "bytes_up_down_ratio": "log1p", "pkts_per_flow_mean": "log1p",
+    "flow_duration_mean": "log1p", "flow_duration_var": "log1p",
+    "iat_mean": "log1p", "iat_var": "log1p", "iat_max": "log1p",
+    "active_flow_count": "log1p",
+    # packet aggregates
+    "ttl_mean": "zscore", "ttl_var": "log1p", "tcp_window_mean": "log1p", "tcp_window_entropy": "zscore",
+    "frag_flag_rate": "unit",
+    "payload_size_mean": "log1p", "payload_size_var": "log1p", "payload_size_p95": "log1p",
+    "payload_size_entropy": "zscore",
+    "retrans_count": "log1p", "retrans_rate": "unit",
+    # graph scalars
+    "out_degree": "log1p", "in_degree": "log1p", "dst_ip_entropy": "zscore", "dst_port_entropy": "zscore",
+    "new_peer_count": "log1p", "neighbour_risk_fraction": "unit", "local_clustering_coeff": "unit",
+    "reciprocity": "unit",
+    # dynamics (signed)
+    "d_syn_ratio": "unit", "d_dst_port_entropy": "zscore", "d_out_degree": "asinh",
+    "d_new_peer_count": "asinh", "d_iat_var": "asinh", "d_retrans_rate": "unit",
+    "slope3_syn_ratio": "unit", "slope3_dst_port_entropy": "zscore", "slope3_out_degree": "asinh",
+    "slope3_iat_var": "asinh",
+    # activity
+    "is_active": "unit",
+}
+assert set(FEATURE_TRANSFORMS) == set(FEATURE_ORDER), "FEATURE_TRANSFORMS must cover FEATURE_ORDER exactly"
 
-# Windowing / rollout geometry — the other non-negotiable constants shared
-# across the data pipeline, model, training, and serving code.
-WINDOW_SECONDS: int = 30          # Delta
-CONTEXT_LENGTH: int = 30          # L windows of history (15 min)
-HORIZON_LENGTH: int = 6           # K windows of forecast (3 min)
+# Kept for readers of older metadata: the Δ=30 scaler applied log1p to these
+# five only (and, being an identity RobustScaler, changed nothing else).
+LOG1P_FEATURES: list[str] = [f for f in FEATURE_ORDER if FEATURE_TRANSFORMS[f] == "log1p"]
+
+# Windowing / rollout geometry — DEFAULTS only. The governing values are
+# `windowing.window_seconds / context_length / horizon_length` in
+# config/default.yaml, read through `nidra.train.pipeline.geometry_from_config`;
+# these constants back test fixtures and functions called without a config.
+#
+# Δ = 60 s since the Δ=60 rebuild: the CIC-IDS2017 flow CSVs carry
+# minute-resolution timestamps, so a 30 s window could only ever populate
+# the :00 half — every :30 window was an artificial empty state (see
+# reports/NIDRA_REEVALUATION_2026-09-19.md §4.1). Changing Δ invalidates
+# every trained artifact and every recorded metric; the Δ=30 record is kept
+# under the git tag `baseline-delta30-run7`.
+WINDOW_SECONDS: int = 60          # Delta
+CONTEXT_LENGTH: int = 30          # L windows of history (30 min at Δ=60)
+HORIZON_LENGTH: int = 6           # K windows of forecast (6 min at Δ=60)
 
 STAGE_LABELS: list[str] = [
     "benign",

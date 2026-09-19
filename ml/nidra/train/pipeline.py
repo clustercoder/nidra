@@ -14,11 +14,11 @@ import pandas as pd
 from nidra.data.dataset import WindowedArrays, build_windowed_arrays
 from nidra.data.flow_load import load_cicflowmeter_csv
 from nidra.data.join import build_day_inputs
-from nidra.data.labels import attach_risk_label, label_stage_table
+from nidra.data.labels import attach_risk_label, label_stage_table, reattach_risk_label
 from nidra.data.normalize import FeatureScaler
-from nidra.data.schema import CONTEXT_LENGTH, HORIZON_LENGTH
+from nidra.data.schema import CONTEXT_LENGTH, FEATURE_INDEX, HORIZON_LENGTH, WINDOW_SECONDS
 from nidra.data.splits import SplitResult, assert_no_episode_leakage, assert_no_temporal_overlap, build_splits
-from nidra.data.windowize import CIC2017_TIMEBASE_TAG, windowize_day
+from nidra.data.windowize import CIC2017_TIMEBASE_TAG, FUSION_TAG, windowize_day
 from nidra.utils.config import resolve_path
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 def load_and_label_day(flow_csv_path: str | Path, window_seconds: int, min_windows_per_host: int,
                         packets_parquet_path: str | Path | None = None, row_cap: int | None = None,
-                        cache_path: str | Path | None = None) -> pd.DataFrame:
+                        cache_path: str | Path | None = None, horizon_k: int = HORIZON_LENGTH) -> pd.DataFrame:
     """Full per-day pipeline: load CSV -> join/window -> windowize -> label.
     `packets_parquet_path` is optional; when absent, the day runs in
     flow-only mode (packet features zero-filled, logged). `row_cap` bounds
@@ -58,7 +58,7 @@ def load_and_label_day(flow_csv_path: str | Path, window_seconds: int, min_windo
     stage_table, label_report = label_stage_table(flows_w)
     if label_report["unmapped_labels"]:
         logger.warning("load_and_label_day: unmapped raw labels in %s: %s", flow_csv_path, label_report["unmapped_labels"])
-    labelled = attach_risk_label(states, stage_table, horizon_k=HORIZON_LENGTH, window_seconds=window_seconds)
+    labelled = attach_risk_label(states, stage_table, horizon_k=horizon_k, window_seconds=window_seconds)
 
     if cache_path is not None:
         cache_path = Path(cache_path)
@@ -87,17 +87,25 @@ def declared_packets_tag(day_meta: dict) -> str:
 
 def day_cache_path(processed_dir: str | Path, day_key: str, windowing_cfg: dict,
                     row_cap: int | None, packets_tag: str) -> Path:
-    """Cache key encodes everything that changes the resulting table: window
-    geometry, the host-count filter, packet availability (a day gains real
-    packet features the moment its PCAP is extracted — the cache must not
-    keep serving the old flow-only table), the row cap, and the flow timebase
-    (CIC2017_TIMEBASE_TAG — the CSV clock corrections in
-    windowize.parse_cic_timestamp decide which packets a flow window meets at
-    all, so they change every packet-derived column in the table)."""
+    """Cache key encodes everything that changes the resulting table: the
+    window length, packet availability (a day gains real packet features the
+    moment its PCAP is extracted — the cache must not keep serving the old
+    flow-only table), the row cap, the flow timebase (CIC2017_TIMEBASE_TAG —
+    the CSV clock corrections in windowize.parse_cic_timestamp decide which
+    packets a flow window meets at all) and the flow/packet fusion rule
+    (windowize.FUSION_TAG).
+
+    Deliberately NOT in the key: the history/horizon geometry (L, K) and the
+    per-host window-count filter. The cached table is the unfiltered state
+    table with the K-independent `stage_label`; `risk_label` is re-derived
+    for the configured K and hosts are filtered to L + K windows when a
+    split is assembled (`build_all_splits`), so one table per day serves
+    every geometry. The Δ=30 tables (`__m36__...utc12h.parquet`, no fusion
+    tag) are kept under the old key as the historical record; this loader
+    does not read them."""
     return Path(processed_dir) / (
         f"{day_key}__w{windowing_cfg['window_seconds']}"
-        f"__m{windowing_cfg['min_windows_per_host']}"
-        f"__{packets_tag}__cap{row_cap}__{CIC2017_TIMEBASE_TAG}.parquet"
+        f"__{packets_tag}__cap{row_cap}__{CIC2017_TIMEBASE_TAG}__{FUSION_TAG}.parquet"
     )
 
 
@@ -119,9 +127,39 @@ def _resolve_packets_path(dataset_cfg: dict, day_meta: dict, day_key: str) -> Pa
     return path
 
 
+def geometry_from_config(cfg: dict) -> tuple[int, int, int]:
+    """(window_seconds, L, K) — the one place the config's geometry is read
+    for windowing, labelling and sample construction. `labels.
+    risk_threshold_windows`, if present, must agree with K: the risk label
+    is "attack in (t, t+K]" and a horizon that differs from the rollout's
+    would make the label and the forecast describe different questions."""
+    w = cfg.get("windowing", {})
+    window_seconds = int(w.get("window_seconds", WINDOW_SECONDS))
+    L = int(w.get("context_length", CONTEXT_LENGTH))
+    K = int(w.get("horizon_length", HORIZON_LENGTH))
+    declared = cfg.get("labels", {}).get("risk_threshold_windows")
+    if declared is not None and int(declared) != K:
+        raise ValueError(
+            f"labels.risk_threshold_windows={declared} disagrees with windowing.horizon_length={K}; "
+            "the risk label horizon and the rollout horizon must be the same K"
+        )
+    return window_seconds, L, K
+
+
+def _filter_min_windows(table: pd.DataFrame, min_windows_per_host: int) -> pd.DataFrame:
+    if table.empty or min_windows_per_host <= 1:
+        return table
+    counts = table.groupby("host_id")["window_ts"].transform("count")
+    return table[counts >= min_windows_per_host].reset_index(drop=True)
+
+
 def build_all_splits(cfg: dict) -> SplitResult:
     dataset_cfg = cfg["dataset"]
     windowing_cfg = cfg["windowing"]
+    window_seconds, L, K = geometry_from_config(cfg)
+    min_windows = int(windowing_cfg.get("min_windows_per_host", L + K))
+    if min_windows < L + K:
+        raise ValueError(f"windowing.min_windows_per_host={min_windows} is below L+K={L + K}; no sample could be built")
     raw_dir = dataset_cfg.get("cic2017_flow_dir")
     if raw_dir is None:
         raise KeyError("cfg['dataset'] must set 'cic2017_flow_dir'")
@@ -145,9 +183,10 @@ def build_all_splits(cfg: dict) -> SplitResult:
         if declared_cache is not None and declared_cache.exists():
             day_tables[day_key] = load_and_label_day(
                 csv_path,
-                window_seconds=windowing_cfg["window_seconds"],
-                min_windows_per_host=windowing_cfg["min_windows_per_host"],
+                window_seconds=window_seconds,
+                min_windows_per_host=1,
                 cache_path=declared_cache,
+                horizon_k=K,
             )
             continue
 
@@ -167,12 +206,21 @@ def build_all_splits(cfg: dict) -> SplitResult:
                       if processed_dir is not None else None)
         day_tables[day_key] = load_and_label_day(
             csv_path,
-            window_seconds=windowing_cfg["window_seconds"],
-            min_windows_per_host=windowing_cfg["min_windows_per_host"],
+            window_seconds=window_seconds,
+            min_windows_per_host=1,
             packets_parquet_path=packets_parquet_path,
             row_cap=row_cap,
             cache_path=cache_path,
+            horizon_k=K,
         )
+
+    # The cached table is unfiltered and K-agnostic: apply this config's
+    # geometry now — hosts need at least L+K windows to yield one sample,
+    # and risk_label is re-derived for this K regardless of the K the
+    # table was cached under.
+    for day_key in list(day_tables):
+        table = _filter_min_windows(day_tables[day_key], min_windows)
+        day_tables[day_key] = reattach_risk_label(table, K) if not table.empty else table
 
     splits_cfg = cfg["splits"]
     splits = build_splits(
@@ -181,6 +229,8 @@ def build_all_splits(cfg: dict) -> SplitResult:
         test_days=splits_cfg["test_days"],
         holdout_days=splits_cfg["holdout_days"],
         val_fraction=splits_cfg["val_fraction_of_train_time"],
+        val_block_per_day=bool(splits_cfg.get("val_block_per_day", True)),
+        horizon_k=K,
     )
     assert_no_temporal_overlap(splits)
     assert_no_episode_leakage(splits)
@@ -188,21 +238,24 @@ def build_all_splits(cfg: dict) -> SplitResult:
 
 
 def fit_scaler(train_arrays: WindowedArrays) -> FeatureScaler:
-    """Fit RobustScaler on TRAIN split's raw states only — both the history
-    (X) and future targets (Y) come from the same underlying state table, so
-    fitting on the union of both is still "training period only"; it is
-    never fit on val/test/holdout arrays."""
+    """Fit the FeatureScaler on the TRAIN split's raw states only — both the
+    history (X) and future targets (Y) come from the same underlying state
+    table, so fitting on the union of both is still "training period only";
+    it is never fit on val/test/holdout arrays. Statistics are computed on
+    active windows (see normalize.py); the sampled training windows contain
+    ~98% silent rows and a scaler fit on those was the identity."""
     all_train_states = np.concatenate([train_arrays.X.reshape(-1, train_arrays.X.shape[-1]),
                                         train_arrays.Y.reshape(-1, train_arrays.Y.shape[-1])], axis=0)
-    return FeatureScaler().fit(all_train_states)
+    active = all_train_states[:, FEATURE_INDEX["is_active"]] > 0
+    return FeatureScaler().fit(all_train_states, active_mask=active)
 
 
 def scale_arrays(arrays: WindowedArrays, scaler: FeatureScaler) -> tuple[np.ndarray, np.ndarray]:
     return scaler.transform(arrays.X), scaler.transform(arrays.Y)
 
 
-def build_windowed_splits(splits: SplitResult) -> dict[str, WindowedArrays]:
+def build_windowed_splits(splits: SplitResult, L: int = CONTEXT_LENGTH, K: int = HORIZON_LENGTH) -> dict[str, WindowedArrays]:
     return {
-        name: build_windowed_arrays(df, L=CONTEXT_LENGTH, K=HORIZON_LENGTH)
+        name: build_windowed_arrays(df, L=L, K=K)
         for name, df in [("train", splits.train), ("val", splits.val), ("test", splits.test), ("holdout", splits.holdout)]
     }

@@ -17,7 +17,7 @@ import pandas as pd
 import pytest
 
 from nidra.train import pipeline as pipeline_mod
-from nidra.data.windowize import CIC2017_TIMEBASE_TAG
+from nidra.data.windowize import CIC2017_TIMEBASE_TAG, FUSION_TAG
 from nidra.train.pipeline import FLOW_ONLY_TAG, build_all_splits, day_cache_path, declared_packets_tag
 
 
@@ -32,7 +32,7 @@ def _cfg(tmp_path, *, packets_dir=None):
                 "friday_ddos": {"file": "Friday-DDos.csv", "role": "test", "packets": "Friday_packets.parquet"},
             },
         },
-        "windowing": {"window_seconds": 30, "min_windows_per_host": 36},
+        "windowing": {"window_seconds": 60, "context_length": 1, "horizon_length": 1, "min_windows_per_host": 2},
         "splits": {
             "train_days": ["monday"],
             "test_days": ["friday_ddos"],
@@ -50,7 +50,7 @@ def _write_cache(cfg, tmp_path, day_key, tag, n_rows=2):
     path = day_cache_path(processed, day_key, cfg["windowing"], cfg["dataset"]["mvp_row_cap_per_day"], tag)
     pd.DataFrame({
         "host_id": ["h1"] * n_rows,
-        "window_ts": list(range(0, 30 * n_rows, 30)),
+        "window_ts": list(range(0, 60 * n_rows, 60)),
         "stage_label": ["benign"] * n_rows,
         "risk_label": [0] * n_rows,
     }).to_parquet(path)
@@ -90,14 +90,24 @@ def test_declared_tag_ignores_local_disk():
 
 
 def test_cache_key_matches_committed_naming_convention(tmp_path):
-    """The committed files are named e.g.
-    monday__w30__m36__Monday-WorkingHours_packets.parquet__capNone__utc12h.parquet —
-    if this format drifts, every committed cache silently stops matching."""
-    path = day_cache_path(tmp_path, "monday", {"window_seconds": 30, "min_windows_per_host": 36},
+    """The committed Δ=60 files are named e.g.
+    monday__w60__Monday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet —
+    if this format drifts, every committed cache silently stops matching.
+    The key carries no L/K/min-windows component on purpose: one cached
+    table per day serves every history/horizon geometry (risk_label is
+    re-derived and hosts are filtered when the split is assembled)."""
+    path = day_cache_path(tmp_path, "monday", {"window_seconds": 60, "min_windows_per_host": 36},
                           None, "Monday-WorkingHours_packets.parquet")
     assert path.name == (
-        "monday__w30__m36__Monday-WorkingHours_packets.parquet__capNone__utc12h.parquet"
+        f"monday__w60__Monday-WorkingHours_packets.parquet__capNone__utc12h__{FUSION_TAG}.parquet"
     )
+    # geometry must not change the key
+    other = day_cache_path(tmp_path, "monday", {"window_seconds": 60, "min_windows_per_host": 18,
+                                                "context_length": 15, "horizon_length": 3},
+                           None, "Monday-WorkingHours_packets.parquet")
+    assert other.name == path.name
+    # the historical Δ=30 key (with __m36__ and no fusion tag) is no longer produced
+    assert "__m36__" not in path.name
 
 
 def test_cache_key_carries_the_timebase_tag():
@@ -106,9 +116,9 @@ def test_cache_key_carries_the_timebase_tag():
     CSV clock defects — see windowize.parse_cic_timestamp — left 11 of 45
     features ~always zero). A cache written under the old timebase must not
     be served to a run using the new one, so the tag is part of the name."""
-    key = {"window_seconds": 30, "min_windows_per_host": 36}
+    key = {"window_seconds": 60, "min_windows_per_host": 36}
     path = day_cache_path("/p", "monday", key, None, "M.parquet")
-    assert f"__{CIC2017_TIMEBASE_TAG}." in path.name
+    assert f"__{CIC2017_TIMEBASE_TAG}__" in path.name
     # And the pre-fix naming must no longer be produced by anything.
     assert path.name != "monday__w30__m36__M.parquet__capNone.parquet"
 

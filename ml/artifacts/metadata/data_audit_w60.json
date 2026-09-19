@@ -1,0 +1,489 @@
+{
+  "stage": "data_audit",
+  "recorded_at": "2026-09-19T19:03:15Z",
+  "git_commit": "31b1eeddf41932401d2eb689b92469a081a87462",
+  "config_path": "config/default.yaml",
+  "config_hash": "b9d04c029f0a8274",
+  "schema_version": "1.0",
+  "n_features": 45,
+  "geometry": {
+    "window_seconds": 60,
+    "context_length_L": 30,
+    "horizon_length_K": 6,
+    "history_minutes": 30.0,
+    "horizon_minutes": 6.0,
+    "min_windows_per_host": 36
+  },
+  "dataset": {
+    "name": "CIC-IDS2017 (TrafficLabelling CSVs + project tshark packet parquet)",
+    "flow_timebase": "utc12h",
+    "days": {
+      "monday": {
+        "role": "benign_baseline",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Monday-WorkingHours.pcap_ISCX.csv",
+          "bytes": 268649908,
+          "mtime": "2017-08-10T17:15:46Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Monday-WorkingHours_packets.parquet",
+          "bytes": 147461456,
+          "mtime": "2026-09-07T11:19:48Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/monday__w60__Monday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 8259248,
+          "mtime": "2026-09-19T18:52:53Z"
+        },
+        "processed_table_sha256": "38332ecd06e993fe505fcdeeaf82769eec87c9f7695ce3a0f6ffbc4a6de8ee6f"
+      },
+      "tuesday": {
+        "role": "train",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Tuesday-WorkingHours.pcap_ISCX.csv",
+          "bytes": 174696560,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Tuesday-WorkingHours_packets.parquet",
+          "bytes": 144575051,
+          "mtime": "2026-09-11T05:53:26Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/tuesday__w60__Tuesday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 6761403,
+          "mtime": "2026-09-19T18:54:48Z"
+        },
+        "processed_table_sha256": "fff7ae730c51eb0b9a62dfffbdd0e817c77a689a8f7669bd809ccaaeef95ce5c"
+      },
+      "wednesday": {
+        "role": "train",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Wednesday-workingHours.pcap_ISCX.csv",
+          "bytes": 285642925,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Wednesday-workingHours_packets.parquet",
+          "bytes": 167783673,
+          "mtime": "2026-09-11T06:00:54Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/wednesday__w60__Wednesday-workingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 6930474,
+          "mtime": "2026-09-19T18:56:55Z"
+        },
+        "processed_table_sha256": "e04a90cb47a58fa2973456c2da50561281de4811718a718bb7611cde2f5a1e7e"
+      },
+      "thursday_web": {
+        "role": "holdout",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv",
+          "bytes": 92030223,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Thursday-WorkingHours_packets.parquet",
+          "bytes": 117663088,
+          "mtime": "2026-09-11T06:06:08Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/thursday_web__w60__Thursday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 2526113,
+          "mtime": "2026-09-19T18:58:13Z"
+        },
+        "processed_table_sha256": "0018c62a33036e567cda116463735bec2c7dbd9b24ce12ecff1c8931e9661905"
+      },
+      "thursday_infiltration": {
+        "role": "holdout",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv",
+          "bytes": 108723183,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Thursday-WorkingHours_packets.parquet",
+          "bytes": 117663088,
+          "mtime": "2026-09-11T06:06:08Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/thursday_infiltration__w60__Thursday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 3190235,
+          "mtime": "2026-09-19T18:59:38Z"
+        },
+        "processed_table_sha256": "de13160473ce818d2d1e8b11bd4ab6a3799e6484ba13bb5614ee686adb708894"
+      },
+      "friday_morning": {
+        "role": "test",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Morning.pcap_ISCX.csv",
+          "bytes": 75386737,
+          "mtime": "2017-08-17T14:16:06Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/friday_morning__w60__Friday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 2676780,
+          "mtime": "2026-09-19T19:00:56Z"
+        },
+        "processed_table_sha256": "9883c25229c4a3356def80ba624a749815a3f16c0d6b681ccf5dcd678c07094b"
+      },
+      "friday_portscan": {
+        "role": "test",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv",
+          "bytes": 101874777,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/friday_portscan__w60__Friday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 1810713,
+          "mtime": "2026-09-19T19:02:06Z"
+        },
+        "processed_table_sha256": "85382f4c3e7d7aaa965abf627c148d65153a239b3806b5d361d4cadaf15d6393"
+      },
+      "friday_ddos": {
+        "role": "test",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv",
+          "bytes": 96101069,
+          "mtime": "2018-06-07T16:33:50Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/friday_ddos__w60__Friday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 892035,
+          "mtime": "2026-09-19T19:03:04Z"
+        },
+        "processed_table_sha256": "9dcea5afe3caae1e9360ce80e98e1873d1846fd73a935cbe07072f2315ecd080"
+      }
+    }
+  },
+  "seed": null,
+  "ensemble_seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "split": null,
+  "threshold": 0.75,
+  "pooling": null,
+  "calibration": null,
+  "checkpoints": {
+    "weights": {
+      "seed_0": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/weights/model_seed_0.pt",
+        "sha256": "a0a55c953cc75dccfd2542f34c4400fc47aa88de6aa8ac5dc9601e01619cec15"
+      },
+      "seed_1": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/weights/model_seed_1.pt",
+        "sha256": "e03a2a6f33065f319b3ebb47bc9c2e47b0181cf70b9901701fb68408400e4b38"
+      },
+      "seed_2": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/weights/model_seed_2.pt",
+        "sha256": "27bcd5a00edd7dd0c74de843b77f987fb6ee0a1116f93e621810ee0c1821a849"
+      },
+      "seed_3": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/weights/model_seed_3.pt",
+        "sha256": "cb66a9522466d15070a275238b34816615115d3156caf6fe3c8bb3870c581eff"
+      },
+      "seed_4": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/weights/model_seed_4.pt",
+        "sha256": "de4d3b140e81b9d55518f18c94e1d9894427fbb454fd6685d7d98a59e325a85f"
+      }
+    },
+    "scaler": {
+      "robust_scaler.joblib": "d9e3871400cba0e4f7c3272f016a0d5c71ea3e26b786a19283e2440af4b9b605",
+      "feature_scaler.json": null,
+      "scaler_metadata.json": "3dbce1d1c75ad0de47db799643f7ca3bfcc970caac5b19e2c4b1a5ac93f48e3d",
+      "shap_background.npy": "6ba0add3806c68e8d50776271956b47af0d2a396528ca1f2bdd15d4a4b7c2657"
+    },
+    "calibration": {
+      "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/weights/risk_calibration.json",
+      "sha256": "228f4ca55e65e85d452271222dfff647180c663d66bcdb591d23dfc0acf58039"
+    }
+  },
+  "platform": {
+    "python": "3.14.7",
+    "machine": "arm64",
+    "system": "Darwin"
+  },
+  "metrics": {
+    "train": {
+      "name": "train",
+      "rows": 2355066,
+      "hosts": 6465,
+      "window_seconds": 60,
+      "window_ts_all_aligned": true,
+      "sub_window_offsets_present": [
+        0
+      ],
+      "time_span_hours": 53.68333333333333,
+      "active_rate": 0.05968962228659409,
+      "all_zero_row_rate": 0.9124517104828485,
+      "attack_windows": 139,
+      "attack_windows_active": 139,
+      "attacked_hosts": [
+        "172.16.0.1"
+      ],
+      "stage_counts": {
+        "benign": 2354927,
+        "exfil": 75,
+        "initial_access": 64
+      },
+      "risk_positive": 179,
+      "natural_prevalence": 7.600636245438557e-05,
+      "episodes": {
+        "merge_gap_windows": 5,
+        "n": 5,
+        "per_host": {
+          "172.16.0.1": 5
+        },
+        "lengths_windows": [
+          1,
+          1,
+          2,
+          64,
+          92
+        ],
+        "raw_contiguous_runs": 13
+      },
+      "label_composition": {
+        "n_positive": 179,
+        "inside_running_episode": 155,
+        "inside_running_episode_fraction": 0.8659217877094972,
+        "pre_onset_within_K": 24,
+        "n_true_onsets": 5,
+        "pre_onset_windows_available": {
+          "<=1min": 3,
+          "<=3min": 9,
+          "<=5min": 15,
+          "<=10min": 29,
+          "<=15min": 39,
+          "<=30min": 69
+        }
+      },
+      "packet_features_populated_rate_on_active": 0.9965142666088083,
+      "flow_features_populated_rate_on_active": 0.5154048074665832
+    },
+    "val": {
+      "name": "val",
+      "rows": 813183,
+      "hosts": 5120,
+      "window_seconds": 60,
+      "window_ts_all_aligned": true,
+      "sub_window_offsets_present": [
+        0
+      ],
+      "time_span_hours": 50.56666666666667,
+      "active_rate": 0.07587836932154263,
+      "all_zero_row_rate": 0.9004566007897361,
+      "attack_windows": 74,
+      "attack_windows_active": 74,
+      "attacked_hosts": [
+        "172.16.0.1"
+      ],
+      "stage_counts": {
+        "benign": 813109,
+        "initial_access": 74
+      },
+      "risk_positive": 88,
+      "natural_prevalence": 0.00010821672366490691,
+      "episodes": {
+        "merge_gap_windows": 5,
+        "n": 2,
+        "per_host": {
+          "172.16.0.1": 2
+        },
+        "lengths_windows": [
+          21,
+          63
+        ],
+        "raw_contiguous_runs": 12
+      },
+      "label_composition": {
+        "n_positive": 88,
+        "inside_running_episode": 82,
+        "inside_running_episode_fraction": 0.9318181818181818,
+        "pre_onset_within_K": 6,
+        "n_true_onsets": 2,
+        "pre_onset_windows_available": {
+          "<=1min": 1,
+          "<=3min": 3,
+          "<=5min": 5,
+          "<=10min": 10,
+          "<=15min": 15,
+          "<=30min": 30
+        }
+      },
+      "packet_features_populated_rate_on_active": 0.9962724664927151,
+      "flow_features_populated_rate_on_active": 0.5232970844205306
+    },
+    "test": {
+      "name": "test",
+      "rows": 299392,
+      "hosts": 2072,
+      "window_seconds": 60,
+      "window_ts_all_aligned": true,
+      "sub_window_offsets_present": [
+        0
+      ],
+      "time_span_hours": 8.05,
+      "active_rate": 0.14858780461735785,
+      "all_zero_row_rate": 0.8016513467293716,
+      "attack_windows": 697,
+      "attack_windows_active": 697,
+      "attacked_hosts": [
+        "172.16.0.1",
+        "192.168.10.12",
+        "192.168.10.14",
+        "192.168.10.15",
+        "192.168.10.17",
+        "192.168.10.5",
+        "192.168.10.50",
+        "192.168.10.8",
+        "192.168.10.9",
+        "205.174.165.73"
+      ],
+      "stage_counts": {
+        "benign": 298695,
+        "c2": 648,
+        "recon": 27,
+        "exfil": 22
+      },
+      "risk_positive": 982,
+      "natural_prevalence": 0.003279980761008978,
+      "episodes": {
+        "merge_gap_windows": 5,
+        "n": 16,
+        "per_host": {
+          "172.16.0.1": 7,
+          "192.168.10.12": 1,
+          "192.168.10.14": 1,
+          "192.168.10.15": 1,
+          "192.168.10.17": 1,
+          "192.168.10.5": 1,
+          "192.168.10.50": 1,
+          "192.168.10.8": 1,
+          "192.168.10.9": 1,
+          "205.174.165.73": 1
+        },
+        "lengths_windows": [
+          1,
+          2,
+          2,
+          2,
+          3,
+          3,
+          6,
+          9,
+          11,
+          21,
+          59,
+          144,
+          151,
+          156,
+          174,
+          176
+        ],
+        "raw_contiguous_runs": 235
+      },
+      "label_composition": {
+        "n_positive": 982,
+        "inside_running_episode": 904,
+        "inside_running_episode_fraction": 0.9205702647657841,
+        "pre_onset_within_K": 78,
+        "n_true_onsets": 16,
+        "pre_onset_windows_available": {
+          "<=1min": 13,
+          "<=3min": 39,
+          "<=5min": 65,
+          "<=10min": 123,
+          "<=15min": 176,
+          "<=30min": 327
+        }
+      },
+      "packet_features_populated_rate_on_active": 0.9947623971586567,
+      "flow_features_populated_rate_on_active": 0.5297621723688352
+    },
+    "holdout": {
+      "name": "holdout",
+      "rows": 450482,
+      "hosts": 2557,
+      "window_seconds": 60,
+      "window_ts_all_aligned": true,
+      "sub_window_offsets_present": [
+        0
+      ],
+      "time_span_hours": 8.083333333333334,
+      "active_rate": 0.11688147362158754,
+      "all_zero_row_rate": 0.8404708734200257,
+      "attack_windows": 96,
+      "attack_windows_active": 96,
+      "attacked_hosts": [
+        "172.16.0.1",
+        "192.168.10.8"
+      ],
+      "stage_counts": {
+        "benign": 450386,
+        "initial_access": 68,
+        "lateral": 28
+      },
+      "risk_positive": 151,
+      "natural_prevalence": 0.0003351965228355406,
+      "episodes": {
+        "merge_gap_windows": 5,
+        "n": 5,
+        "per_host": {
+          "172.16.0.1": 2,
+          "192.168.10.8": 3
+        },
+        "lengths_windows": [
+          1,
+          15,
+          28,
+          42,
+          46
+        ],
+        "raw_contiguous_runs": 30
+      },
+      "label_composition": {
+        "n_positive": 151,
+        "inside_running_episode": 127,
+        "inside_running_episode_fraction": 0.8410596026490066,
+        "pre_onset_within_K": 24,
+        "n_true_onsets": 5,
+        "pre_onset_windows_available": {
+          "<=1min": 4,
+          "<=3min": 12,
+          "<=5min": 20,
+          "<=10min": 38,
+          "<=15min": 52,
+          "<=30min": 73
+        }
+      },
+      "packet_features_populated_rate_on_active": 0.9948341025202743,
+      "flow_features_populated_rate_on_active": 0.5262188289366228
+    },
+    "host_overlap": {
+      "train_test": 1696,
+      "train_holdout": 1913,
+      "train_val": 4907
+    }
+  }
+}

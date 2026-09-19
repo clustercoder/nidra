@@ -19,7 +19,6 @@ import torch
 
 from nidra.data.dataset import build_windowed_arrays, subsample_stratified_by_risk
 from nidra.data.normalize import FeatureScaler
-from nidra.data.schema import CONTEXT_LENGTH, HORIZON_LENGTH
 from nidra.eval.ablations import horizon_curve, persistence_ablation, surprise_signal, time_shuffle_ablation
 from nidra.eval.baselines import (
     baseline_lr_current_state,
@@ -36,7 +35,7 @@ from nidra.eval.calibration import calibration_by_horizon
 from nidra.eval.lead_time_runner import compute_lead_time_report
 from nidra.eval.metrics import standard_metrics
 from nidra.models.world_model import WorldModel
-from nidra.train.pipeline import build_all_splits, scale_arrays
+from nidra.train.pipeline import build_all_splits, geometry_from_config, scale_arrays
 from nidra.utils.config import load_config, resolve_path
 
 logger = logging.getLogger(__name__)
@@ -166,7 +165,7 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
         risk_pooling_method, risk_pooling_quantile, risk_pooling_head_reduction, forecast_chunk_size,
     )
 
-    scaler = FeatureScaler.load(scaler_dir / "robust_scaler.joblib", scaler_dir / "scaler_metadata.json")
+    scaler = FeatureScaler.load(scaler_dir / "feature_scaler.json", scaler_dir / "scaler_metadata.json")
     model = _build_model(cfg)
     model.load_state_dict(torch.load(weights_dir / f"model_seed_{seed}.pt", map_location="cpu"))
     model.eval()
@@ -212,6 +211,7 @@ def run(cfg: dict, seed: int, split_name: str, n_samples: int, max_eval_samples:
             logger.info("run_eval: applying post-hoc calibration from %s", weights_dir / "risk_calibration.json")
 
     splits = build_all_splits(cfg)
+    _, CONTEXT_LENGTH, HORIZON_LENGTH = geometry_from_config(cfg)
     eval_split_df = getattr(splits, split_name)
 
     # Only two splits are needed here: train (to fit the LR baselines) and the

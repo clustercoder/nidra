@@ -104,7 +104,11 @@ def parse_cic_timestamp(
     does not share these defects can be read literally, but no caller in this
     project should need to.
     """
-    # CIC-IDS2017's "TrafficLabelling" release uses DD/MM/YYYY HH:MM:SS.
+    # CIC-IDS2017's "TrafficLabelling" release prints D/M/YYYY H:MM — MINUTE
+    # resolution, no seconds field at all (every timestamp string in the
+    # release is 13-14 characters). Any window shorter than 60 s therefore
+    # cannot be populated at the sub-minute offsets: at Delta=30 s every :30
+    # window was an artificial all-zero state. The canonical window is 60 s.
     parsed = pd.to_datetime(ts, errors="coerce", dayfirst=True)
     if twelve_hour:
         # Noon is already 12 on a 12-hour clock, so only hours at or below
@@ -199,6 +203,62 @@ def aggregate_packets(packets: pd.DataFrame, window_seconds: int) -> pd.DataFram
     return out.fillna(0.0)
 
 
+FLOW_FEATURES: list[str] = FEATURE_ORDER[0:15]
+PACKET_FEATURES: list[str] = FEATURE_ORDER[15:26]
+GRAPH_FEATURES: list[str] = FEATURE_ORDER[26:34]
+assert FLOW_FEATURES[0] == "syn_ratio" and FLOW_FEATURES[-1] == "active_flow_count"
+assert PACKET_FEATURES[0] == "ttl_mean" and PACKET_FEATURES[-1] == "retrans_rate"
+assert GRAPH_FEATURES[0] == "out_degree" and GRAPH_FEATURES[-1] == "reciprocity"
+
+#: Tag for the flow/packet fusion rule below; part of the windowed-table cache
+#: key (train.pipeline.day_cache_path) because a table built under the old
+#: left join is a different table for the same day.
+FUSION_TAG: str = "fuse2"
+
+
+def _fuse_flow_and_packet_windows(flow_agg: pd.DataFrame, packet_agg: pd.DataFrame) -> pd.DataFrame:
+    """Join the per-(host, window) flow aggregates and packet aggregates.
+
+    A CICFlowMeter flow is timestamped at its START, so a host with one
+    long-lived connection (an SSH session, a slowloris socket, a large
+    download) starts a flow in one window and then sends packets for many
+    windows with no new flow start at all. The original left join from flows
+    onto packets emitted every such window as an all-zero `is_active=0`
+    state — on Tuesday of CIC-IDS2017 that was 24,377 host-minutes, 39% of
+    the minutes in which a host was actually transmitting. Those minutes are
+    real state, so the join is outer, with two restrictions that keep the
+    host population and the day's extent defined by the flow records:
+
+      - only hosts that appear as a flow SOURCE in this day file are kept
+        (labels are keyed on the flow source, and a host that never initiates
+        a flow — a pure responder — has no label semantics here);
+      - only windows inside the day file's own flow time range are kept, so
+        a day file that covers the morning does not absorb the afternoon's
+        packets from the shared full-day PCAP.
+
+    Windows with packets but no flow start carry their packet aggregates
+    and zero flow aggregates (`active_flow_count` counts flow STARTS in the
+    window — a window with an ongoing flow but no new one legitimately has
+    zero); windows with a flow start but no packets (PCAP gap) carry zero
+    packet aggregates, as before.
+    """
+    if packet_agg.empty or flow_agg.empty:
+        return flow_agg.merge(packet_agg, on=["host_id", "window_ts"], how="left")
+    flow_hosts = set(flow_agg["host_id"])
+    lo, hi = flow_agg["window_ts"].min(), flow_agg["window_ts"].max()
+    packet_kept = packet_agg[
+        packet_agg["host_id"].isin(flow_hosts) & (packet_agg["window_ts"] >= lo) & (packet_agg["window_ts"] <= hi)
+    ]
+    merged = flow_agg.merge(packet_kept, on=["host_id", "window_ts"], how="outer")
+    n_packet_only = len(merged) - len(flow_agg)
+    logger.info(
+        "_fuse_flow_and_packet_windows: %d flow-start windows + %d packet-only windows of flow-source hosts "
+        "(%d packet windows outside the flow host set / time range ignored)",
+        len(flow_agg), n_packet_only, len(packet_agg) - len(packet_kept),
+    )
+    return merged
+
+
 def build_state_rows(
     flows: pd.DataFrame,
     packets: pd.DataFrame,
@@ -224,23 +284,26 @@ def build_state_rows(
     flow_agg = aggregate_flows(flows, window_seconds)
     packet_agg = aggregate_packets(packets if packets is not None else pd.DataFrame(), window_seconds)
 
-    merged = flow_agg.merge(packet_agg, on=["host_id", "window_ts"], how="left")
-    for col in ["ttl_mean", "ttl_var", "tcp_window_mean", "tcp_window_entropy", "frag_flag_rate",
-                "payload_size_mean", "payload_size_var", "payload_size_p95", "payload_size_entropy",
-                "retrans_count", "retrans_rate"]:
+    merged = _fuse_flow_and_packet_windows(flow_agg, packet_agg)
+    for col in PACKET_FEATURES:
         if col not in merged.columns:
             merged[col] = 0.0
+        merged[col] = pd.to_numeric(merged[col], errors="coerce").fillna(0.0)
+    for col in FLOW_FEATURES:
         merged[col] = pd.to_numeric(merged[col], errors="coerce").fillna(0.0)
 
     # --- chronological pass: graph scalars + stateful peer tracker ---
     tracker = PeerTracker()
-    window_order = sorted(flows["window_ts"].unique())
+    window_order = sorted(merged["window_ts"].unique())
+    flows_by_window = {w: g[["src_ip", "dst_ip", "dst_port"]] for w, g in flows.groupby("window_ts", sort=False)}
+    hosts_by_window = {w: set(g["host_id"]) for w, g in merged.groupby("window_ts", sort=False)}
+    empty_flows = flows.iloc[0:0][["src_ip", "dst_ip", "dst_port"]]
     graph_rows: list[dict] = []
     for w in window_order:
-        w_flows = flows.loc[flows["window_ts"] == w, ["src_ip", "dst_ip", "dst_port"]]
+        w_flows = flows_by_window.get(w, empty_flows)
         graph = compute_window_graph(w_flows, degree_cap=graph_degree_cap)
 
-        active_hosts = set(merged.loc[merged["window_ts"] == w, "host_id"])
+        active_hosts = hosts_by_window[w]
         for h in active_hosts:
             peers = graph.out_peers.get(h, set())
             row = {
@@ -258,8 +321,10 @@ def build_state_rows(
             graph_rows.append(row)
         tracker.commit_window(graph.out_degree)
 
-    graph_df = pd.DataFrame(graph_rows)
+    graph_df = pd.DataFrame(graph_rows, columns=["host_id", "window_ts"] + GRAPH_FEATURES)
     merged = merged.merge(graph_df, on=["host_id", "window_ts"], how="left")
+    # Every row in `merged` is a window in which this host was observed
+    # sending something — a flow start, packets of an ongoing flow, or both.
     merged["is_active"] = 1.0
 
     # --- fill empty windows per host across its active range ---
@@ -338,8 +403,13 @@ def windowize_day(
     min_windows_per_host: int,
 ) -> pd.DataFrame:
     """Top-level entry: builds state rows and filters hosts below the
-    minimum window count (L + K)."""
+    minimum window count. The canonical cached table is built with
+    `min_windows_per_host=1` (no host filter) and the geometry-dependent
+    L + K filter is applied when a split is assembled (train.pipeline),
+    so one cached table serves every history/horizon configuration."""
     states = build_state_rows(flows, packets, window_seconds=window_seconds)
+    if min_windows_per_host <= 1:
+        return states
     counts = states.groupby("host_id")["window_ts"].transform("count")
     kept = states[counts >= min_windows_per_host].reset_index(drop=True)
     n_dropped_hosts = states["host_id"].nunique() - kept["host_id"].nunique()

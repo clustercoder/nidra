@@ -102,6 +102,24 @@ def label_stage_table(flows_windowed: pd.DataFrame) -> tuple[pd.DataFrame, dict]
     return winners.reset_index(drop=True), {"unmapped_labels": unmapped}
 
 
+def risk_label_from_attack_flags(is_attack: np.ndarray, horizon_k: int) -> np.ndarray:
+    """risk_label[i] = 1 iff any of is_attack[i+1 .. i+K] is 1, for ONE
+    host's chronological, gap-filled sequence. Vectorized forward-looking
+    window max (the per-row Python loop this replaces took minutes on a
+    real day of ~500k windows). Rows near the end of the sequence look at
+    the windows that exist, exactly as before."""
+    attack = np.asarray(is_attack, dtype="int64")
+    n = len(attack)
+    if n == 0:
+        return np.zeros(0, dtype="int64")
+    # cumulative count of attack windows: cum[j] = attack[0..j-1].sum()
+    cum = np.concatenate([[0], np.cumsum(attack)])
+    idx = np.arange(n)
+    hi = np.minimum(n, idx + 1 + horizon_k)
+    ahead = cum[hi] - cum[idx + 1]
+    return (ahead > 0).astype("int64")
+
+
 def attach_risk_label(state_table: pd.DataFrame, stage_table: pd.DataFrame, horizon_k: int, window_seconds: int) -> pd.DataFrame:
     """Attach stage_label (per host/window, benign if no attack flow present)
     and risk_label = 1 if any attack-stage window occurs in (t, t+K], else 0.
@@ -112,23 +130,24 @@ def attach_risk_label(state_table: pd.DataFrame, stage_table: pd.DataFrame, hori
     df = state_table.merge(stage_table, on=["host_id", "window_ts"], how="left")
     df["stage"] = df["stage"].fillna("benign")
     df = df.sort_values(["host_id", "window_ts"]).reset_index(drop=True)
-
-    is_attack = (df["stage"] != "benign").astype(int)
-    df["_is_attack"] = is_attack
-
-    risk_labels = np.zeros(len(df), dtype=int)
-    for host, g in df.groupby("host_id", sort=False):
-        g_idx = g.index.to_numpy()
-        attack = g["_is_attack"].to_numpy()
-        n = len(attack)
-        # future window in (t, t+K] means the next K entries in this host's
-        # own chronological (gap-filled) sequence — window spacing is
-        # uniform (WINDOW_SECONDS) after _fill_empty_windows, so index
-        # offset == time offset.
-        for i in range(n):
-            hi = min(n, i + 1 + horizon_k)
-            risk_labels[g_idx[i]] = 1 if attack[i + 1 : hi].any() else 0
-
-    df["risk_label"] = risk_labels
     df["stage_label"] = df["stage"]
-    return df.drop(columns=["_is_attack", "stage"])
+    df = df.drop(columns=["stage"])
+    return reattach_risk_label(df, horizon_k)
+
+
+def reattach_risk_label(labelled: pd.DataFrame, horizon_k: int) -> pd.DataFrame:
+    """(Re)compute `risk_label` from `stage_label` for the given horizon K.
+    The cached windowed tables carry stage_label, which does not depend on
+    K; risk_label does, so it is derived here for whatever K the current
+    config uses. Rows must be per-host chronological and gap-filled (uniform
+    window spacing), which is what windowize guarantees, so an index offset
+    equals a time offset."""
+    df = labelled.sort_values(["host_id", "window_ts"]).reset_index(drop=True)
+    is_attack = (df["stage_label"] != "benign").to_numpy(dtype="int64")
+    risk = np.zeros(len(df), dtype="int64")
+    host_codes, host_starts = np.unique(df["host_id"].to_numpy(), return_index=True)
+    bounds = np.append(np.sort(host_starts), len(df))
+    for lo, hi in zip(bounds[:-1], bounds[1:]):
+        risk[lo:hi] = risk_label_from_attack_flags(is_attack[lo:hi], horizon_k)
+    df["risk_label"] = risk
+    return df

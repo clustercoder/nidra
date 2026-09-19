@@ -1110,3 +1110,76 @@ an attribute React did not render, which is a real hydration mismatch; `<html>` 
 `suppressHydrationWarning`, which is what every theme implementation does and what the
 attribute being deliberately out-of-band requires. Verified zero hydration warnings after.
 Extends: D100.
+
+---
+
+## 2026-09-20
+
+**D102 — Δ = 60 s is the canonical window; the Δ=30 artifacts are frozen under a tag, not
+kept live.** The CIC-IDS2017 TrafficLabelling CSVs print minute-resolution timestamps (no
+seconds field), so a 30 s window could only ever be populated at the :00 offset: every :30
+window was an artificial all-zero state, half of all risk positives were those empty
+windows, and persistence error oscillated with parity (ml/reports/NIDRA_REEVALUATION_2026-09-19.md
+§4.1, §18). `windowing.window_seconds: 60`, `schema.WINDOW_SECONDS = 60`. Per CLAUDE.md a Δ
+change invalidates every trained artifact and recorded metric: the published Δ=30 Run 7
+state is tagged `baseline-delta30-run7` with a digest manifest
+(ml/experiments/BASELINE_MANIFEST_delta30_run7.json); its processed tables are removed from
+the working tree (recoverable with `git checkout baseline-delta30-run7 -- ml/artifacts/processed/`)
+because the loader's cache key changed and dead files that no code can read are worse than
+none. Overrides: `window_delta: 30` everywhere it was written down (CLAUDE.md key
+parameters, ML_README, config).
+
+**D103 — Flow/packet fusion is an outer join over flow-source hosts within the day file's
+flow time range.** A CICFlowMeter flow is stamped at its start, so a host with one long-lived
+connection starts a flow in one minute and sends packets for many minutes with no new flow
+start; the old left join emitted every such minute as an all-zero `is_active=0` row — on
+Tuesday 24,377 host-minutes, 39% of the minutes a host was actually transmitting. Those
+minutes now carry their packet aggregates (flow-start aggregates legitimately 0,
+`active_flow_count` counts flow STARTS). Two restrictions keep the population and extent
+defined by the flow records: hosts must appear as a flow source in the day file (labels are
+keyed on the flow source), and windows must fall inside the file's own flow time range (three
+Friday day files share one full-day PCAP). Measured after the change: on active rows packet
+features are populated 99.5–99.7% of the time, flow-start features 51–53%. Cache key gains
+`__fuse2`. Extends: IMPLEMENTATION-ML.md §2.4.
+
+**D104 — One cached table per day serves every history/horizon geometry.** The cache key no
+longer carries `min_windows_per_host`; the table is the unfiltered state table with the
+K-independent `stage_label`, and `risk_label` is re-derived for the configured K while hosts
+are filtered to ≥ L+K windows when a split is assembled (`train.pipeline.build_all_splits`).
+`labels.risk_threshold_windows` must equal `windowing.horizon_length` (checked). Needed for
+the L=15/K=3 vs L=30/K=6 comparison without re-windowing 8 day files per candidate.
+
+**D105 — Validation is a trailing 30% block of EACH training day, and labels are recomputed
+inside each split after the cut.** The training days are consecutive, so one trailing block
+off the concatenated timeline was just the end of Wednesday: validation held one Heartbleed
+episode on one host (54 positives at Δ=30) and every checkpoint, pooling, threshold and
+calibration decision rested on it. Per day at 30% (episode-nudged) validation holds Tuesday's
+SSH brute force (63 windows) and Wednesday's Heartbleed (21) — two episodes, two families —
+and training keeps FTP-Patator and the Wednesday DoS block (139 attack windows). 25% gives the
+same split; 20% would drop SSH-Patator back into train and leave validation with Heartbleed
+alone. Recomputing `risk_label` per split removes the ≤K train positives that were derived
+from validation-block windows. Test (Friday) and holdout (Thursday) are untouched.
+Overrides: `val_fraction_of_train_time: 0.15` on the concatenated timeline.
+
+**D106 — The scaler is feature-specific transforms + z-scoring on ACTIVE training rows;
+constant and duplicate features are dropped at fit time; FEATURE_ORDER stays 45 wide.** The
+shipped RobustScaler was the identity (98% silent rows put both quartiles at 0, sklearn
+substituted scale 1) and twelve heavy-tailed features saturated the ±10 clip on 45–90% of
+active rows. `schema.FEATURE_TRANSFORMS` declares log1p / asinh / zscore / unit per feature;
+statistics are fit on active rows so an all-zero window maps to a distinct fixed point; a
+feature constant on active rows (other than `is_active`) or duplicating an earlier one
+(|corr| > 0.999) is dropped — output forced to 0, excluded from the dynamics loss and the
+state-forecast metrics via `FeatureScaler.model_mask` — and the reason is recorded. The
+45-wide schema is a cross-service contract (backend, frontend types, SHAP), so dropping means
+"the model never reads it", not "the column disappears". The artifact is plain JSON
+(`feature_scaler.json`), no pickled sklearn object, and every fit writes
+`preprocessing_audit.{json,md}` next to it. Overrides: IMPLEMENTATION-ML.md §2.5 RobustScaler.
+
+**D107 — Dynamics checkpoints are selected on FREE-RUNNING validation NLL.** The original
+criterion was teacher-forced multi-step NLL, which scores a model that is fed the true
+future at every step — not the model that is deployed. `train_dynamics.selection_metric:
+val_free_running_nll` scores the deterministic K-step rollout (own predictions fed back)
+against the true future; free-running MSE, persistence MSE, skill and 90% band coverage per
+horizon are logged every epoch. `val_multistep_nll` remains available for reproducing the
+Δ=30 artifacts. Loss options `beta_nll`, `mse_aux_weight`, `nonsilent_sample_weight` are
+off by default and only turned on by a recorded experiment.
