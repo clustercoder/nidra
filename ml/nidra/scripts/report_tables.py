@@ -54,7 +54,7 @@ def systems_table(m: dict, split: str) -> str:
     thr = m["operating_point"]["threshold_used"]
     lines = [f"**{split}** — {m['eval_set']['n_rows']} scored rows, natural prevalence {m['eval_set']['natural_prevalence_published']:.5f}, "
              f"operating point `{m['operating_point']['pooling_key']}`, threshold {thr:.3f} (selected on val).",
-             "", "| system | AP (natural) | 95% CI (episode bootstrap) | ROC-AUC | P / R / F1 @thr | FA per active-benign h | det. AP | onset AP 5 / 15 min |",
+             "", "| system | AP (natural) | 95% CI (episode bootstrap) | ROC-AUC | P / R / F1 @thr | false alarms / h (whole split) | det. AP | onset AP 5 / 15 min |",
              "|---|---|---|---|---|---|---|---|"]
     for name in SYSTEM_ORDER:
         if name not in pub:
@@ -72,10 +72,10 @@ def systems_table(m: dict, split: str) -> str:
         lines.append(f"| {SYSTEM_LABEL.get(name, name)} | {_f(r['auc_pr'])} | {ci_s} | {_f(r['roc_auc'])} | "
                      f"{_f(at['precision'], 2)} / {_f(at['recall'], 2)} / {_f(at['f1'], 2)} | {_f(r.get('false_alarms_per_hour'), 2)} | "
                      f"{_f(det.get(name, {}).get('auc_pr'))} | {_f(o5)} / {_f(o15)} |")
-    for h, tab in onset.items():
-        if "onset_head_direct" in tab["systems"]:
-            lines.append(f"| onset head (explicit supervision) @ {h} min | — | — | — | — | — | — | {_f(tab['systems']['onset_head_direct']['auc_pr'])} |")
-            break
+    oh5 = onset.get("5", {}).get("systems", {}).get("onset_head_direct", {}).get("auc_pr")
+    oh15 = onset.get("15", {}).get("systems", {}).get("onset_head_direct", {}).get("auc_pr")
+    if oh5 is not None or oh15 is not None:
+        lines.append(f"| onset head (explicit supervision, Task B only) | — | — | — | — | — | — | {_f(oh5)} / {_f(oh15)} |")
     mand = m.get("task_published_label_at_mandated_threshold", {}).get("systems", {}).get("world_model_calibrated")
     if mand:
         at = mand["at_threshold"]
