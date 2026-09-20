@@ -170,9 +170,9 @@ train_dynamics:
   #   mse_aux_weight        adds w * MSE(mean, target) to the NLL.
   #   nonsilent_sample_weight  training weight of samples whose origin window
   #                         is active (the 94% silent windows dominate otherwise).
-  beta_nll: 0.0
-  mse_aux_weight: 0.0
-  nonsilent_sample_weight: 1.0
+  beta_nll: 0.5              # DECISIONS.md D113: kept — state skill 0.40 -> 0.63, risk AP +0.08 over persistence
+  mse_aux_weight: 0.0        # D113: comparable to β-NLL on risk AP, weaker on state skill; not kept
+  nonsilent_sample_weight: 1.0   # D113: best single risk AP (0.813) but state skill 0.52; not kept
 
 # ---------------------------------------------------------------------------
 # Stage-2 head training

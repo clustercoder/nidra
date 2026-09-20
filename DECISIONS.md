@@ -1239,3 +1239,43 @@ transfers across the two geometries is stated here, not hidden. Also fixed on th
 evidence: quantile pooling at q ≥ 0.85 (the Δ=30 shipped statistic) scores 0.13–0.16
 natural-prevalence AP on validation against 0.68–0.76 for mean / P(trajectory > 0.5)
 pooling — the tail statistic is dominated by silent hosts under natural prevalence.
+
+**D113 — Dynamics loss: β-NLL with β = 0.5 is kept; the two-lag linear skip, the MSE
+auxiliary term and non-silent sample weighting are not.** Screened at L=15/K=3, 20 epochs,
+seed 0, one head recipe trained on every split row (D114), identical validation set
+(caps 15000 active / 5000 silent). Natural-prevalence AP on the published label for the
+world model vs persistence (risk head on S_t) vs persistence + learned noise, and
+state-forecast skill vs persistence (ridge two-lag: 0.638):
+
+| variant | world model | persistence | + learned noise | state skill |
+|---|---|---|---|---|
+| plain NLL | 0.728 | 0.730 | 0.713 | 0.399 |
+| β-NLL 0.5 | **0.806** | 0.730 | 0.750 | **0.629** |
+| MSE aux 1.0 | 0.793 | 0.730 | 0.752 | 0.593 |
+| non-silent weight 3 | 0.813 | 0.730 | 0.756 | 0.519 |
+| linear skip | 0.751 | 0.713 | 0.712 | 0.625 |
+| linear skip + β-NLL | 0.750 | 0.713 | 0.722 | 0.662 |
+| β-NLL + non-silent | 0.749 | 0.730 | 0.741 | 0.649 |
+
+Under the plain NLL the learned mean adds nothing at the risk level (−0.002 vs
+persistence) and the state forecast is far below a linear two-lag fit; the failure is the
+known heteroscedastic-NLL pathology (the loss lets the model explain the active rows away
+with variance instead of fitting their mean). β-NLL fixes the mean (skill 0.63 ≈ ridge) and
+is the only variant that improves both axes; the paired episode bootstrap of AP(world
+model) − AP(persistence) is +0.077 [+0.005, +0.309] — two validation episodes, so the
+interval is what it is. The linear skip matches β-NLL on state skill but not on risk AP;
+its combination with β-NLL has the best state skill (0.662) and a lower risk AP (0.750),
+so it is left available (`model.transition.linear_skip`) but off. The screen is one seed
+per variant; the production run at L=30/K=6 with five seeds is the confirmation.
+
+**D114 — Heads are trained and selected on every observed state of the split.** The
+windowed subsample the dynamics need (500k of 2.3M training rows, 50k of 900k validation
+rows) is the wrong sample for a function of one state: on the same head, the selection
+statistic computed on the 50k weighted validation subsample was 0.72 while the benchmark
+set gave 0.42, the gap being three external hosts one sample happened to contain.
+`train/head_data.py` makes every row one sample; validation selection is then the exact
+natural prevalence with no weights. Effect on the validation benchmark (same dynamics):
+head on S_t 0.42 → 0.73 AP, and the head no longer changes by ±0.3 between otherwise
+identical runs. The benchmark's active/silent negative caps were raised to 15000 / 5000
+for the locked runs for the same reason (a 2000-row silent sample gives one false alarm the
+weight of 340 positives).
