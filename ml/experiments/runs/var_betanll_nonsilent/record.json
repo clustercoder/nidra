@@ -1,0 +1,1158 @@
+{
+  "stage": "train",
+  "recorded_at": "2026-09-20T00:29:43Z",
+  "git_commit": "eb7b3e8f2c9dde1ceaea5a236c3747cdccb8dfea",
+  "config_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/var_betanll_nonsilent/config.yaml",
+  "config_hash": "7548b67d5a56199e",
+  "schema_version": "1.0",
+  "n_features": 45,
+  "geometry": {
+    "window_seconds": 60,
+    "context_length_L": 15,
+    "horizon_length_K": 3,
+    "history_minutes": 15.0,
+    "horizon_minutes": 3.0,
+    "min_windows_per_host": 18
+  },
+  "dataset": {
+    "name": "CIC-IDS2017 (TrafficLabelling CSVs + project tshark packet parquet)",
+    "flow_timebase": "utc12h",
+    "days": {
+      "monday": {
+        "role": "benign_baseline",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Monday-WorkingHours.pcap_ISCX.csv",
+          "bytes": 268649908,
+          "mtime": "2017-08-10T17:15:46Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Monday-WorkingHours_packets.parquet",
+          "bytes": 147461456,
+          "mtime": "2026-09-07T11:19:48Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/monday__w60__Monday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 8259248,
+          "mtime": "2026-09-19T18:52:53Z"
+        }
+      },
+      "tuesday": {
+        "role": "train",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Tuesday-WorkingHours.pcap_ISCX.csv",
+          "bytes": 174696560,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Tuesday-WorkingHours_packets.parquet",
+          "bytes": 144575051,
+          "mtime": "2026-09-11T05:53:26Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/tuesday__w60__Tuesday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 6761403,
+          "mtime": "2026-09-19T18:54:48Z"
+        }
+      },
+      "wednesday": {
+        "role": "train",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Wednesday-workingHours.pcap_ISCX.csv",
+          "bytes": 285642925,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Wednesday-workingHours_packets.parquet",
+          "bytes": 167783673,
+          "mtime": "2026-09-11T06:00:54Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/wednesday__w60__Wednesday-workingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 6930474,
+          "mtime": "2026-09-19T18:56:55Z"
+        }
+      },
+      "thursday_web": {
+        "role": "holdout",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv",
+          "bytes": 92030223,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Thursday-WorkingHours_packets.parquet",
+          "bytes": 117663088,
+          "mtime": "2026-09-11T06:06:08Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/thursday_web__w60__Thursday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 2526113,
+          "mtime": "2026-09-19T18:58:13Z"
+        }
+      },
+      "thursday_infiltration": {
+        "role": "holdout",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv",
+          "bytes": 108723183,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Thursday-WorkingHours_packets.parquet",
+          "bytes": 117663088,
+          "mtime": "2026-09-11T06:06:08Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/thursday_infiltration__w60__Thursday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 3190235,
+          "mtime": "2026-09-19T18:59:38Z"
+        }
+      },
+      "friday_morning": {
+        "role": "test",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Morning.pcap_ISCX.csv",
+          "bytes": 75386737,
+          "mtime": "2017-08-17T14:16:06Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/friday_morning__w60__Friday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 2676780,
+          "mtime": "2026-09-19T19:00:56Z"
+        }
+      },
+      "friday_portscan": {
+        "role": "test",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv",
+          "bytes": 101874777,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/friday_portscan__w60__Friday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 1810713,
+          "mtime": "2026-09-19T19:02:06Z"
+        }
+      },
+      "friday_ddos": {
+        "role": "test",
+        "flow_csv": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv",
+          "bytes": 96101069,
+          "mtime": "2018-06-07T16:33:50Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/friday_ddos__w60__Friday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 892035,
+          "mtime": "2026-09-19T19:03:04Z"
+        }
+      }
+    }
+  },
+  "seed": null,
+  "ensemble_seeds": [
+    0
+  ],
+  "split": null,
+  "threshold": 0.75,
+  "pooling": null,
+  "calibration": null,
+  "checkpoints": {
+    "weights": {
+      "seed_0": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/var_betanll_nonsilent/artifacts/weights/model_seed_0.pt",
+        "sha256": "9c40f3bc4f7b6a59f378d5bbab4cf9046e531b4eddc2c3f42696905ce137d8bf"
+      }
+    },
+    "scaler": {
+      "robust_scaler.joblib": null,
+      "feature_scaler.json": "0baf8f74960848a996439354624448a2285808a900f5babc61682087f55ca9fa",
+      "scaler_metadata.json": "104bb3d8c6d71e51cb4fc398bea928874e87e35ee81254e439de92240c28ec59",
+      "shap_background.npy": "36e27270e273ca441885be497bcfd1824826837aa3083b83535d5cec0cb192b5"
+    },
+    "calibration": {
+      "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/var_betanll_nonsilent/artifacts/weights/risk_calibration.json",
+      "sha256": null
+    }
+  },
+  "platform": {
+    "python": "3.14.7",
+    "machine": "arm64",
+    "system": "Darwin"
+  },
+  "metrics": {
+    "seeds": {
+      "0": {
+        "dynamics": {
+          "seed": 0,
+          "stage": "dynamics_only",
+          "selection_metric": "val_free_running_nll",
+          "best_epoch": 15,
+          "best_selection_score": -1.6597573359807332,
+          "best_val_multistep_nll": -1.513415081160409,
+          "best_val_free_running": {
+            "val_free_nll_by_k": [
+              -1.7788196802139282,
+              -1.6641700267791748,
+              -1.5362823009490967
+            ],
+            "val_free_mse_by_k": [
+              0.0547395721077919,
+              0.0669596940279007,
+              0.07878632098436356
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9881926774978638,
+              0.98412024974823,
+              0.9795005321502686
+            ],
+            "val_free_nll": -1.6597573359807332,
+            "val_free_mse": 0.06682852904001872,
+            "val_free_skill_by_k": [
+              0.4948981559607313,
+              0.4226728030315148,
+              0.3829483787700353
+            ],
+            "val_free_skill": 0.43049927885207573,
+            "val_free_coverage90": 0.9839378197987875
+          },
+          "loss_options": {
+            "beta_nll": 0.5,
+            "mse_aux_weight": 0.0,
+            "nonsilent_sample_weight": 3.0,
+            "horizon_discount": 0.85
+          },
+          "features_kept": 45,
+          "dropped_features": [],
+          "n_train_samples": 500000,
+          "n_val_samples": 50000,
+          "geometry": {
+            "window_seconds": 60,
+            "context_length": 15,
+            "horizon_length": 3
+          },
+          "config_hash": "7548b67d5a56199e",
+          "git_commit": "eb7b3e8f2c9dde1ceaea5a236c3747cdccb8dfea",
+          "trained_at": "2026-09-20T00:28:42Z"
+        },
+        "dynamics_history": [
+          {
+            "epoch": 0,
+            "train_nll": -0.09398979631099746,
+            "teacher_forcing_p": 1.0,
+            "val_nll": -1.4132917219278764,
+            "val_free_nll_by_k": [
+              -1.65623939037323,
+              -1.5479029417037964,
+              -1.3849257230758667
+            ],
+            "val_free_mse_by_k": [
+              0.0741325244307518,
+              0.09373433887958527,
+              0.11837461590766907
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9874416589736938,
+              0.980797529220581,
+              0.9724085927009583
+            ],
+            "val_free_nll": -1.529689351717631,
+            "val_free_mse": 0.09541382640600204,
+            "val_free_skill_by_k": [
+              0.31595236587666264,
+              0.19182152919491657,
+              0.0728942823361658
+            ],
+            "val_free_skill": 0.18690050901521682,
+            "val_free_coverage90": 0.9802159269650778
+          },
+          {
+            "epoch": 1,
+            "train_nll": -0.10715023967858782,
+            "teacher_forcing_p": 0.9416666666666667,
+            "val_nll": -1.4462069041874943,
+            "val_free_nll_by_k": [
+              -1.6964712142944336,
+              -1.5934960842132568,
+              -1.4436639547348022
+            ],
+            "val_free_mse_by_k": [
+              0.06694232672452927,
+              0.08174256980419159,
+              0.0981866866350174
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9879506230354309,
+              0.9815148711204529,
+              0.9723458886146545
+            ],
+            "val_free_nll": -1.5778770844141643,
+            "val_free_mse": 0.08229052772124608,
+            "val_free_skill_by_k": [
+              0.3822989225006038,
+              0.2952146902225887,
+              0.23100541547865472
+            ],
+            "val_free_skill": 0.29873490328016694,
+            "val_free_coverage90": 0.9806037942568461
+          },
+          {
+            "epoch": 2,
+            "train_nll": -0.11098772191865314,
+            "teacher_forcing_p": 0.8833333333333333,
+            "val_nll": -1.505826021335563,
+            "val_free_nll_by_k": [
+              -1.7757225036621094,
+              -1.5917150974273682,
+              -1.3192535638809204
+            ],
+            "val_free_mse_by_k": [
+              0.062011055648326874,
+              0.07642100006341934,
+              0.09110002964735031
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9871776700019836,
+              0.9793277382850647,
+              0.9528142809867859
+            ],
+            "val_free_nll": -1.562230388323466,
+            "val_free_mse": 0.07651069511969884,
+            "val_free_skill_by_k": [
+              0.4278015455233509,
+              0.34109732135635995,
+              0.28650785712976945
+            ],
+            "val_free_skill": 0.3479895985724175,
+            "val_free_coverage90": 0.9731065630912781
+          },
+          {
+            "epoch": 3,
+            "train_nll": -0.11341411221861561,
+            "teacher_forcing_p": 0.825,
+            "val_nll": -1.485755782954547,
+            "val_free_nll_by_k": [
+              -1.7458524703979492,
+              -1.6429086923599243,
+              -1.4985677003860474
+            ],
+            "val_free_mse_by_k": [
+              0.05949573218822479,
+              0.07271236926317215,
+              0.08579479157924652
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9870527982711792,
+              0.9816871285438538,
+              0.9752161502838135
+            ],
+            "val_free_nll": -1.6291096210479736,
+            "val_free_mse": 0.07266763101021449,
+            "val_free_skill_by_k": [
+              0.4510113454748552,
+              0.3730731757204129,
+              0.32805829012414767
+            ],
+            "val_free_skill": 0.38073950064580353,
+            "val_free_coverage90": 0.9813186923662821
+          },
+          {
+            "epoch": 4,
+            "train_nll": -0.11471507431674241,
+            "teacher_forcing_p": 0.7666666666666667,
+            "val_nll": -1.480035122559995,
+            "val_free_nll_by_k": [
+              -1.7391520738601685,
+              -1.6280215978622437,
+              -1.4883002042770386
+            ],
+            "val_free_mse_by_k": [
+              0.05787985771894455,
+              0.07090876251459122,
+              0.08428659290075302
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9877718091011047,
+              0.9821392893791199,
+              0.9753694534301758
+            ],
+            "val_free_nll": -1.618491291999817,
+            "val_free_mse": 0.07102507104476292,
+            "val_free_skill_by_k": [
+              0.46592160404542315,
+              0.38862389236732287,
+              0.33987044771792596
+            ],
+            "val_free_skill": 0.39473710164482,
+            "val_free_coverage90": 0.9817601839701334
+          },
+          {
+            "epoch": 5,
+            "train_nll": -0.11594914081301483,
+            "teacher_forcing_p": 0.7083333333333333,
+            "val_nll": -1.4796252804143089,
+            "val_free_nll_by_k": [
+              -1.7365401983261108,
+              -1.6343491077423096,
+              -1.505648136138916
+            ],
+            "val_free_mse_by_k": [
+              0.057784635573625565,
+              0.07113099843263626,
+              0.08444707095623016
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9884110689163208,
+              0.9838541150093079,
+              0.9784072637557983
+            ],
+            "val_free_nll": -1.6255124807357788,
+            "val_free_mse": 0.071120901654164,
+            "val_free_skill_by_k": [
+              0.4668002532445671,
+              0.38670777190869,
+              0.3386135893817732
+            ],
+            "val_free_skill": 0.39392045040401136,
+            "val_free_coverage90": 0.9835574825604757
+          },
+          {
+            "epoch": 6,
+            "train_nll": -0.116703492233972,
+            "teacher_forcing_p": 0.65,
+            "val_nll": -1.4281316606365904,
+            "val_free_nll_by_k": [
+              -1.6744945049285889,
+              -1.5550968647003174,
+              -1.4666827917099
+            ],
+            "val_free_mse_by_k": [
+              0.056872569024562836,
+              0.06913965940475464,
+              0.08216375857591629
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9889149069786072,
+              0.9847460389137268,
+              0.9795444011688232
+            ],
+            "val_free_nll": -1.5654247204462688,
+            "val_free_mse": 0.06939199566841125,
+            "val_free_skill_by_k": [
+              0.47521622140213593,
+              0.40387711827251604,
+              0.3564964095013565
+            ],
+            "val_free_skill": 0.40865387667909114,
+            "val_free_coverage90": 0.9844017823537191
+          },
+          {
+            "epoch": 7,
+            "train_nll": -0.11709195731837825,
+            "teacher_forcing_p": 0.5916666666666667,
+            "val_nll": -1.481102357105333,
+            "val_free_nll_by_k": [
+              -1.7391375303268433,
+              -1.6177204847335815,
+              -1.5106922388076782
+            ],
+            "val_free_mse_by_k": [
+              0.05589577555656433,
+              0.06813540309667587,
+              0.08069158345460892
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9886744022369385,
+              0.9842575788497925,
+              0.9788994789123535
+            ],
+            "val_free_nll": -1.6225167512893677,
+            "val_free_mse": 0.06824092070261638,
+            "val_free_skill_by_k": [
+              0.4842294482677022,
+              0.41253582688518453,
+              0.3680264318959474
+            ],
+            "val_free_skill": 0.41846313078855923,
+            "val_free_coverage90": 0.9839438199996948
+          },
+          {
+            "epoch": 8,
+            "train_nll": -0.11721968357050896,
+            "teacher_forcing_p": 0.5333333333333334,
+            "val_nll": -1.4763812617379792,
+            "val_free_nll_by_k": [
+              -1.733189582824707,
+              -1.6241058111190796,
+              -1.5159803628921509
+            ],
+            "val_free_mse_by_k": [
+              0.05553274229168892,
+              0.06795776635408401,
+              0.08034837990999222
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9877551794052124,
+              0.9830469489097595,
+              0.9779742956161499
+            ],
+            "val_free_nll": -1.6244252522786458,
+            "val_free_mse": 0.06794629618525505,
+            "val_free_skill_by_k": [
+              0.48757928759737557,
+              0.41406741277678727,
+              0.3707143896654139
+            ],
+            "val_free_skill": 0.4209738680068609,
+            "val_free_coverage90": 0.9829254746437073
+          },
+          {
+            "epoch": 9,
+            "train_nll": -0.11716839391196017,
+            "teacher_forcing_p": 0.4750000000000001,
+            "val_nll": -1.4398019733477612,
+            "val_free_nll_by_k": [
+              -1.688927173614502,
+              -1.5639164447784424,
+              -1.4745279550552368
+            ],
+            "val_free_mse_by_k": [
+              0.05595827475190163,
+              0.06752296537160873,
+              0.07981041818857193
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9885557293891907,
+              0.9845830202102661,
+              0.979469358921051
+            ],
+            "val_free_nll": -1.575790524482727,
+            "val_free_mse": 0.06776388610402743,
+            "val_free_skill_by_k": [
+              0.4836527455716404,
+              0.4178162714909117,
+              0.3749276864435175
+            ],
+            "val_free_skill": 0.422528333955701,
+            "val_free_coverage90": 0.9842027028401693
+          },
+          {
+            "epoch": 10,
+            "train_nll": -0.11734543028161284,
+            "teacher_forcing_p": 0.41666666666666663,
+            "val_nll": -1.4878181267757804,
+            "val_free_nll_by_k": [
+              -1.7467926740646362,
+              -1.633855938911438,
+              -1.5197584629058838
+            ],
+            "val_free_mse_by_k": [
+              0.054979097098112106,
+              0.06720089167356491,
+              0.07927405834197998
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.987865149974823,
+              0.9835684299468994,
+              0.9782930612564087
+            ],
+            "val_free_nll": -1.633469025293986,
+            "val_free_mse": 0.06715134903788567,
+            "val_free_skill_by_k": [
+              0.4926879721824221,
+              0.42059319435485787,
+              0.37912843739580404
+            ],
+            "val_free_skill": 0.4277482648132046,
+            "val_free_coverage90": 0.9832422137260437
+          },
+          {
+            "epoch": 11,
+            "train_nll": -0.11754557525750037,
+            "teacher_forcing_p": 0.3583333333333334,
+            "val_nll": -1.5117000590781777,
+            "val_free_nll_by_k": [
+              -1.7770274877548218,
+              -1.657884955406189,
+              -1.5304837226867676
+            ],
+            "val_free_mse_by_k": [
+              0.055339515209198,
+              0.067569300532341,
+              0.07948605716228485
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.987956702709198,
+              0.983945369720459,
+              0.9793298244476318
+            ],
+            "val_free_nll": -1.6551320552825928,
+            "val_free_mse": 0.06746495763460796,
+            "val_free_skill_by_k": [
+              0.4893622638232821,
+              0.4174167692402667,
+              0.3774680702897689
+            ],
+            "val_free_skill": 0.4250757486803929,
+            "val_free_coverage90": 0.9837439656257629
+          },
+          {
+            "epoch": 12,
+            "train_nll": -0.11701448273677245,
+            "teacher_forcing_p": 0.3,
+            "val_nll": -1.4912195278673757,
+            "val_free_nll_by_k": [
+              -1.7509292364120483,
+              -1.6389877796173096,
+              -1.524932861328125
+            ],
+            "val_free_mse_by_k": [
+              0.055125296115875244,
+              0.06735638529062271,
+              0.07925032079219818
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9883213043212891,
+              0.9843360185623169,
+              0.9795565009117126
+            ],
+            "val_free_nll": -1.6382832924524944,
+            "val_free_mse": 0.06724400073289871,
+            "val_free_skill_by_k": [
+              0.49133894093089037,
+              0.41925252672807534,
+              0.37931434902860883
+            ],
+            "val_free_skill": 0.42695870370983346,
+            "val_free_coverage90": 0.9840712745984396
+          },
+          {
+            "epoch": 13,
+            "train_nll": -0.1173743808145388,
+            "teacher_forcing_p": 0.3,
+            "val_nll": -1.5017912698035338,
+            "val_free_nll_by_k": [
+              -1.764009714126587,
+              -1.6431987285614014,
+              -1.5176383256912231
+            ],
+            "val_free_mse_by_k": [
+              0.05518355593085289,
+              0.06764411181211472,
+              0.07948937267065048
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9880063533782959,
+              0.9837795495986938,
+              0.9791748523712158
+            ],
+            "val_free_nll": -1.641615589459737,
+            "val_free_mse": 0.06743901347120602,
+            "val_free_skill_by_k": [
+              0.4908013565317897,
+              0.416771745587151,
+              0.3774421033479616
+            ],
+            "val_free_skill": 0.42529684018097225,
+            "val_free_coverage90": 0.9836535851160685
+          },
+          {
+            "epoch": 14,
+            "train_nll": -0.11722527322966601,
+            "teacher_forcing_p": 0.3,
+            "val_nll": -1.5037074867559939,
+            "val_free_nll_by_k": [
+              -1.7666579484939575,
+              -1.6381068229675293,
+              -1.5083370208740234
+            ],
+            "val_free_mse_by_k": [
+              0.05510338768362999,
+              0.06740766763687134,
+              0.07908376306295395
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9880186915397644,
+              0.9842196106910706,
+              0.9796475172042847
+            ],
+            "val_free_nll": -1.6377005974451702,
+            "val_free_mse": 0.06719827279448509,
+            "val_free_skill_by_k": [
+              0.49154109796465917,
+              0.41881036979107744,
+              0.380618823150188
+            ],
+            "val_free_skill": 0.42734838898762206,
+            "val_free_coverage90": 0.9839619398117065
+          },
+          {
+            "epoch": 15,
+            "train_nll": -0.11761979004863875,
+            "teacher_forcing_p": 0.3,
+            "val_nll": -1.513415081160409,
+            "val_free_nll_by_k": [
+              -1.7788196802139282,
+              -1.6641700267791748,
+              -1.5362823009490967
+            ],
+            "val_free_mse_by_k": [
+              0.0547395721077919,
+              0.0669596940279007,
+              0.07878632098436356
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9881926774978638,
+              0.98412024974823,
+              0.9795005321502686
+            ],
+            "val_free_nll": -1.6597573359807332,
+            "val_free_mse": 0.06682852904001872,
+            "val_free_skill_by_k": [
+              0.4948981559607313,
+              0.4226728030315148,
+              0.3829483787700353
+            ],
+            "val_free_skill": 0.43049927885207573,
+            "val_free_coverage90": 0.9839378197987875
+          },
+          {
+            "epoch": 16,
+            "train_nll": -0.11750193896342141,
+            "teacher_forcing_p": 0.3,
+            "val_nll": -1.5054240226745605,
+            "val_free_nll_by_k": [
+              -1.7686201333999634,
+              -1.6510549783706665,
+              -1.5269594192504883
+            ],
+            "val_free_mse_by_k": [
+              0.05477800965309143,
+              0.06702391803264618,
+              0.07889063656330109
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.987930178642273,
+              0.9838864803314209,
+              0.9793499112129211
+            ],
+            "val_free_nll": -1.6488781770070393,
+            "val_free_mse": 0.06689752141634624,
+            "val_free_skill_by_k": [
+              0.49454347881833594,
+              0.4221190629767536,
+              0.3821313829222951
+            ],
+            "val_free_skill": 0.42991133821300076,
+            "val_free_coverage90": 0.983722190062205
+          },
+          {
+            "epoch": 17,
+            "train_nll": -0.11748017187582037,
+            "teacher_forcing_p": 0.3,
+            "val_nll": -1.508324277036044,
+            "val_free_nll_by_k": [
+              -1.7725303173065186,
+              -1.6417018175125122,
+              -1.5124222040176392
+            ],
+            "val_free_mse_by_k": [
+              0.05489925295114517,
+              0.06711534410715103,
+              0.07898665219545364
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9880915880203247,
+              0.9841776490211487,
+              0.9796565771102905
+            ],
+            "val_free_nll": -1.6422181129455566,
+            "val_free_mse": 0.06700041641791661,
+            "val_free_skill_by_k": [
+              0.49342472302492646,
+              0.4213307863860374,
+              0.3813793919580907
+            ],
+            "val_free_skill": 0.429034485490988,
+            "val_free_coverage90": 0.9839752713839213
+          },
+          {
+            "epoch": 18,
+            "train_nll": -0.11731091878465554,
+            "teacher_forcing_p": 0.3,
+            "val_nll": -1.4980042613282496,
+            "val_free_nll_by_k": [
+              -1.759718418121338,
+              -1.6316980123519897,
+              -1.5060451030731201
+            ],
+            "val_free_mse_by_k": [
+              0.05490892007946968,
+              0.067128986120224,
+              0.07910990715026855
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9880225658416748,
+              0.9842161536216736,
+              0.9797873497009277
+            ],
+            "val_free_nll": -1.632487177848816,
+            "val_free_mse": 0.06704927111665408,
+            "val_free_skill_by_k": [
+              0.49333552093299815,
+              0.4212131648036397,
+              0.38041406360231855
+            ],
+            "val_free_skill": 0.4286181545233292,
+            "val_free_coverage90": 0.9840086897214254
+          },
+          {
+            "epoch": 19,
+            "train_nll": -0.11850138055565772,
+            "teacher_forcing_p": 0.3,
+            "val_nll": -1.5090205705895716,
+            "val_free_nll_by_k": [
+              -1.7733412981033325,
+              -1.6499077081680298,
+              -1.5212944746017456
+            ],
+            "val_free_mse_by_k": [
+              0.05480526015162468,
+              0.06703939288854599,
+              0.07891218364238739
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9880067706108093,
+              0.9840899705886841,
+              0.9796268939971924
+            ],
+            "val_free_nll": -1.648181160291036,
+            "val_free_mse": 0.06691894556085269,
+            "val_free_skill_by_k": [
+              0.49429202860544375,
+              0.4219856386039301,
+              0.38196262697688665
+            ],
+            "val_free_skill": 0.42972876550159045,
+            "val_free_coverage90": 0.9839078783988953
+          }
+        ],
+        "heads": {
+          "seed": 0,
+          "stage": "dynamics_and_frozen_heads",
+          "selection_metric": "val_free_running_nll",
+          "best_epoch": 15,
+          "best_selection_score": -1.6597573359807332,
+          "best_val_multistep_nll": -1.513415081160409,
+          "best_val_free_running": {
+            "val_free_nll_by_k": [
+              -1.7788196802139282,
+              -1.6641700267791748,
+              -1.5362823009490967
+            ],
+            "val_free_mse_by_k": [
+              0.0547395721077919,
+              0.0669596940279007,
+              0.07878632098436356
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.10837333649396896,
+              0.11598222702741623,
+              0.1276818960905075
+            ],
+            "val_free_coverage90_by_k": [
+              0.9881926774978638,
+              0.98412024974823,
+              0.9795005321502686
+            ],
+            "val_free_nll": -1.6597573359807332,
+            "val_free_mse": 0.06682852904001872,
+            "val_free_skill_by_k": [
+              0.4948981559607313,
+              0.4226728030315148,
+              0.3829483787700353
+            ],
+            "val_free_skill": 0.43049927885207573,
+            "val_free_coverage90": 0.9839378197987875
+          },
+          "loss_options": {
+            "beta_nll": 0.5,
+            "mse_aux_weight": 0.0,
+            "nonsilent_sample_weight": 3.0,
+            "horizon_discount": 0.85
+          },
+          "features_kept": 45,
+          "dropped_features": [],
+          "n_train_samples": 500000,
+          "n_val_samples": 50000,
+          "geometry": {
+            "window_seconds": 60,
+            "context_length": 15,
+            "horizon_length": 3
+          },
+          "config_hash": "7548b67d5a56199e",
+          "git_commit": "eb7b3e8f2c9dde1ceaea5a236c3747cdccb8dfea",
+          "trained_at": "2026-09-20T00:28:42Z",
+          "heads_best_val_loss": 3.963113307952881,
+          "heads_best_val_auc_pr": 0.7230016579391735,
+          "heads_best_val_auc_pr_natural": 0.7230016579391735,
+          "heads_best_epoch_risk": 1,
+          "heads_best_epoch_stage": 7,
+          "heads_selection_metric": "val_auc_pr_natural",
+          "heads_data": "all_split_rows",
+          "heads_n_train": 2286022,
+          "heads_n_train_pos": 161,
+          "heads_n_val": 899453,
+          "heads_n_val_pos": 88,
+          "heads_recipe": {
+            "risk_sampling": "imbalanced",
+            "input_noise": 0.3,
+            "pos_repeat": 20,
+            "neg_ratio": 10,
+            "hard_negative_fraction": 0.5,
+            "separate_optimizers": true
+          },
+          "heads_pos_weight": 14197.89453125,
+          "heads_class_weights": [
+            0.16667701303958893,
+            381004.15625,
+            5953.18994140625,
+            381004.15625,
+            381004.15625,
+            5080.0556640625
+          ],
+          "heads_trained_at": "2026-09-20T00:29:43Z"
+        },
+        "heads_history": [
+          {
+            "epoch": 0,
+            "train_risk_loss": 1.5396707151619526,
+            "train_stage_loss": 0.017277633855019615,
+            "val_loss": 3.1323611736297607,
+            "val_risk_loss": 2.152663230895996,
+            "val_stage_loss": 0.9796979427337646,
+            "val_auc_pr": 0.5434477022732903,
+            "val_auc_pr_natural": 0.5434477022732903,
+            "val_stage_acc_on_attacks": 0.7702702702702703,
+            "val_stage_macro_f1": 0.6211984077261309
+          },
+          {
+            "epoch": 1,
+            "train_risk_loss": 1.3628926147486997,
+            "train_stage_loss": 0.007668686771237334,
+            "val_loss": 3.963113307952881,
+            "val_risk_loss": 2.9465200901031494,
+            "val_stage_loss": 1.0165932178497314,
+            "val_auc_pr": 0.7230016579391735,
+            "val_auc_pr_natural": 0.7230016579391735,
+            "val_stage_acc_on_attacks": 0.7972972972972973,
+            "val_stage_macro_f1": 0.6268617800871873
+          },
+          {
+            "epoch": 2,
+            "train_risk_loss": 1.3359871787281667,
+            "train_stage_loss": 0.008333261453795725,
+            "val_loss": 4.150843620300293,
+            "val_risk_loss": 3.2005810737609863,
+            "val_stage_loss": 0.9502625465393066,
+            "val_auc_pr": 0.7036985208314577,
+            "val_auc_pr_natural": 0.7036985208314577,
+            "val_stage_acc_on_attacks": 0.8378378378378378,
+            "val_stage_macro_f1": 0.6372508250781911
+          },
+          {
+            "epoch": 3,
+            "train_risk_loss": 1.1277138314735324,
+            "train_stage_loss": 0.0058283759740417685,
+            "val_loss": 6.7625497579574585,
+            "val_risk_loss": 4.99647331237793,
+            "val_stage_loss": 1.7660764455795288,
+            "val_auc_pr": 0.6693812540700401,
+            "val_auc_pr_natural": 0.6693812540700401,
+            "val_stage_acc_on_attacks": 0.7837837837837838,
+            "val_stage_macro_f1": 0.6262592906536664
+          },
+          {
+            "epoch": 4,
+            "train_risk_loss": 1.2625859440970382,
+            "train_stage_loss": 0.007331139851244927,
+            "val_loss": 5.93134880065918,
+            "val_risk_loss": 4.244706630706787,
+            "val_stage_loss": 1.6866421699523926,
+            "val_auc_pr": 0.6495852969583243,
+            "val_auc_pr_natural": 0.6495852969583243,
+            "val_stage_acc_on_attacks": 0.7837837837837838,
+            "val_stage_macro_f1": 0.6218859144554307
+          },
+          {
+            "epoch": 5,
+            "train_risk_loss": 1.2898377373399388,
+            "train_stage_loss": 0.006280306553665235,
+            "val_loss": 6.033314228057861,
+            "val_risk_loss": 3.6679537296295166,
+            "val_stage_loss": 2.3653604984283447,
+            "val_auc_pr": 0.665776647104656,
+            "val_auc_pr_natural": 0.665776647104656,
+            "val_stage_acc_on_attacks": 0.7702702702702703,
+            "val_stage_macro_f1": 0.6234039245098028
+          },
+          {
+            "epoch": 6,
+            "train_risk_loss": 1.230237061004555,
+            "train_stage_loss": 0.004425614523020044,
+            "val_loss": 10.195006847381592,
+            "val_risk_loss": 5.829158306121826,
+            "val_stage_loss": 4.365848541259766,
+            "val_auc_pr": 0.6583849352320977,
+            "val_auc_pr_natural": 0.6583849352320977,
+            "val_stage_acc_on_attacks": 0.7027027027027027,
+            "val_stage_macro_f1": 0.6084613463009737
+          },
+          {
+            "epoch": 7,
+            "train_risk_loss": 1.230274103899516,
+            "train_stage_loss": 0.004991685359747232,
+            "val_loss": 10.408722400665283,
+            "val_risk_loss": 5.277525901794434,
+            "val_stage_loss": 5.13119649887085,
+            "val_auc_pr": 0.661324493191206,
+            "val_auc_pr_natural": 0.661324493191206,
+            "val_stage_acc_on_attacks": 0.3918918918918919,
+            "val_stage_macro_f1": 0.781540889740221
+          }
+        ]
+      }
+    }
+  },
+  "label": "var_betanll_nonsilent",
+  "note": "Stage 5 variant: beta-NLL 0.5 + non-silent sample weight 3",
+  "stages": [
+    "dynamics",
+    "heads"
+  ],
+  "epochs_override": 20,
+  "init_from": null,
+  "n_train_samples": 500000,
+  "n_val_samples": 50000,
+  "wall_seconds": 1591.9808208942413
+}

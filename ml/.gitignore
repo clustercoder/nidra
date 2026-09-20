@@ -38,3 +38,15 @@ __pycache__/
 venv/
 *.egg-info/
 .DS_Store
+
+# Experiment runs (nidra/scripts/run_experiment.py): the config, provenance
+# record, metadata and benchmark JSON of every run are committed; the weights,
+# scaler arrays and per-row score dumps are not (they are reproducible from
+# the record, and the shipped ones live under artifacts/).
+experiments/runs/**/*.pt
+experiments/runs/**/*.npy
+experiments/runs/**/*.npz
+experiments/runs/**/*.joblib
+# Disk copy of the Δ=30 run-7 weights; the same bytes are in git under the
+# `baseline-delta30-run7` tag (ml/artifacts/weights at that commit).
+experiments/baseline_delta30_run7/artifacts/
