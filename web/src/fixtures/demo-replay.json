@@ -22,11 +22,11 @@
    "measured_on_this_episode": {
     "attack_labelled_windows": 42,
     "windows": 48,
-    "true_positives": 4,
+    "true_positives": 6,
     "false_positives": 0,
-    "false_negatives": 38,
+    "false_negatives": 36,
     "precision": 1.0,
-    "recall": 0.095
+    "recall": 0.143
    }
   }
  },
@@ -39,7 +39,8 @@
    "context_L": 30,
    "horizon_K": 6,
    "n_features": 45,
-   "risk_threshold": 0.75,
+   "risk_threshold": 0.718,
+   "risk_threshold_mandated": 0.75,
    "lead_time_m": 2
   }
  },

@@ -246,11 +246,15 @@ def build(limit: int | None = None) -> None:
                 }
         print(f"  {host:16s} {len(series)} forecasts")
 
+    # The threshold the console draws and scores against is the one the predictor
+    # actually used for lead time: the validation-frozen operating point's, when
+    # there is one. The mandated 0.75 travels alongside it.
+    served_threshold = round(float(op.get("threshold", cfg["risk_threshold"])), 3)
     victim_series = [f for f in forecasts if f["host_id"] == VICTIM]
-    crossed = [i for i, f in enumerate(victim_series) if f["observed_risk"] >= cfg["risk_threshold"]]
+    crossed = [i for i, f in enumerate(victim_series) if f["observed_risk"] >= served_threshold]
     warned = [i for i, f in enumerate(victim_series) if f["lead_time_s"] is not None]
     quiet_max = max(f["observed_risk"] for f in forecasts if f["host_id"] != VICTIM)
-    measured = measure(victim_df, start, n, victim_series, float(cfg["risk_threshold"]))
+    measured = measure(victim_df, start, n, victim_series, served_threshold)
 
     replay = {
         "source": {
@@ -298,7 +302,8 @@ def build(limit: int | None = None) -> None:
                 "context_L": CONTEXT_LENGTH,
                 "horizon_K": HORIZON_LENGTH,
                 "n_features": len(FEATURE_ORDER),
-                "risk_threshold": float(cfg["risk_threshold"]),
+                "risk_threshold": served_threshold,
+                "risk_threshold_mandated": float(cfg["risk_threshold"]),
                 "lead_time_m": int(cfg["lead_time_m"]),
             },
         },
@@ -310,7 +315,7 @@ def build(limit: int | None = None) -> None:
     OUT.write_text(json.dumps(replay, indent=1) + "\n")
 
     print(f"\nwrote {OUT.relative_to(REPO)}  ({OUT.stat().st_size / 1024:.0f} KB)")
-    print(f"victim observed risk crosses {cfg['risk_threshold']} at display windows: {crossed[:6]}"
+    print(f"victim observed risk crosses {served_threshold} at display windows: {crossed[:6]}"
           f"{' ...' if len(crossed) > 6 else ''}")
     print(f"victim windows that raise an advance warning: {len(warned)} of {n}")
     print(f"quiet hosts' highest observed risk: {quiet_max:.4f}")

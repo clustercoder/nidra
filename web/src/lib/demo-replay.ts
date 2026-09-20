@@ -67,7 +67,11 @@ export type ModelConfig = {
   context_L: number;
   horizon_K: number;
   n_features: number;
+  /** The threshold the predictor scored lead time against — the validation-frozen
+   *  operating point's when one is loaded (Run 8: 0.718). */
   risk_threshold: number;
+  /** The problem statement's 0.75, reported alongside; absent on older fixtures. */
+  risk_threshold_mandated?: number;
   lead_time_m: number;
 };
 
