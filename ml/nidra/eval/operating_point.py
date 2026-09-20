@@ -52,10 +52,24 @@ def pooling_key(p: dict[str, Any]) -> str:
     return f"{p['method']}|q={q}|{p.get('horizon_reduction', 'max')}"
 
 
+def extend_calibration_to_horizon(params_by_k: list[dict], K: int) -> list[dict]:
+    """Per-horizon Platt parameters for a rollout of K steps from an operating
+    point fit at another K. Horizons beyond the fitted ones reuse the last
+    fitted horizon's parameters and are marked `extended_from_k`; a shorter
+    rollout uses the leading entries. This exists for the horizon-extension
+    check (K=10 scored under the K=6 operating point) — the fitted parameters
+    differ by < 3 % across horizons — and the record says when it was used."""
+    fitted = len(params_by_k)
+    if K <= fitted:
+        return list(params_by_k[:K])
+    tail = params_by_k[-1]
+    return list(params_by_k) + [{**tail, "extended_from_k": fitted} for _ in range(K - fitted)]
+
+
 def _composite(bundle: ScoreBundle, pooling: dict[str, Any], calibration: list[dict] | None) -> np.ndarray:
     risk_k = bundle.pooled(pooling["method"], pooling.get("quantile") or 0.85)
     if calibration is not None:
-        risk_k = apply_platt_by_horizon(risk_k, calibration)
+        risk_k = apply_platt_by_horizon(risk_k, extend_calibration_to_horizon(calibration, risk_k.shape[-1]))
     return ScoreBundle.over_horizon(risk_k, pooling.get("horizon_reduction", "max"))
 
 
@@ -102,11 +116,14 @@ def apply_operating_point(bundle: ScoreBundle, op: dict[str, Any]) -> dict[str, 
     """Raw and calibrated composite scores under a frozen operating point."""
     pooling = op["pooling"]
     cal = op["calibration"]["params_by_k"]
+    risk_k_raw = bundle.pooled(pooling["method"], pooling.get("quantile") or 0.85)
+    cal_k = extend_calibration_to_horizon(cal, risk_k_raw.shape[-1])
     return {
         "raw": _composite(bundle, pooling, None),
         "calibrated": _composite(bundle, pooling, cal),
-        "risk_k_raw": bundle.pooled(pooling["method"], pooling.get("quantile") or 0.85),
-        "risk_k_calibrated": apply_platt_by_horizon(bundle.pooled(pooling["method"], pooling.get("quantile") or 0.85), cal),
+        "risk_k_raw": risk_k_raw,
+        "risk_k_calibrated": apply_platt_by_horizon(risk_k_raw, cal_k),
+        "calibration_horizons_extended": len(cal_k) > len(cal),
     }
 
 

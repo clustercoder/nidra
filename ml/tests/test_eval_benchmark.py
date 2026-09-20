@@ -179,3 +179,36 @@ def test_benchmark_selects_on_val_then_freezes_for_test(benchmark_artifacts):
     # the sampled-prevalence AP is not the natural one
     wm = systems["world_model"]
     assert wm["auc_pr"] != wm["auc_pr_unweighted"] or wm["n_pos"] == 0
+
+
+# ---------------------------------------------------------------------------
+# operating point under a horizon extension (K=10 check on a K=6 operating point)
+# ---------------------------------------------------------------------------
+
+def test_calibration_extends_to_a_longer_horizon_by_repeating_the_last_params():
+    from nidra.eval.operating_point import extend_calibration_to_horizon
+    params = [{"a": 1.0 + k / 10, "b": -0.1 * k, "n": 10, "degenerate": False} for k in range(6)]
+    ext = extend_calibration_to_horizon(params, 10)
+    assert len(ext) == 10
+    assert ext[:6] == params
+    for k in range(6, 10):
+        assert ext[k]["a"] == params[-1]["a"] and ext[k]["b"] == params[-1]["b"]
+        assert ext[k]["extended_from_k"] == 6
+    assert extend_calibration_to_horizon(params, 6) == params
+    assert extend_calibration_to_horizon(params, 3) == params[:3]
+
+
+def test_apply_operating_point_accepts_a_longer_horizon_and_says_so():
+    from nidra.eval.operating_point import apply_operating_point
+    from nidra.eval.systems import ScoreBundle
+    rng = np.random.default_rng(0)
+    K = 10
+    bundle = ScoreBundle(K=K, risk_traj=rng.uniform(size=(4, 12, K)).astype("float16"), n_members=1, n_samples_per_member=12)
+    op = {"pooling": {"method": "mean", "quantile": None, "horizon_reduction": "max"},
+          "calibration": {"params_by_k": [{"a": 1.0, "b": 0.0, "n": 10, "degenerate": False}] * 6}}
+    applied = apply_operating_point(bundle, op)
+    assert applied["risk_k_calibrated"].shape == (4, K)
+    assert applied["calibration_horizons_extended"] is True
+    same_k = apply_operating_point(ScoreBundle(K=6, risk_traj=rng.uniform(size=(4, 12, 6)).astype("float16"),
+                                               n_members=1, n_samples_per_member=12), op)
+    assert same_k["calibration_horizons_extended"] is False

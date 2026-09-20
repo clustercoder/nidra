@@ -234,6 +234,7 @@ def main() -> None:
     if not args.pcap and not args.csv:
         parser.error("give --pcap and/or --csv")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.getLogger("shap").setLevel(logging.WARNING)  # the shap package logs every kernel weight vector at INFO
     summary = run(args)
     print(json.dumps({k: v for k, v in summary.items() if k != "ground_truth"}, indent=2, default=float))
     if "ground_truth" in summary:
