@@ -169,7 +169,7 @@ history is the best system at 0.04–0.08 on test/holdout. Training positives at
 - **Test (Friday)**: AP 0.058; Bot-C2 windows (833 of 946 positives) scored ≈ 0 by every
   head-based system; DDoS scored 1.00 from its first window; PortScan partially.
 - **Leave-one-day-out retrains**: <<LODO_SHORT>>
-- **Horizon extension (K = 10 on test)**: <<K10_SHORT>>
+- **Horizon extension (K = 10 on test)**: rollout stable to ten steps, state skill 0.56–0.64 at every k (ridge 0.53–0.61); risk-level AP 0.062 vs persistence 0.066 (ΔAP −0.004 [−0.021, +0.016]); per-horizon AP 0.059 → 0.020 while the oracle stays at 0.085 — depth costs resolution, the head is the ceiling (`artifacts/metrics/test_K10/`).
 
 ## 10. Diagnosis (why the risk-level margin is where it is)
 
@@ -225,8 +225,8 @@ forecast** over every (window, feature) cell with a **deletion faithfulness chec
   training examples — anchored 12 minutes before the 15:04 onset: 12 quiet windows at 0.00,
   the observed risk crossing 0.75 one minute after onset and the forecast's peak horizon
   reaching 0.71–0.91 through the scan (4 windows where the forecast crosses one window
-  before the observation does; on this single episode P 1.00 / R 0.095 at 0.75 over 48
-  windows; the three quiet peers on the same /24 peak at 0.54). The fixture states why this
+  before the observation does; on this single episode P 1.00 / R 0.14 at the served 0.718
+  over 48 windows; the three quiet peers on the same /24 peak at 0.54). The fixture states why this
   episode was chosen and where the Botnet numbers are, and the console's stage label for it
   is model-internal by construction.
 - **Offline pipeline** (`python -m nidra.cli.forecast --csv <Friday-PortScan CSV> --out …`):

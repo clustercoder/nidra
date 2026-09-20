@@ -322,7 +322,21 @@ its margin over persistence is not zero:
 
 ### 8.5 Horizon extension check (K = 10 on test)
 
-<<K10>>
+Scored with the same production checkpoints and the K=6 operating point (pooling and
+threshold unchanged; the per-horizon Platt parameters for k = 7…10 reuse k = 6's, which
+differ by < 3 % across the fitted horizons — recorded as `calibration_horizons_extended`)
+against the label "attack within 10 windows" (`artifacts/metrics/test_K10/`; 21,175 rows,
+prevalence 0.0046). The rollout is stable to ten steps — no NaN, state skill vs persistence
+0.64 / 0.59 / 0.56 / 0.57 / 0.59 / 0.59 / 0.60 / 0.60 / 0.60 / 0.60 for k = 1…10 (ridge
+0.61 → 0.58), i.e. the deterministic forecast keeps its margin over the linear reference to
+ten minutes — but the risk-level result is the same as at K=6: published-label AP 0.062
+(persistence 0.066, deterministic 0.079, ridge 0.084, GRU classifier 0.171), ΔAP vs
+persistence −0.004 [−0.021, +0.016]. Per horizon, AP(attack at t+k) decays 0.059 → 0.020
+from one to ten minutes while the oracle stays flat at 0.084–0.087: what the forecast loses
+with depth is resolution, not the head's ceiling, which is already the binding constraint
+on Friday. Four of fifteen episodes are alerted (median latency 0.5 min), none before
+onset. Extending the horizon does not create warning where the head has nothing to
+recognise.
 
 ### 8.6 Generalisation: leave-one-day-out retrains
 
@@ -384,8 +398,8 @@ quantile chosen on the test split. Under natural prevalence the same artifacts' 
   training examples — anchored 12 minutes before the 15:04 onset: 12 quiet windows at 0.00,
   the observed risk crossing 0.75 one minute after onset and the forecast's peak horizon
   reaching 0.71–0.91 through the scan (4 windows where the forecast crosses one window
-  before the observation does; on this single episode P 1.00 / R 0.095 at 0.75 over 48
-  windows; the three quiet peers on the same /24 peak at 0.54). The fixture states why this
+  before the observation does; on this single episode P 1.00 / R 0.14 at the served 0.718
+  over 48 windows; the three quiet peers on the same /24 peak at 0.54). The fixture states why this
   episode was chosen and where the Botnet numbers are, and the console's stage label for it
   is model-internal by construction.
 - **Offline pipeline** (`python -m nidra.cli.forecast --csv <Friday-PortScan CSV> --out …`):
