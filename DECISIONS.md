@@ -1279,3 +1279,25 @@ head on S_t 0.42 → 0.73 AP, and the head no longer changes by ±0.3 between ot
 identical runs. The benchmark's active/silent negative caps were raised to 15000 / 5000
 for the locked runs for the same reason (a 2000-row silent sample gives one false alarm the
 weight of 340 positives).
+
+**D115 — Run 8 production result: the Δ=60 five-seed ensemble ships as-is, with the
+natural-prevalence numbers as the only published ones, and the risk-level world-model
+claim scoped to what the benchmark supports.** `experiments/runs/production` (24 epochs,
+β-NLL, heads on every split row), operating point frozen on validation (median pooling,
+threshold 0.718). Test AP 0.058 [0.018, 0.199] against persistence 0.065 (ΔAP −0.007
+[−0.026, +0.011]); holdout AP 0.439 [0.000, 0.768] against 0.295 (+0.143 [−0.000,
++0.283]); state-forecast skill vs persistence 0.587 / 0.616 (ridge 0.565 / 0.595). Three
+things were decided on that evidence. (1) Nothing is re-tuned: the test result is the
+first look at Friday under this protocol and stays the published one; the Bot-C2
+breakdown (833 of 946 positives on five workstations, head ROC-AUC 0.37) is reported as
+diagnosis beside the headline, never instead of it. (2) The stochastic rollout stays the
+served path although the deterministic one scores +0.023 [+0.003, +0.048] higher on test
+— the band and P(attack within horizon) need sampled trajectories, and on holdout the
+sign reverses (−0.058 [−0.169, +0.014]). (3) The history-aware risk head (a head on the
+encoder state at each rollout step, trained on observed pairs and frozen) is recorded as
+the next change, not made now: the validation split shares families with training and
+cannot select for family transfer, so adopting it would mean choosing it on test. The
+published claim becomes: learned dynamics that beat a linear reference at the state level
+on every split; risk-level forecasting that helps on Thursday's unseen families and not
+on Friday's; no demonstrated advance warning on this dataset. Runs 1–7's scorecard is
+withdrawn as a description of the system and kept for provenance.

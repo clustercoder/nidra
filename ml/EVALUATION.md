@@ -1,12 +1,113 @@
 # Evaluation
 
-This document explains the harness and metric definitions.
-`REAL_DATA_RESULTS.md` is the source of truth for actual measured
-results — Run 4 and the Run 3 pooled-ensemble addendum are the current,
-best-supported numbers; Run 2 (still referenced below for the harness
-examples that predate Run 3/4) is kept for provenance.
+This document explains the harnesses and metric definitions.
+`REAL_DATA_RESULTS.md` is the source of truth for measured results — **Run 8
+(the natural-prevalence benchmark below) is the current, best-supported set of
+numbers**. Everything from the second section onward describes the older
+`run_eval.py` harness (Runs 1–7, Δ=30 s, balanced evaluation subsample); it is
+kept because those runs are still in the results document, not because its
+numbers describe the shipped system.
 
-## Running it
+## The primary benchmark (Run 8, current): `nidra.eval.benchmark`
+
+```bash
+cd ml
+# 1. validation selects the operating point and writes artifacts/weights/operating_point.json
+python -m nidra.eval.benchmark --split val --select-operating-point --n-samples 60 --n-resamples 300
+# 2. test and holdout only LOAD it (a run without one uses config pooling + the mandated 0.75 and says so)
+python -m nidra.eval.benchmark --split test --n-samples 60 --n-resamples 300
+python -m nidra.eval.benchmark --split holdout --n-samples 60 --n-resamples 300
+# tables and figures from the records
+python -m nidra.scripts.report_tables --run . --splits val,test,holdout
+python -m nidra.scripts.plot_benchmark --run . --splits test,holdout --out reports/run8
+```
+
+Writes `<metrics_dir>/<split>/benchmark.json` (plus `benchmark_scores.npz` with every
+system's per-row scores). Each record starts with the provenance block from
+`nidra/utils/provenance.py` — git commit, config hash, dataset file digests, geometry,
+seeds, checkpoint sha256, operating point, caps, eval seed — so a number can be traced
+to exactly what produced it. `--set key=value` overrides (used for the K-extension check)
+are recorded in the file as `config_overrides`.
+
+### Evaluation set (`nidra/eval/eval_set.py`)
+
+Stratified, weighted back to the split's **natural prevalence**:
+
+| stratum | what | sampled | weight |
+|---|---|---|---|
+| positive | every origin whose published label is 1 (attack within K windows) | all | 1 |
+| pre_onset | every origin ≤ `pre_onset_minutes` (30) before an episode onset | all | 1 |
+| active_negative | benign origins whose current state is active (`is_active=1`) | ≤ `active_negative_cap` (15,000) | N_full / n_sampled |
+| silent_negative | benign origins whose current state is silent | ≤ `silent_negative_cap` (5,000) | N_full / n_sampled |
+
+Every metric is computed with those weights, so precision, F1, false-alarm rate and AP
+are the ones a deployment at the split's prevalence would see (test 0.0033, holdout
+0.00034). The balanced 4,000-row subsample of Runs 1–7 (prevalence ≈0.46) is a different
+quantity; the two are never mixed in one table.
+
+Episodes are attack runs on one host merged across gaps of ≤ `episode_merge_gap_windows`
+(5). The geometry (`nidra/data/onset.py`) is shared by the eval set, the onset-target
+training arrays and the per-episode report, and keys never cross an episode boundary.
+
+### Tasks
+
+- **Task A — published label** (primary): attack on this host within the next K windows,
+  origin anywhere. Natural-prevalence AP with an **episode-cluster bootstrap** interval
+  (resampling episodes, not rows, so the 87–92% of positives that sit inside an already
+  running episode do not count as independent evidence). `n_positive_clusters` is
+  reported; when it is < 5 the interval is wide by construction and the summary marks it
+  with `*`. A row-level interval is reported alongside for reference only.
+- **Task A′ — detection**: is the origin state itself attack-labelled. What a classifier
+  measures; reported so the two are never conflated.
+- **Task B — onset within h minutes** (h ∈ {1, 3, 5, 10, 15, 30}): origin strictly outside
+  any episode, positive iff the next episode on the host begins within h. This is the
+  forecasting question the problem statement asks; the dataset's attacks start without a
+  same-host precursor phase, so it has very few positives and every system is near the
+  prevalence floor — reported, not tuned.
+- **Task C — per horizon k**: attack at exactly `t+k`, plus stage top-1 at `t+k`,
+  ridge/persistence state skill at `t+k`.
+- **Attribution**: paired episode-bootstrap AP differences for
+  `world_model − {persistence, persistence + learned noise, isotropic noise, deterministic
+  rollout, ridge two-lag, LR, GBDT, GRU classifier}`. The sign and interval of
+  `world_model − persistence` is the test of whether the transition model contributes
+  anything beyond the head on `S_t`.
+- **State-forecast skill**: `1 − MSE(model) / MSE(persistence)` on the deterministic
+  rollout, over the features the scaler keeps (constant and duplicate training columns are
+  dropped from the model and the metric alike); ridge two-lag is the
+  linear reference. Also the empirical coverage of the 90% band.
+- **Per episode**: earliest sustained crossing before onset (lead time, minutes), or
+  latency after onset, at the frozen threshold and at the mandated 0.75.
+
+### Operating point (`nidra/eval/operating_point.py`)
+
+Chosen on validation only, written to `artifacts/weights/operating_point.json`, loaded
+by both the test/holdout benchmark and `NidraPredictor`:
+
+1. pooling statistic over sampled trajectories — nine candidates (mean, median, quantiles
+   0.5–0.95, max, P(trajectory > 0.5)) scored on validation Task A AP;
+2. per-horizon Platt calibration fit on validation with the natural weights;
+3. threshold: the validation F1-optimal one on the calibrated score. The mandated 0.75 is
+   reported alongside in every record; neither is ever chosen on test.
+
+### Baselines and ablations scored in the same run
+
+Persistence (frozen risk head on `S_t`), persistence + the model's learned noise (mean
+disabled), isotropic-noise persistence, deterministic world model (no noise), ridge
+two-lag dynamics rolled out K steps, oracle on the true future states, LR on `S_t`, LR on
+the flattened L-window history, GBDT on `S_t`, the GRU sequence classifier trained by the
+`gru_baseline` stage, and (`onset_head_direct`) the explicit onset head in the Task B
+tables. All classifier baselines are fit on a 500k-row stratified training sample and
+scored on the identical evaluation rows.
+
+---
+
+## The legacy harness (`run_eval.py`, Runs 1–7, superseded)
+
+Everything below describes the balanced-subsample harness the earlier runs were
+measured with. It still runs, and its metric definitions are still correct for what
+they measure, but its numbers are not comparable to the benchmark above.
+
+### Running it
 
 Against the shipped production model. This needs no dataset download — the
 weights, scaler and windowed tables are all committed under `artifacts/`,

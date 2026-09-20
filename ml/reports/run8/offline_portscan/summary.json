@@ -1,0 +1,88 @@
+{
+  "input": {
+    "pcap": null,
+    "csv": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv",
+    "n_flows": 286467,
+    "n_packets": 0,
+    "flow_only": true,
+    "labelled": true,
+    "unmapped_labels": []
+  },
+  "geometry": {
+    "window_seconds": 60,
+    "L": 30,
+    "K": 6
+  },
+  "operating_point": {
+    "source": "operating_point.json (selected on val)",
+    "pooling_key": "median|q=-|max",
+    "threshold": 0.7177971005439758,
+    "threshold_mandated": 0.75,
+    "selected_at": "2026-09-20T05:45:01Z",
+    "calibrated": true
+  },
+  "n_hosts": 3667,
+  "n_state_rows": 85497,
+  "n_origins_forecast": 3000,
+  "n_above_threshold": 2,
+  "alerts_per_hour_of_capture": 1.0,
+  "n_trajectories_per_origin": 300,
+  "calibrated": true,
+  "model_version": "nidra-v0.1.0",
+  "wall_seconds": 100.20581769943237,
+  "ground_truth": {
+    "n_episodes": 6,
+    "n_warned_before_onset": 0,
+    "n_alerted_within_episode": 0,
+    "episodes": [
+      {
+        "host_id": "172.16.0.1",
+        "onset_ts": 1499443500,
+        "end_ts": 1499443560,
+        "n_windows": 2,
+        "first_alert_ts": null
+      },
+      {
+        "host_id": "172.16.0.1",
+        "onset_ts": 1499446320,
+        "end_ts": 1499446800,
+        "n_windows": 9,
+        "first_alert_ts": null
+      },
+      {
+        "host_id": "172.16.0.1",
+        "onset_ts": 1499447640,
+        "end_ts": 1499447760,
+        "n_windows": 3,
+        "first_alert_ts": null
+      },
+      {
+        "host_id": "172.16.0.1",
+        "onset_ts": 1499449860,
+        "end_ts": 1499450160,
+        "n_windows": 6,
+        "first_alert_ts": null
+      },
+      {
+        "host_id": "172.16.0.1",
+        "onset_ts": 1499450580,
+        "end_ts": 1499451180,
+        "n_windows": 11,
+        "first_alert_ts": null
+      },
+      {
+        "host_id": "172.16.0.1",
+        "onset_ts": 1499451660,
+        "end_ts": 1499451780,
+        "n_windows": 3,
+        "first_alert_ts": null
+      }
+    ]
+  },
+  "published_label_metrics": {
+    "auc_pr": 0.12172453671918149,
+    "roc_auc": 0.6815704593482371,
+    "n_pos": 3,
+    "n": 3000
+  }
+}

@@ -32,9 +32,11 @@ rather than reconstructing order from a dict.
 | Dynamics (deltas/slopes) | 10 | `d_syn_ratio`, `slope3_out_degree`, `d_iat_var` |
 | Activity | 1 | `is_active` |
 
-Geometry, fixed across the pipeline, model and serving: **Δ = 30s** windows,
-**L = 30** windows of history (15 minutes), **K = 6** windows of forecast
-(3 minutes). So one training example is `[30, 45] → [6, 45]`.
+Geometry, fixed across the pipeline, model and serving: **Δ = 60 s** windows
+(canonical since 2026-09-20 — CIC-IDS2017 flow timestamps have minute
+resolution, so Δ=30 s produced an artificial all-zero state every other
+window), **L = 30** windows of history (30 minutes), **K = 6** windows of
+forecast (6 minutes). So one training example is `[30, 45] → [6, 45]`.
 
 ## Data pipeline
 
@@ -148,33 +150,27 @@ Nothing is trained after stage 2. `freeze_all()` is the end state.
 ## Ensemble and risk pooling
 
 Five seeds (`ensemble.seeds: [0,1,2,3,4]`), each rolling out 200 sampled
-trajectories → **1,000 trajectories** per forecast.
+trajectories → **1,000 trajectories** per forecast (benchmarks use 60 per
+member).
 
-Reducing those 1,000 trajectories to one number is the single most
-consequential decision in the system, and it is isolated in
-`nidra/models/risk_pooling.py` so evaluation and serving cannot drift apart.
+Reducing those trajectories to one number is the single most consequential
+decision in the system, and it is isolated in `nidra/models/risk_pooling.py`
+so evaluation and serving cannot drift apart. It is also the decision that
+was made wrongly for Runs 1–7: the 85th-percentile statistic was chosen by
+looking at test and holdout F1 on a balanced evaluation subsample. Under the
+natural prevalence of attacks the tail statistics collapse — on validation,
+q0.85 scores 0.47 AP, q0.95 0.01, max 0.005, against 0.69–0.73 for mean,
+median and P(trajectory > 0.5) — because with 87 % of the weight on silent
+hosts, a statistic that rewards one risky trajectory in three hundred rewards
+silence.
 
-Mean pooling answers *"how risky is the average imagined future"*. For a
-rare event where only a minority of sampled futures reach compromise, the
-mean sits far below any individual risky trajectory — which is why
-mean-pooled scores ranked attacks well (good AUC-PR) yet almost never
-crossed the mandated 0.75 alert threshold: **F1 0.010**. Pooling the **85th
-percentile** instead asks *"how risky is the riskier tail"* — a different
-statistic of the same distribution, not a different model and not a lowered
-bar, and monotonic in the underlying per-trajectory risk, so it invents no
-separability the ranking did not already have. Same checkpoints, F1 **0.84**.
-
-Those two figures are the Run 6 pooling sweep, measured as a matched pair on
-the pre-Run-7 checkpoints; they are quoted together because they isolate the
-pooling change and nothing else. The shipped ensemble now scores test F1
-**0.906** after the Run 7 data correction and retrain — see
-`REAL_DATA_RESULTS.md`.
-
-`q=0.85` was selected by a sweep on both splits. It is scale-specific: at
-reduced scale `q=0.5` won, and at full scale `q=0.5` is the *worst* setting
-tested (test AUC-PR collapses 0.925 → 0.499). That sweep also predates the
-Run 7 retrain; it has not been repeated on the new checkpoints, so `q=0.85`
-is carried forward on the earlier evidence rather than re-derived.
+Since Run 8 the statistic, the per-horizon calibration and the threshold are
+chosen together on **validation only** by `nidra/eval/benchmark.py
+--select-operating-point`, written to `artifacts/weights/operating_point.json`
+and read by both the benchmark and `NidraPredictor`. The shipped point is
+median pooling, max over horizons, threshold 0.718 (the mandated 0.75 is
+reported alongside and gives the same recall). Nothing about it is chosen on
+test.
 
 ## Serving
 
@@ -184,10 +180,12 @@ checkpoints and the scaler once at construction, and is **stateless with
 respect to per-host history**: `forecast()` takes the caller's `[L, F]`
 buffer as an argument rather than holding one, so any inference worker can
 serve any host with no coordination. It returns the risk curve for t+1..t+6
-with confidence intervals, lead time, stage distribution, predicted features
-in raw units (inverse-transformed out of scaled space), SHAP top signals,
-and temporal saliency. Latency target is 300ms; measured ~188ms median on an
-M1 CPU.
+with a trajectory band, the cumulative P(attack within the horizon), lead
+time, stage distribution and its ATT&CK tactics, predicted features in raw
+units (inverse-transformed out of scaled space), SHAP top signals, temporal
+saliency and integrated-gradient forecast attributions with a faithfulness
+check. Latency target is 300 ms on an M1 CPU (`python -m nidra.serve.benchmark`;
+the Run 8 figure is in `REAL_DATA_RESULTS.md` §8.8).
 
 ## Module map
 
@@ -195,9 +193,9 @@ M1 CPU.
 |---|---|
 | `nidra/data/` | schema, flow/pcap loading, windowing, graph features, labels, splits, normalization, tensor construction |
 | `nidra/models/` | encoder, transition, heads, world model + rollout, risk pooling |
-| `nidra/train/` | shared pipeline, stage-1 and stage-2 trainers, losses |
-| `nidra/eval/` | baselines, ablations, metrics, calibration, lead time, `run_eval` CLI |
-| `nidra/explain/` | SHAP, temporal saliency, counterfactual rollout, flow bridge |
+| `nidra/train/` | shared pipeline, head data, stage-1 / stage-2 / onset trainers, losses |
+| `nidra/eval/` | `benchmark` (natural-prevalence harness, operating point, attribution, state skill, episodes); legacy baselines, ablations, metrics, calibration, lead time, `run_eval` |
+| `nidra/explain/` | SHAP, temporal saliency, forecast attributions (IG + faithfulness), counterfactual rollout, flow bridge |
 | `nidra/serve/` | `NidraPredictor`, latency benchmark |
 | `nidra/scripts/` | demo forecast, report generation, calibration fitting, sanity plots |
 

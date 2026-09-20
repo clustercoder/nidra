@@ -2,136 +2,435 @@
 
 ## Plain-English scorecard (read this first)
 
-Everything below this section is the full, technical, run-by-run record —
-every number's exact provenance, every bug found, every open question.
-This section is the same information distilled into plain language, for
-anyone who wants the scores without the jargon first. The root
-[`../README.md`](../README.md) has an even shorter pitch version of the
-same numbers.
+Everything below this section is the full, technical, run-by-run record — every number's
+exact provenance, every bug found, every open question. This section is the same
+information distilled into plain language. The root [`../README.md`](../README.md) has
+the shorter pitch version of the same numbers.
 
-### What each "system" in the tables below actually is
+**Which numbers are current.** Run 8 (2026-09-20) is the current result and the only one
+that describes the shipped artifacts. It re-measured everything under a protocol that
+Runs 1–7 did not use: every metric at the split's **natural prevalence** (attack windows
+are 0.03–0.4 % of all host-minutes, not the 46 % of the old 4,000-row subsample), and
+every tunable — how sampled futures are pooled, the calibration, the alert threshold —
+**chosen on validation and frozen before the test or holdout day was scored**. The old
+headline (test AUC-PR 0.960 / F1 0.906) is therefore **withdrawn as a description of the
+system**: it was measured correctly on its own terms, but its terms (balanced prevalence,
+pooling statistic chosen by looking at test) do not describe deployment. It is kept in
+the Run 7 section for provenance.
 
-| System | What it actually does |
-|---|---|
-| **"Assume nothing changes"** (`persistence`) | The simplest possible guess: look at what the network is doing right now, and bet it keeps doing exactly that for the next few minutes. No learning involved — just "whatever's happening now will keep happening." Any real system has to beat this to be worth building. |
-| **"Simple lookup, this instant only"** (`lr_current_state`) | A basic statistical classifier (logistic regression) that looks at *only the current snapshot* — the 45 numbers describing this exact moment's traffic — and guesses "dangerous or not." No memory of what came before; doesn't forecast anything, just judges right now. |
-| **"Simple lookup, last 15 min of history"** (`lr_flattened_history`) | Same idea, but handed all 30 snapshots from the last 15 minutes at once, judging the current moment with that fuller picture. Still doesn't predict the future — just judges "now" with more context. |
-| **NIDRA — the world model** (`world_model`) | The only one that actually **forecasts forward**. Instead of only looking at the past or present, it *imagines* several minutes into the future based on learned patterns of how network behavior evolves, then judges danger based on that imagined future. This is the project's actual contribution. |
-| **"Perfect-hindsight cheat score"** (`oracle`) | Not a real, deployable system — a benchmark only. Since this is historical data, we already know what actually happened next; this row lets the risk-judging component see the **real** future (not a guess) and scores how dangerous it turned out to be. It's a sanity-check ceiling — "how good could a forecast possibly be if it were perfect" — never something buildable in real time, since you never truly know the future in advance. |
-| **"(ensemble)"** suffix | Instead of trusting one trained model, 5 independently-trained models each vote, and their scores are averaged — the configuration actually used in production. Rows without this suffix are a single model's score. |
+### The three columns that matter
 
-### Every metric, every system, both splits
+| | **Historical** (Run 7, Δ=30 s, balanced subsample, pooling tuned on test) | **Corrected protocol — strongest non-forecasting baseline** (Run 8) | **Final NIDRA** (Run 8, 5-seed world model) |
+|---|:---:|:---:|:---:|
+| Test day (Friday: Bot, PortScan, DDoS) — AP | 0.960 | 0.164 (GRU sequence classifier) | **0.058** [0.018, 0.199] |
+| Test day — precision / recall / F1 at the alert threshold | 0.964 / 0.855 / 0.906 | 0.49 / 0.03 / 0.05 | 0.89 / 0.03 / 0.06 |
+| Unseen attack type (Thursday: Web attacks, Infiltration) — AP | 0.682 | 0.443 (logistic regression on 30 min of history) | **0.439** [0.000, 0.768] |
+| Unseen attack type — precision / recall / F1 | 0.731 / 0.800 / 0.764 | 0.68 / 0.53 / 0.60 | 0.85 / 0.32 / 0.46 |
+| Episodes warned *before* their first attack window | "8 of 10" (test) | 0 | 0 of 15 (test), 0 of 5 (holdout) |
+| Next-state forecast: MSE reduction vs "assume nothing changes" | not measured | 0.565 / 0.595 (ridge two-lag linear model, test / holdout) | **0.587 / 0.616** |
 
-Four scores appear below. In plain English: **Precision** — "when it
-raises an alarm, how often is it actually right?" (no false alarms).
-**Recall** — "of every real attack, how many did it catch?" (measured at
-a strict, mandated 75%-confidence alert bar — a demanding threshold on
-purpose). **F1** — one blended number combining the two. **AUC-PR** —
-the fairest score to compare systems by, since it doesn't depend on any
-one alert threshold; it asks "across every possible confidence bar,
-how well does this system rank real attacks above normal traffic?" This
-is the number to compare across rows.
+AP = average precision at natural prevalence (the area under the precision–recall
+curve; the fairest single number, since it does not depend on one threshold). The
+thresholds are the validation-chosen one (0.718) for Run 8 and the mandated 0.75 for
+Run 7; Run 8 at 0.75 is within 0.01 of the same F1.
 
-**Test split (Friday's attacks), n=4,000:**
+### What that says, plainly
 
-| System | Precision | Recall | F1 | AUC-PR |
+- **The model learns how a host's traffic evolves.** On every split its next-six-minutes
+  state forecast has 59–67 % lower squared error than assuming nothing changes, and 5–6 %
+  lower than a linear model fitted to the same task. This is the part of the "world
+  model" claim the data supports.
+- **On an attack type it never saw (Thursday), forecasting from those learned dynamics
+  helps.** The world model's AP is 0.439 against 0.295 for the same risk head applied to
+  the current state only (+0.14, 95 % interval [−0.00, +0.28] over five episodes), and it
+  matches the best history-reading classifier (0.443). It finds 3 of 5 episodes, 1–29
+  minutes after they start, and never before.
+- **On Friday it fails, and so does everything else.** 833 of Friday's 946 attack minutes
+  are Botnet command-and-control on five workstations — a stage with zero training
+  examples, and traffic that looks like a quiet workstation to a risk head that reads one
+  minute of state. The head ranks those minutes *below* silence (ROC-AUC 0.37). A
+  sequence classifier reading the full 30-minute history does rank them (ROC-AUC 0.976)
+  but is still only 0.164 AP at natural prevalence. The world model's AP is 0.058 — the
+  same as the head on the current state (−0.007 [−0.026, +0.011]).
+- **Advance warning is not demonstrated.** No episode on any split crosses the alert
+  threshold before its first attack-labelled minute. The dataset has almost no same-host
+  precursors (3 / 9 / 15 training positives at 1 / 3 / 5 minutes before an onset), and
+  every system — including one trained directly on that question — sits at the
+  prevalence floor there. That is a fact about CIC-IDS2017 as much as about NIDRA, and it
+  is reported as such rather than rescued.
+- **False alarms are rare at the chosen threshold**: 0.5–0.9 per hour across 2,000–2,600
+  monitored hosts on the test and holdout days (0.01–0.02 % of active-benign minutes).
+
+Full tables, intervals, per-horizon and per-episode results: Run 8 below and
+`reports/run8/benchmark_tables.md`; figures in `reports/run8/`.
+
+### The superseded scorecard (Runs 1–7), kept for provenance
+
+These are the Run 7 numbers exactly as the previous version of this section published
+them: Δ=30 s windows, a 4,000-row evaluation subsample with prevalence ≈0.46, the 85th
+percentile of sampled trajectories chosen by looking at test and holdout F1, threshold
+0.75. They are not comparable to Run 8 and are not a description of the shipped system.
+
+| Test split (Friday), n=4,000 | Precision | Recall | F1 | AUC-PR |
 |---|:---:|:---:|:---:|:---:|
-| Assume nothing changes (ensemble) | 0.956 | 0.166 | 0.282 | 0.701 |
-| Simple lookup, this instant only | 0.951 | 0.494 | 0.651 | 0.767 |
-| Simple lookup, last 15 min of history | 0.962 | 0.398 | 0.563 | 0.745 |
-| **NIDRA — world model (ensemble)** | 0.964 | 0.855 | **0.906** | **0.960** |
-| Perfect-hindsight cheat score (ensemble) | 0.933 | 0.577 | 0.713 | 0.878 |
+| persistence (ensemble) | 0.956 | 0.166 | 0.282 | 0.701 |
+| LR on the current state | 0.951 | 0.494 | 0.651 | 0.767 |
+| LR on 15 min of history | 0.962 | 0.398 | 0.563 | 0.745 |
+| world model (ensemble) | 0.964 | 0.855 | 0.906 | 0.960 |
+| oracle (ensemble) | 0.933 | 0.577 | 0.713 | 0.878 |
 
-**Holdout split (Thursday — an attack type NIDRA never saw in training), n=4,000:**
-
-| System | Precision | Recall | F1 | AUC-PR |
+| Holdout split (Thursday), n=4,000 | Precision | Recall | F1 | AUC-PR |
 |---|:---:|:---:|:---:|:---:|
-| Assume nothing changes (ensemble) | 0.828 | 0.433 | 0.568 | 0.618 |
-| Simple lookup, this instant only | 0.761 | 0.780 | 0.770 | 0.748 |
-| Simple lookup, last 15 min of history | 0.850 | 0.853 | **0.851** | **0.872** |
-| **NIDRA — world model (ensemble)** | 0.731 | 0.800 | 0.764 | 0.682 |
-| Perfect-hindsight cheat score (ensemble) | 0.607 | 0.604 | 0.605 | 0.773 |
+| persistence (ensemble) | 0.828 | 0.433 | 0.568 | 0.618 |
+| LR on the current state | 0.761 | 0.780 | 0.770 | 0.748 |
+| LR on 15 min of history | 0.850 | 0.853 | 0.851 | 0.872 |
+| world model (ensemble) | 0.731 | 0.800 | 0.764 | 0.682 |
+| oracle (ensemble) | 0.607 | 0.604 | 0.605 | 0.773 |
 
-**The recall problem is fixed (Run 6).** Earlier versions of this scorecard
-showed near-perfect precision at ~0.5-1% recall, because the sampled futures
-were averaged together before scoring, washing out the minority of imagined
-futures that actually cross the alert bar. Pooling the riskier tail instead
-(85th percentile) takes test F1 from 0.010 to 0.906 and holdout F1 from 0.014
-to 0.764, while AUC-PR holds or improves. Advance warning changed with it too,
-from 0 of 10 test episodes warned to 8 of 10 — but see Run 7 on why no number
-of *hours* is quoted for that warning any more.
-
-**The numbers above are Run 7's**, measured after correcting a flow-to-packet
-join that had left eleven of the forty-five features zero in ~97% of active
-windows. Every table further down this document that predates Run 7 describes
-a model effectively trained on 34 features; those sections are kept unedited
-for provenance, not as current results.
-
-**Where NIDRA wins and where it loses**: on the test split it leads every
-baseline on both AUC-PR (0.960 vs. the strongest baseline's 0.767) and F1
-(0.906 vs. 0.651), and the margin widened considerably with Run 7. On the
-holdout split it does **not** — "Simple lookup, last 15 min of history"
-scores AUC-PR 0.872 against NIDRA's 0.682 and F1 0.851 against 0.764. Run 6's pooling fix did not close that gap. An earlier version of this section claimed NIDRA led every
-baseline on *both* splits and singled out holdout as the most important
-one; that was wrong, contradicted by this document's own tables directly
-above, and it inverted the project's own rule (`eval/baselines.py`: "If the
-world model cannot beat baseline #2, that is reported, not hidden").
-Stated plainly: **on an attack type it never trained on, a plain logistic
-regression over the last 15 minutes of history ranks risk better than the
-world model does.** What the world model uniquely provides is a *forecast*
-with lead time (hours of advance warning — see the lead-time sections) and
-zero false alarms at the mandated threshold, neither of which the history
-baseline offers at all; what it does not yet provide is better ranking on
-an unseen attack type. Both halves of that are load-bearing.
-
-One correction to the sentence above, from Run 7: "hours of advance warning"
-overstates what the lead-time measurement supports. The detector fires at the
-first window each host gives it, which puts nearly every episode at the
-ceiling set by that host's available history rather than at a distance the
-model chose. The forecast is still the thing the baselines cannot do; the
-hours are not a measured property of it.
-
-### The tuning experiment (`logvar_max=1.5`), single model, before vs. after
-
-A retrain that reduced how much randomness the model uses while imagining
-the future, testing the hypothesis that this randomness was washing out
-its own signal:
-
-**Test split:**
-
-| Version | Precision | Recall | F1 | AUC-PR |
-|---|:---:|:---:|:---:|:---:|
-| Before (`logvar_max=3.0`, Run 3) | 1.000 | 0.029 | 0.057 | 0.878 |
-| **After (`logvar_max=1.5`, Run 4)** | 1.000 | 0.028 | 0.054 | **0.915** |
-
-**Holdout split:**
-
-| Version | Precision | Recall | F1 | AUC-PR |
-|---|:---:|:---:|:---:|:---:|
-| Before (`logvar_max=3.0`, Run 3) | 0.938 | 0.109 | 0.196 | 0.700 |
-| **After (`logvar_max=1.5`, Run 4)** | 0.850 | 0.062 | 0.116 | **0.719** |
-
-The fix improved single-model AUC-PR on both splits, confirming the
-hypothesis — but this gain does **not** carry over once you already have
-5 models voting together (Run 4's own ensemble scores 0.913 on test,
-slightly *below* Run 3's ensemble at 0.920) — see "Run 3 addendum" and
-"Run 4" below for the full measurement and the likely explanation
-(ensembling and this fix both reduce the same kind of noise, so their
-benefits overlap rather than stack).
-
-### Other measured numbers, plainly
-
-- **Speed**: ~115ms per forecast on ordinary CPU hardware, comfortably
-  under the 300ms budget for feeling instant.
-- **Early warning**: a sustained warning before the first attack-labelled
-  window on 8 of 10 test episodes — though it doesn't fire for every attack
-  at the strict alert bar, and the *amount* of warning is not currently
-  measurable; see Run 7's lead-time section for why.
-- **Code health**: 276 automated tests, all passing.
+Other Run 7 figures that were quoted: ~115 ms per forecast; "8 of 10" test episodes
+warned (see Run 7 on why no duration was attached); 276 tests.
 
 ---
 
-## Run 7 (current): the flow/packet join was three hours and twelve hours out, and 11 of 45 features were ~always zero
+## Run 8 (current): Δ=60 rebuild, natural-prevalence benchmark, world-model attribution
+
+**Read this section before any of the ones below it.** Runs 1–7 were measured at Δ=30 s on a
+balanced evaluation subsample (4,000 rows, prevalence ≈0.46, one attack family in
+validation) with the pooling quantile chosen by looking at test and holdout F1. None of
+those numbers is comparable to the ones here, and the headline "AUC-PR 0.960 / F1 0.906"
+of the scorecard above is **withdrawn as a description of the deployed system** — not
+because it was mis-measured on its own terms, but because its terms (balanced prevalence,
+test-tuned pooling) do not describe deployment. The Δ=30 artifacts, config and manifest are
+frozen under the git tag `baseline-delta30-run7` and `experiments/BASELINE_MANIFEST_delta30_run7.json`
+(weights copied to `experiments/baseline_delta30_run7/`).
+
+Everything in Run 8 is produced by `nidra.eval.benchmark` from the artifacts named in each
+record, at the natural prevalence of each split, with the operating point (pooling
+statistic, per-horizon calibration, threshold) selected on validation and frozen before
+test or holdout were scored. Every record carries the git commit, config hash, dataset
+digests, geometry, seeds and checkpoint hashes (`nidra/utils/provenance.py`).
+
+### 8.1 What changed in the data (DECISIONS D102–D105)
+
+- **Δ = 60 s is canonical.** CIC-IDS2017 flow timestamps have minute resolution, so at
+  Δ=30 every second window was an artificial all-zero state. Rebuilt all 8 day-files.
+- **Flow/packet fusion.** Packet-only host-minutes (39% of Tuesday's transmitting minutes)
+  used to be emitted as zero rows; they are now active states. Packet features are
+  populated on 99.5–99.7% of active rows, flow-start features on 51–53% (a flow that
+  started in an earlier minute contributes packets but no flow record — expected).
+- **Validation is a trailing 30% block of each training day**, nudged so that no
+  episode straddles the cut and no episode starts within 30 minutes after it (its run-up
+  stays with it). Validation holds SSH-Patator (Tuesday) and Heartbleed (Wednesday);
+  training keeps FTP-Patator and the four Wednesday DoS attacks. Labels are recomputed
+  inside each split.
+- **Composition at Δ=60** (`artifacts/metadata/data_audit_w60.json`):
+
+| split | rows | hosts | active | attack windows | positives (K=6) | episodes | pre-onset windows ≤30 min |
+|---|---|---|---|---|---|---|---|
+| train (Mon+Tue+Wed, 70%) | 2,274,548 | 6,413 | 6.0% | 139 | 179 | 5 | 69 |
+| val (Tue+Wed, trailing 30%) | 893,701 | 5,224 | 7.3% | 74 | 94 | 2 | 60 |
+| test (Friday) | 299,392 | 2,072 | 14.9% | 697 | 982 | 16 | 327 |
+| holdout (Thursday) | 450,482 | 2,557 | 11.7% | 96 | 151 | 5 | 73 |
+
+  Positives that sit inside an already-running episode: 87% / 87% / 92% / 84%. The
+  dataset's attacks are launched from an attacker VM without a preceding phase on the
+  same host, so genuine precursors are rare; this is the ceiling on Task B below.
+
+### 8.2 What changed in the model and training (D106–D108, D112–D114)
+
+- **Preprocessing**: the shipped RobustScaler was the identity; replaced by per-feature
+  transforms (log1p / asinh / z-score / unit) fit on active training rows, with an
+  automated audit (`preprocessing_audit.md` next to every scaler).
+- **Dynamics selection** on the free-running validation NLL (the deployed behaviour), not
+  the teacher-forced loss.
+- **Dynamics loss**: β-NLL with β=0.5. Screened against six alternatives on validation
+  (D113); under the plain NLL the learned mean added nothing at the risk level and the
+  state forecast was far below a linear two-lag fit.
+- **Heads**: imbalanced BCE with pos_weight, Gaussian input noise σ=0.3, trained and
+  selected on every observed state of the split (2.27M training rows, 894k validation
+  rows) with the risk head selected on exact natural-prevalence validation AP and the
+  stage head on macro-F1. Frozen afterwards, as before.
+- **Geometry**: L=30 windows (30 min) / K=6 windows (6 min) at Δ=60 (D112).
+- **Onset head** (explicit supervision, D109) and **ATT&CK mapping** (D110) added;
+  serving applies the validation-frozen operating point (D111).
+
+### 8.3 The variant screen on validation (seed 0, L=15/K=3, 20 epochs)
+
+Natural-prevalence AP on the published label; state skill = 1 − MSE/MSE_persistence on the
+deterministic rollout over the kept features (ridge two-lag: 0.638). Same head recipe and
+the same evaluation set for every row; identical heads across rows except where the
+model's parameter count changes the RNG stream (linear-skip rows).
+
+| variant | world model | persistence (head on S_t) | persistence + learned noise | state skill |
+|---|---|---|---|---|
+| plain NLL | 0.728 | 0.730 | 0.713 | 0.399 |
+| **β-NLL 0.5 (kept)** | **0.806** | 0.730 | 0.750 | **0.629** |
+| MSE auxiliary 1.0 | 0.793 | 0.730 | 0.752 | 0.593 |
+| non-silent sample weight 3 | 0.813 | 0.730 | 0.756 | 0.519 |
+| two-lag linear skip | 0.751 | 0.713 | 0.712 | 0.625 |
+| linear skip + β-NLL | 0.750 | 0.713 | 0.722 | 0.662 |
+| β-NLL + non-silent weight | 0.749 | 0.730 | 0.741 | 0.649 |
+
+Paired episode-bootstrap of AP(world model) − AP(persistence) for the kept variant:
++0.077 [+0.005, +0.309]; − AP(persistence + learned noise): +0.056 [+0.004, +0.255].
+Validation has two episodes, so these intervals are wide by construction; the five-seed
+production run on test and holdout (8.4) is the confirmation.
+
+Two other validation facts fixed before test was touched:
+
+- **Pooling.** Under natural prevalence the Δ=30 shipped statistic (85th percentile of the
+  sampled trajectories) scores 0.13–0.16 AP against 0.68–0.81 for mean / median /
+  P(trajectory > 0.5) pooling; the tail statistic is dominated by silent hosts. The
+  operating point is chosen among nine candidates on validation AP and written to
+  `operating_point.json`; serving reads it.
+- **Calibration.** Per-horizon Platt scaling fit on validation with natural weights; the
+  mandated 0.75 threshold is reported on the calibrated score, the served threshold is
+  the validation F1-optimal one. Both are in every record.
+
+### 8.4 Production run: five seeds at L=30/K=6, and the operating point frozen on validation
+
+`experiments/runs/production/record.json` (git 8beccae, config hash 91e7e0ab7162ec53):
+five seeds, β-NLL 0.5, 24 epochs with free-running selection (best epochs 17 / 16 / 12 /
+19 / 17; validation free-running NLL −1.649 … −1.660; free-running skill vs persistence
+0.442–0.447, coverage of the 90 % band 0.98), heads on every split row (risk-head best
+epochs 1 / 1 / 1 / 12 / 1 at validation natural AP 0.689 / 0.663 / 0.660 / 0.637 / 0.675),
+onset heads (3 / 9 / 15 / 29 / 39 / 69 training positives at 1 … 30 min), GRU classifier
+baseline (best epoch 1, validation AP 0.758 on the 50k subsample). Wall time 4 h 46 min on
+the M1. Benchmarks: 5 members × 60 trajectories, 300 bootstrap resamples.
+
+**Validation** (20,113 scored rows; 89 positives in 2 episodes — SSH-Patator and
+Heartbleed — prevalence 0.00012) chose the operating point: **median pooling** over the
+300 sampled trajectories, max over horizons, per-horizon Platt (a ≈ 1.20–1.23, b ≈ −0.15),
+F1-optimal threshold **0.718** (validation F1 0.797; the mandated 0.75 gives P 1.00 / R
+0.65 / F1 0.79 on the same rows). The pooling sweep on validation AP: mean 0.693, mean +
+integrated horizon 0.695, **median 0.726**, q0.75 0.691, q0.85 0.469, q0.90 0.050, q0.95
+0.013, max 0.005, P(traj > 0.5) 0.692 — the Δ=30 statistic (q0.85) is the fourth-worst
+candidate under natural prevalence, and the tail statistics collapse entirely.
+
+On validation the five-seed ensemble does **not** lead persistence at the risk level:
+world model 0.726 vs persistence (risk head on S_t) 0.749 vs persistence + learned noise
+0.756, ΔAP(world model − persistence) = −0.024 [−0.045, +0.052]; deterministic rollout
+0.748 (−0.001 [−0.020, +0.058] vs persistence). The seed-0 screen at L=15/K=3 (§8.3) had
+given +0.077 for the same comparison; that single-seed advantage did not survive five
+seeds at L=30/K=6 on these two episodes, and it is the production number that stands.
+Per horizon the picture is different —
+AP(attack at t+k) 0.83 / 0.86 / 0.83 / 0.86 / 0.84 / 0.82 for k = 1…6 against an oracle on
+the true future of 0.89 / 0.91 / 0.89 / 0.91 / 0.88 / 0.88 — and the state forecast is
+where the learned dynamics show: skill vs persistence **0.672** (ridge two-lag 0.653,
+period-2 persistence 0.081), i.e. 5.6 % lower MSE than the linear reference, on all 45
+features (none dropped by the production scaler). Two validation episodes make every
+risk-level interval uninformative (marked `*` in the records); test and holdout are the
+measurement. The world model beats the four classifier baselines on validation (LR on
+S_t +0.294 [+0.014, +0.426], LR on the history +0.207 [+0.006, +0.328], GBDT +0.038,
+GRU classifier +0.020 — the last two intervals include zero).
+
+**Test (Friday: Bot, PortScan, DDoS — 21,173 scored rows, 946 positives in 15 episodes,
+prevalence 0.0042).** Every system collapses under natural prevalence, and the world model
+is not the best of them:
+
+- Published-label AP: GRU sequence classifier 0.164 [0.059, 0.342], oracle on the true
+  future 0.117, ridge two-lag 0.083, deterministic rollout 0.081 [0.031, 0.216],
+  persistence 0.065 [0.020, 0.206], **world model 0.058 [0.018, 0.199]**, LR-history 0.036,
+  LR-S_t 0.033, GBDT 0.024. Prevalence is 0.004, so 0.058 is fourteen times the base
+  rate and still useless as an alarm: at the frozen threshold recall is 0.03 for every
+  system (world model: P 0.89 / R 0.03 / F1 0.06, 0.48 false alarms per hour across the
+  2,072 monitored hosts, 0.013 % of active-benign windows), and only 3 of 15 episodes
+  ever cross it, none before onset. The mandated 0.75 gives the same recall (P 0.94).
+- Attribution: world model − persistence **−0.007 [−0.026, +0.011]**; − persistence +
+  learned noise +0.001 [−0.011, +0.021]; − deterministic rollout −0.023 [−0.048, −0.003]
+  (the sampled noise costs AP here); − ridge −0.025 [−0.074, −0.000]; − GRU classifier
+  −0.106 [−0.293, +0.020]; − LR on S_t +0.025 [+0.004, +0.058]; − GBDT +0.034 [+0.008,
+  +0.100].
+- The ROC-AUC of the risk head on S_t is **0.37** — below chance. The head, trained on
+  179 positives from two families (FTP-Patator, four DoS tools; all on the attacker host
+  172.16.0.1), scores Friday's attack states at a median of 0.0000, *below* the all-zero
+  silent state (0.0001) that 87 % of the split's weight sits on. 833 of the 946 positives
+  are Botnet-C2 windows on five internal workstations (192.168.10.5/8/9/14/15, episodes of
+  143–175 minutes): a stage (`c2`) with zero training examples, and traffic that looks
+  like a quiet workstation to a per-state head. Excluding those five episodes (reported
+  for diagnosis, never as the headline): world model 0.334, persistence 0.325,
+  deterministic 0.327, oracle 0.535, GRU classifier 0.207. The DDoS episode
+  (172.16.0.1@1499453760, LOIC) is scored 1.00 from its first window — the one Friday
+  family that resembles training — and the PortScan run-ups reach 0.13–1.00 at their
+  90th percentile but stay near zero at the median.
+- The GRU sequence classifier reaches ROC-AUC **0.976** on the same rows (AP 0.164): the
+  30-window history carries family-general signal that the per-state risk head does not
+  read. That is the most useful single diagnosis in this run — see §8.7.
+- Per horizon (attack at exactly t+k): world model 0.063 → 0.024 from k=1 to k=6,
+  deterministic 0.076 → 0.029, oracle 0.078–0.082 flat; stage top-1 on attack futures 0.00
+  at every k (Friday's stages `c2` and `recon` are absent from training). Task B (onset
+  within h min, 12–299 positives): 0.003–0.016 for the world model, 0.016–0.067 for LR on
+  the history — the prevalence floor, as on validation.
+- State forecast: skill vs persistence **0.587** (ridge 0.565; 5.2 % lower MSE than the
+  linear reference), consistent with validation. The dynamics generalise to Friday's
+  traffic even though the risk head does not.
+
+**Holdout (Thursday: Web Brute Force / XSS / SQLi on the attacker host, Infiltration on
+192.168.10.8 — never trained on; 20,171 scored rows, 122 positives in 5 episodes,
+prevalence 0.00034).** The world model is the best system, and this is the one split where
+its margin over persistence is not zero:
+
+- Published-label AP: **world model 0.439** [0.000, 0.768] (row-level [0.345, 0.534]),
+  LR on the history 0.443 [0.000, 0.719], oracle 0.400, persistence + learned noise 0.383,
+  GRU classifier 0.382, deterministic rollout 0.380, persistence 0.295 [0.000, 0.553],
+  GBDT 0.294, isotropic-noise persistence 0.293, ridge 0.275, LR on S_t 0.241. Five
+  positive episodes: the episode-bootstrap intervals are wide and the row-level ones
+  overstate certainty; both are in the record.
+- Attribution: world model − persistence **+0.143 [−0.000, +0.283]**; − persistence +
+  learned noise +0.055 [−0.001, +0.147]; − isotropic noise +0.146 [−0.000, +0.305];
+  deterministic rollout − persistence +0.085 [+0.000, +0.147]; − ridge +0.163 [−0.003,
+  +0.339]; − LR-history −0.004 [−0.292, +0.423]; − GRU classifier +0.057 [−0.081, +0.174].
+  Every lower bound sits at or a hair below zero: the learned mean and the learned noise
+  each add roughly the same amount, and the effect is consistent in sign across the five
+  episodes without being large enough to be resolved by five of them.
+- At the frozen threshold: P 0.85 / R 0.32 / F1 0.46, 0.86 false alarms per hour across
+  2,557 hosts (0.020 % of active-benign windows); at the mandated 0.75: P 0.89 / R 0.31 /
+  F1 0.46. 3 of 5 episodes are alerted inside the episode (latency 1, 8, 29 min), none
+  before onset. The two Web-attack episodes on 172.16.0.1 are scored at a median of
+  0.78–0.94 (the head recognises brute force); the Infiltration episodes on 192.168.10.8
+  score 0.00 at the median, the long one (41 windows, the infiltrated host port-scanning
+  its subnet) reaching 0.75 at its 90th percentile — the oracle on its true future scores
+  0.78, so here the rollout is what fails to reach the states the head would recognise.
+- Per horizon: world model 0.58 / 0.51 / 0.45 / 0.40 / 0.35 / 0.29 for k=1…6 against an
+  oracle at 0.37–0.45. A forecast out-scoring the head on the true future is possible
+  because the oracle is only as good as the head on *benign* futures too: it scores 34
+  active-benign origins above 0.5 (weight 79 against 122 positives) whose true next
+  minutes look like attack states to the head, where the rollout's smoothed futures do
+  not (6 such rows). The oracle bounds head recognition, not forecast quality.
+  Stage top-1 on attack futures 0.04 → 0.00. Task B ≤ 0.003 for the world model at every
+  h (LR-history 0.007–0.081).
+- State forecast: skill vs persistence **0.616** (ridge 0.595; 5.2 % lower MSE).
+
+**Summary table (published label, natural prevalence, 5-seed ensemble; full tables in
+`reports/run8/benchmark_tables.md`):**
+
+| system | val AP | test AP | holdout AP |
+|---|---|---|---|
+| **NIDRA world model (stochastic rollout, calibrated)** | 0.726 | **0.058** | **0.439** |
+| NIDRA deterministic rollout | 0.748 | 0.081 | 0.380 |
+| persistence + learned noise (mean disabled) | 0.756 | 0.057 | 0.383 |
+| persistence + isotropic noise | 0.734 | 0.064 | 0.293 |
+| persistence (risk head on S_t) | 0.749 | 0.065 | 0.295 |
+| ridge two-lag dynamics + risk head | 0.693 | 0.083 | 0.275 |
+| oracle: risk head on the true future | 0.770 | 0.117 | 0.400 |
+| logistic regression on S_t | 0.432 | 0.033 | 0.241 |
+| logistic regression on the 30-window history | 0.519 | 0.036 | 0.443 |
+| gradient-boosted trees on S_t | 0.688 | 0.024 | 0.294 |
+| GRU sequence classifier | 0.706 | 0.164 | 0.382 |
+| world model − persistence (paired episode bootstrap) | −0.024 [−0.045, +0.052] | −0.007 [−0.026, +0.011] | +0.143 [−0.000, +0.283] |
+| state-forecast skill vs persistence: NIDRA / ridge | 0.672 / 0.653 | 0.587 / 0.565 | 0.616 / 0.595 |
+
+### 8.5 Horizon extension check (K = 10 on test)
+
+<<K10>>
+
+### 8.6 Generalisation: leave-one-day-out retrains
+
+<<LODO>>
+
+### 8.7 Diagnosis: where the forward-looking information goes, and where it stops
+
+Three facts, each measured rather than inferred:
+
+1. **The transition model learns real dynamics.** Deterministic-rollout state skill vs
+   persistence is 0.67 (val), 0.59 (test), and beats the ridge two-lag linear model on every
+   split by 5–6 % MSE. The 90 % band covers 98 % of validation futures. The free-running
+   NLL improves monotonically with training and selects epochs 12–19, not epoch 0. This is
+   the part of the world-model claim the data supports.
+
+2. **The per-state risk head is the bottleneck, not the rollout.** The oracle — the same
+   frozen head applied to the *true* future states — scores 0.117 on test, 0.770 on
+   validation. A forecaster cannot exceed what its head can recognise, and on Friday's
+   families the head recognises almost nothing: ROC-AUC 0.37 on S_t. Meanwhile a GRU
+   sequence classifier trained on the identical labels, rows and scaler ranks Friday's
+   attack windows at ROC-AUC 0.976. The family-general signal exists in the 30-window
+   history; a head that reads one state cannot see it. The fix is architectural and
+   compatible with every invariant — a risk head on the encoder's hidden state `h_{t+k}`
+   (available at every rollout step, since the rollout re-enters the GRU) trained on
+   observed `(h_t, S_t)` only and frozen — but it was not attempted in this run because the
+   validation split shares families with training and cannot select for family transfer;
+   the leave-one-day-out runs (§8.6) are the split that can. It is the first item in §8.9.
+
+3. **Precursors barely exist in this dataset, so Task B cannot be won by any system.**
+   Onset-within-h positives in the whole training split: 3 / 9 / 15 / 29 / 39 / 69 at
+   1 / 3 / 5 / 10 / 15 / 30 minutes, out of 2.27 M origins. The attacks are launched from
+   an attacker VM with no same-host preparatory phase, and the internal victims show nothing
+   before their first labelled window. Every system, including the explicitly supervised
+   onset head and the oracle, sits within a few × the prevalence at h ≤ 15 min on every
+   split. This is a property of CIC-IDS2017, stated in `reports/DATASET_ASSESSMENT`, and it
+   is why the lead-time claim is reported as "0 of 15 episodes warned before onset" rather
+   than as a number of seconds.
+
+What the Δ=30 scorecard (AUC-PR 0.960 / F1 0.906) was measuring, in these terms: the same
+head, on a 4,000-row subsample in which 46 % of rows were positives and 92 % of those sat
+inside already-running DDoS/PortScan episodes on the attacker host, with the pooling
+quantile chosen on the test split. Under natural prevalence the same artifacts' statistic
+(q0.85) is the fourth-worst of nine candidates on validation.
+
+### 8.8 Serving, demo and the offline pipeline
+
+- **Serving latency** (`python -m nidra.serve.benchmark`, K=6, 5 members × 200 trajectories,
+  M1 CPU, 20 calls): median **114.6 ms**, mean 117.6 ms, p95 126.8 ms, max 162.7 ms —
+  target 300 ms, pass. `NidraPredictor` loads `operating_point.json` at construction and
+  refuses one not selected on validation; `forecast()` returns the per-horizon risk curve
+  (calibrated and raw, trajectory band, P(attack within horizon)), the projected stage
+  sequence with ATT&CK tactics/techniques per horizon, and the operating point in force.
+- **Web console fixture** (`scripts/make_demo_replay.py` → `web/src/fixtures/demo-replay.json`,
+  regenerated from the Run 8 artifacts through the same `load_predictor` the inference
+  worker uses). The Friday Botnet episode the fixture used to replay is the benchmark's
+  documented failure: on the Run 8 model it is a flat zero for all 48 windows (0 of 36
+  attack-labelled windows scored). The fixture now replays the **Thursday Infiltration**
+  episode on workstation 192.168.10.8 — the held-out day, a stage (`lateral`) with no
+  training examples — anchored 12 minutes before the 15:04 onset: 12 quiet windows at 0.00,
+  the observed risk crossing 0.75 one minute after onset and the forecast's peak horizon
+  reaching 0.71–0.91 through the scan (4 windows where the forecast crosses one window
+  before the observation does; on this single episode P 1.00 / R 0.095 at 0.75 over 48
+  windows; the three quiet peers on the same /24 peak at 0.54). The fixture states why this
+  episode was chosen and where the Botnet numbers are, and the console's stage label for it
+  is model-internal by construction.
+- **Offline pipeline** (`python -m nidra.cli.forecast --csv <Friday-PortScan CSV> --out …`):
+  286,467 CICFlowMeter flows → 85,497 host-minute states for 3,667 hosts (flow-only mode —
+  packet features zero, warned loudly, since a CSV carries no packets), 3,000 randomly
+  capped origins scored with 300 trajectories each in 100 s, 2 above the threshold (1.0
+  alerts per hour of capture), `forecasts.csv` / `alerts.json` (10 fully explained alerts
+  with ATT&CK mapping) / `summary.json` with ground truth (6 PortScan episodes on
+  172.16.0.1, 0 alerted at the random cap) and `report.html`
+  (`reports/run8/offline_portscan/`). This is a pipeline demonstration, not an
+  evaluation: the random origin cap leaves 3 positives in 3,000 rows.
+- **Environment note**: `scripts/make_demo_replay.py` validates every forecast against the
+  backend's Pydantic `Forecast` schema, so it needs `pydantic` in the ML environment
+  (installed into `ml/.venv` for this run; it is already a declared backend dependency).
+
+### 8.9 What remains open after Run 8
+
+1. **A history-aware risk head.** The single change the evidence points at (§8.7 item 2):
+   a head on the encoder's hidden state at each rollout step, trained on observed
+   `(h_t, S_t)` and frozen. It must be selected on a split that measures family transfer
+   (leave-one-day-out), not on the current validation split.
+2. **Precursor data.** No amount of modelling produces onset warnings from a dataset
+   whose attacks have no same-host run-up. CTU-13 is the one public candidate with a valid
+   temporal mapping (`reports/DATASET_ASSESSMENT_2026-09-20.md`); CIC-IDS2018 remains
+   excluded.
+3. **Stage forecasting on unseen stages** is at 0.00 top-1 on Friday and Thursday futures
+   because `recon`, `c2` and `lateral` never occur in training; the stage head cannot
+   name what it has not seen. The ATT&CK table therefore labels every sequence
+   "projected stage sequence (model-internal)" and the console should not render a stage
+   name for those days as if it were a finding.
+4. **Validation has two episodes.** Every validation interval is uninformative; the
+   split design is fixed by the dataset's day structure. The leave-one-day-out runs are
+   the only within-training-days check with unseen families.
+5. **The sampled noise costs AP on test** (deterministic − stochastic +0.023 [+0.003,
+   +0.048]) and gains it on holdout (−0.058 [−0.169, +0.014]); the stochastic rollout stays
+   the served path because the band and P(attack within horizon) need it, and the
+   difference is inside noise on the split where it matters.
+6. **The web console fixture** (`web/src/fixtures/demo-replay.json`) is regenerated from
+   the Run 8 artifacts by `scripts/make_demo_replay.py` (§8.8); the hero copy's
+   "90 seconds of warning" line from the Δ=30 era is replaced by what the fixture
+   measures.
+
+---
+
+## Run 7 (superseded by Run 8 — Δ=30 s, balanced evaluation subsample): the flow/packet join was three hours and twelve hours out, and 11 of 45 features were ~always zero
 
 Every number in Runs 1-6 was measured on training and evaluation data in which
 eleven of the forty-five features were zero in ~97% of active windows. The

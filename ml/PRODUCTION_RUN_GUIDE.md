@@ -6,6 +6,25 @@
 > benchmark on a fresh clone with no dataset download. This guide is only
 > for retraining from the raw CIC-IDS2017 release.
 
+> **Since Run 8 (2026-09-20) the recorded way to retrain is one command**,
+> which runs the stages below in order, writes a provenance record and,
+> with `--label production`, the shipped artifacts:
+>
+> ```bash
+> cd ml
+> python -m nidra.scripts.run_experiment --label production --seeds 0,1,2,3,4 \
+>     --stages dynamics,heads,onset,gru_baseline --epochs 24
+> python -m nidra.eval.benchmark --split val --select-operating-point --n-samples 60 --n-resamples 300
+> python -m nidra.eval.benchmark --split test    --n-samples 60 --n-resamples 300
+> python -m nidra.eval.benchmark --split holdout --n-samples 60 --n-resamples 300
+> ```
+>
+> The per-stage commands below still work and explain what each stage does;
+> `fit_calibration` and `run_eval` are the legacy (balanced-subsample)
+> evaluation and are not how the published numbers are produced any more —
+> see `EVALUATION.md`. The heads stage now trains on every observed state of
+> the split (not the 500k/50k subsample), which needs no extra flags.
+
 This guide walks you through running NIDRA's **full-scale** training
 (`config/default.yaml`: 5 seeds, 60 epochs for the dynamics stage, 30
 epochs for the heads stage, on 500,000 training / 50,000 validation samples
