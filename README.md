@@ -178,7 +178,8 @@ attack-preceding window alerts; the benign window stays near zero.
 cd web && npm install && npm run dev      # http://localhost:3000/demo
 ```
 
-The console replays real CIC-IDS2017 Friday-morning traffic scored by the
+The console replays real CIC-IDS2017 Thursday-afternoon traffic (the held-out
+Infiltration episode on an internal workstation) scored by the
 trained ensemble, at 30x by default (one 60-second window every two seconds). It
 reads a committed fixture, so it renders with every container stopped.
 

@@ -16,7 +16,7 @@ import { DemoWorkspace } from "./demo-workspace";
 export const metadata: Metadata = {
   title: "Demo console — NIDRA",
   description:
-    "Public replay console. Real CIC-IDS2017 Friday-morning traffic scored by the trained 5-seed NIDRA ensemble — every value is the model's own output.",
+    "Public replay console. Real CIC-IDS2017 Thursday-afternoon traffic — the held-out Infiltration day — scored by the trained 5-seed NIDRA ensemble; every value is the model's own output.",
 };
 
 function first(v: string | string[] | undefined) {
