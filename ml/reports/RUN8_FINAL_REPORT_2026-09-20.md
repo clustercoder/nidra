@@ -248,7 +248,19 @@ forecast** over every (window, feature) cell with a **deletion faithfulness chec
 demonstrating command/artifact, and the measured status; rows 2, 4, 12 and 16 carry the
 open scientific questions and say so.
 
-## 15. Remaining limitations
+## 15. Verification
+
+- `cd ml && pytest tests -q`: **353 passed** (2026-09-20 15:45, after the last code change).
+- `PYTHONPATH=$PWD:$PWD/ml pytest tests/test_skeleton.py`: 14 passed (the backend config
+  change). The rest of the backend suite could not be collected on this machine — no
+  backend virtualenv exists here (`httpx`, `redis`, `sqlalchemy` missing), a pre-existing
+  environment limitation unrelated to this work; the backend-side changes are the two
+  config values in `config/default.yaml` and the demo-fixture generator, both exercised.
+- Every benchmark number above is in a committed `benchmark.json` with its provenance
+  block; `python -m nidra.scripts.report_tables --run . --splits val,test,holdout,test_K10`
+  regenerates the tables from them.
+
+## 16. Remaining limitations
 
 1. No advance warning demonstrated on any split (dataset has no same-host precursors).
 2. The per-state risk head does not transfer to Friday's families; the world model cannot
