@@ -340,7 +340,50 @@ recognise.
 
 ### 8.6 Generalisation: leave-one-day-out retrains
 
-<<LODO>>
+Two full retrains (seed 0, 20 epochs, β-NLL, heads on every split row, operating point
+selected on each run's own validation block; `experiments/runs/lodo_*`, benchmarks with 100
+trajectories, 300 resamples). Each leaves one attack day out of training and scores it as
+the test split, so every family on the scored day is unseen — the family-transfer check the
+production validation split cannot make.
+
+| | train | validation (trailing 30 %) | scored day (unseen families) |
+|---|---|---|---|
+| `lodo_without_wednesday` | Monday + Tuesday (FTP-Patator; 69 positives) | SSH-Patator, 1 episode | Wednesday: DoS ×4 + Heartbleed, 130 positives, 3 episodes |
+| `lodo_without_tuesday` | Monday + Wednesday (DoS ×4; 104 positives) | Heartbleed, 1 episode | Tuesday: FTP + SSH-Patator, 108 positives, 3 episodes |
+
+**Without Wednesday → scored on Wednesday** (threshold 0.597 from validation F1 0.959):
+the world model is the best system — AP **0.451** [0.000, 0.526]* against persistence 0.262,
+deterministic 0.434, ridge 0.334, oracle 0.473, GBDT 0.134, LR-history 0.135; ΔAP vs
+persistence **+0.189 [+0.000, +0.249]**, vs persistence + learned noise +0.163 [−0.000,
++0.214], vs ridge +0.117 [−0.004, +0.315]. P 1.00 / R 0.27 / F1 0.42 at the frozen
+threshold (0 false alarms per hour), the 91-window DoS block alerted from its first minute
+(32 % of its windows above threshold), Heartbleed reaching 0.83 without two consecutive
+crossings, the 2-window episode missed. State skill 0.631 (ridge 0.629). Per horizon
+0.43–0.55 against an oracle at 0.41–0.45. Stage top-1 0.00 (`exfil` is not in a
+FTP-Patator-only training set).
+
+**Without Tuesday → scored on Tuesday** (threshold **0.102**): a degenerate run, reported as
+such. Its validation block holds one Heartbleed episode that the DoS-trained head does not
+recognise at all (head selection AP 0.001, i.e. selected blind at epoch 0; validation world
+model 0.03), so the operating point was chosen on one episode of noise. On Tuesday the same
+head fires on benign traffic — the oracle on the true future scores 1.25 % of active-benign
+minutes above 0.5 (ridge's smoothed futures: 0.05 %) — and the ranking is decided by false
+positives: GBDT on S_t 0.768, ridge two-lag 0.652, LR on S_t 0.342, deterministic 0.194,
+**world model 0.167** [0.003, 0.805]*, persistence 0.155, LR-history 0.123, oracle 0.097.
+ΔAP vs persistence +0.012 [−0.053, +0.348]; vs ridge −0.486 [−0.752, +0.124]. At its
+threshold: P 0.20 / R 0.73, 39 false alarms per hour; 2 of 3 Patator episodes alerted (29
+and 0 min after onset). State skill 0.651 (ridge 0.643) — the dynamics are fine, the head
+is not.
+
+What the two runs say together: with a head that recognises the scored day's attack
+states, the learned dynamics add risk-level information on unseen families (Wednesday
++0.19, Thursday +0.14, both with lower bounds at zero); when the head is blind or fires on
+the day's benign traffic (Tuesday, Friday), no amount of forecasting recovers it and a
+linear forecast or a tree on the current state can rank better. The dynamics themselves
+generalise on every retrain (state skill 0.63–0.65 vs persistence, at or above ridge). Both
+runs are single-seed with three scored episodes and one validation episode each; the
+intervals say so. Leave-one-episode-out was not run (five training episodes would need
+five retrains at ~1 h each; the two LODO runs already cover both training attack days).
 
 ### 8.7 Diagnosis: where the forward-looking information goes, and where it stops
 

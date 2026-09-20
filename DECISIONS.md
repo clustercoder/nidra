@@ -1301,3 +1301,16 @@ published claim becomes: learned dynamics that beat a linear reference at the st
 on every split; risk-level forecasting that helps on Thursday's unseen families and not
 on Friday's; no demonstrated advance warning on this dataset. Runs 1–7's scorecard is
 withdrawn as a description of the system and kept for provenance.
+
+**D116 — Leave-one-day-out is the family-transfer split; its two runs are recorded, not
+averaged, and neither changes the shipped artifacts.** `experiments/runs/lodo_without_wednesday`
+(scored on DoS/Heartbleed: world model 0.451, +0.189 [+0.000, +0.249] over persistence, best
+system) and `lodo_without_tuesday` (scored on Patator: 0.167 vs 0.155, +0.012 [−0.053,
++0.348]; GBDT 0.768 and ridge 0.652 rank better because the DoS-trained head fires on
+Tuesday's benign traffic, and the run's one-episode Heartbleed validation could not select
+a head or a threshold — 0.102). The second run is a property of the dataset's day
+structure (two attack days in training, one validation episode each way), so LODO can
+select a future head architecture only on the day whose validation block the head can
+see, and any such selection must be reported with that caveat. Leave-one-episode-out was
+not run (five retrains at ~1 h each, and the two LODO runs already cover both training
+attack days).

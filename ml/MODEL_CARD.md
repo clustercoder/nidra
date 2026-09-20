@@ -96,6 +96,12 @@ horizon and episode: `reports/run8/benchmark_tables.md`; figures: `reports/run8/
   [−0.00, +0.28] over five episodes), on par with the strongest history-reading
   classifier, with 0.86 false alarms per hour across 2,557 hosts and 3 of 5 episodes
   alerted 1–29 minutes after onset.
+- **Leave-one-day-out retrains agree in direction** (Run 8 §8.6, seed 0): trained without
+  Wednesday and scored on its DoS/Heartbleed families the world model is the best system
+  (AP 0.451, +0.19 [+0.00, +0.25] over persistence); trained without Tuesday and scored on
+  Patator it is within noise of persistence (+0.01) and behind GBDT/ridge because the
+  DoS-trained head fires on Tuesday's benign traffic and its one-episode validation block
+  could not select a threshold. State skill is 0.63–0.65 on both.
 - **On Friday it does not, and the reason is located**: the risk head, trained on 179
   positives from two families, ranks Friday's attack minutes (833 of 946 are Botnet C2 on
   five workstations) below silence (ROC-AUC 0.37); the oracle on the true future is only
@@ -129,8 +135,9 @@ horizon and episode: `reports/run8/benchmark_tables.md`; figures: `reports/run8/
    and gains on holdout (−0.058 [−0.169, +0.014]). The stochastic path is served because
    the band and P(attack within horizon) need it.
 6. **Validation has two episodes**, both similar to training families; it can select
-   pooling and threshold but cannot measure family transfer. Leave-one-day-out retrains
-   (Run 8 §8.6) are the only within-training-days check with unseen families.
+   pooling and threshold but cannot measure family transfer. The leave-one-day-out
+   retrains (Run 8 §8.6) are the only within-training-days check with unseen families, and
+   each has one validation episode and three scored ones — single-seed, wide intervals.
 7. **Hardware caps**: dynamics trained on a 500k/50k stratified subsample of the 2.27 M /
    894 k windows (every positive kept); benchmarks at 60 trajectories per member (serving:
    200). One M1 laptop, ~4.8 h per five-seed run.

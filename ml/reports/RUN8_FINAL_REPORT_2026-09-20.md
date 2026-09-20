@@ -168,7 +168,7 @@ history is the best system at 0.04–0.08 on test/holdout. Training positives at
   scored 0.78–0.94 at the median, Infiltration 0.00 (0.75 at the 90th percentile).
 - **Test (Friday)**: AP 0.058; Bot-C2 windows (833 of 946 positives) scored ≈ 0 by every
   head-based system; DDoS scored 1.00 from its first window; PortScan partially.
-- **Leave-one-day-out retrains**: <<LODO_SHORT>>
+- **Leave-one-day-out retrains** (seed 0, `experiments/runs/lodo_*`): without Wednesday → scored on Wednesday's DoS/Heartbleed: world model AP 0.451, best system, +0.189 [+0.000, +0.249] over persistence, 0 false alarms/h, DoS block alerted from its first minute. Without Tuesday → scored on Patator: degenerate (validation = one Heartbleed episode the head cannot see; threshold 0.102), world model 0.167 vs persistence 0.155 (+0.012 [−0.053, +0.348]), GBDT 0.768 and ridge 0.652 rank better because the DoS-trained head fires on Tuesday's benign traffic. State skill 0.63–0.65 on both. Leave-one-episode-out not run.
 - **Horizon extension (K = 10 on test)**: rollout stable to ten steps, state skill 0.56–0.64 at every k (ridge 0.53–0.61); risk-level AP 0.062 vs persistence 0.066 (ΔAP −0.004 [−0.021, +0.016]); per-horizon AP 0.059 → 0.020 while the oracle stays at 0.085 — depth costs resolution, the head is the ceiling (`artifacts/metrics/test_K10/`).
 
 ## 10. Diagnosis (why the risk-level margin is where it is)
