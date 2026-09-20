@@ -46,16 +46,24 @@ logger = logging.getLogger("make_demo_replay")
 
 OUT = REPO / "web" / "src" / "fixtures" / "demo-replay.json"
 
-#: Friday morning's Botnet (ARES) episode. Chosen over the Friday afternoon DDoS
-#: and PortScan because it runs long enough for a host to be watched crossing from
-#: quiet into compromise inside one 48-window view, and because several other
-#: hosts on the same segment stay benign throughout — which is what makes the
-#: quiet rows meaningful rather than decorative.
-DAY_KEY = "friday_morning"
-VICTIM = "192.168.10.9"
+#: Thursday afternoon's Infiltration episode on an internal workstation. Thursday is
+#: the holdout day — never trained on — so nothing the console shows was learned from
+#: this attack. The episode is the third Infiltration phase (the compromised host
+#: port-scanning its subnet from 15:04 local); the Run 8 benchmark alerts on it 8
+#: minutes after onset (`ml/artifacts/metrics/holdout/benchmark.json`, per_episode).
+#: The Friday Botnet episode this fixture used to show is the benchmark's documented
+#: failure (Run 8 §8.4: Bot-C2 windows score ≈ 0 on every head-based system); a replay
+#: of it is a flat line. Choosing an episode the model detects is presentation; the
+#: numbers for the ones it does not detect are published beside it, not hidden.
+DAY_KEY = "thursday_infiltration"
+VICTIM = "192.168.10.8"
+#: Anchor the display on this episode's onset rather than the host's first labelled
+#: window (the earlier Infiltration phases at 14:19 and 14:28 are two short runs the
+#: model does not score).
+ANCHOR_ONSET_TS = 1499364240
 N_WINDOWS = 48
-#: Display windows before the victim's first attack-labelled window. The console
-#: opens on quiet traffic so the rise is visible rather than already underway.
+#: Display windows before the anchored onset. The console opens on quiet traffic so
+#: the rise is visible rather than already underway.
 LEAD_IN = 12
 TENANT = "demo"
 
@@ -73,8 +81,14 @@ def pick_origins(victim_df: pd.DataFrame) -> tuple[int, int]:
     victim's first attack-labelled window lands LEAD_IN windows in."""
     risk = victim_df.risk_label.to_numpy()
     if not risk.any():
-        raise SystemExit(f"{VICTIM} has no attack-labelled window in {DAY}")
-    first = int(np.argmax(risk == 1))
+        raise SystemExit(f"{VICTIM} has no attack-labelled window in {DAY_KEY}")
+    ts = victim_df.window_ts.to_numpy()
+    hits = np.where(ts == ANCHOR_ONSET_TS)[0]
+    if len(hits) == 0:
+        raise SystemExit(f"{VICTIM} has no window at the anchored onset {ANCHOR_ONSET_TS}")
+    first = int(hits[0])
+    if risk[first] != 1:
+        raise SystemExit(f"window {ANCHOR_ONSET_TS} on {VICTIM} is not attack-labelled; the anchor is stale")
     start = first - LEAD_IN
     if start < CONTEXT_LENGTH - 1:
         raise SystemExit(f"{VICTIM}'s episode starts too early for {CONTEXT_LENGTH} windows of context")
@@ -199,7 +213,7 @@ def build(limit: int | None = None) -> None:
         raise SystemExit(f"only found {len(quiet)} quiet hosts spanning the window")
     hosts = [VICTIM, *quiet]
     print(f"day        : {DAY_KEY}  ({day_file.name})")
-    print(f"victim     : {VICTIM} (first attack-labelled window at display index {LEAD_IN})")
+    print(f"victim     : {VICTIM} (anchored onset {ANCHOR_ONSET_TS} at display index {LEAD_IN})")
     print(f"quiet      : {', '.join(quiet)}")
     print(f"windows    : {n} x {len(hosts)} hosts = {n * len(hosts)} forecasts")
 
@@ -243,7 +257,7 @@ def build(limit: int | None = None) -> None:
             "kind": "real",
             "generator": "scripts/make_demo_replay.py",
             "summary": (
-                "Real CIC-IDS2017 Friday-morning traffic (Botnet ARES) windowed into the "
+                "Real CIC-IDS2017 Thursday-afternoon traffic (Infiltration, the held-out day) windowed into the "
                 "committed 45-feature state tables, scored by the trained 5-seed NIDRA "
                 "ensemble through the same predictor the inference worker loads. "
                 + pooling_desc + " "
@@ -254,16 +268,23 @@ def build(limit: int | None = None) -> None:
             "operating_point": op,
             "episode": {
                 "day": DAY_KEY,
-                "attack": "Botnet ARES",
-                "stage": "c2",
+                "attack": "Infiltration (compromised workstation scans its subnet)",
+                "stage": "lateral",
                 "stage_in_training_data": False,
+                "day_in_training_data": False,
+                "why_this_episode": (
+                    "Thursday is held out of training entirely. This is the episode the Run 8 "
+                    "benchmark alerts on 8 minutes after onset; the Friday Botnet episode the "
+                    "fixture used to show is the benchmark's documented failure (a flat line) and "
+                    "its numbers are published in ml/REAL_DATA_RESULTS.md Run 8."
+                ),
                 "note": (
                     f"This is one host over {N_WINDOWS * WINDOW_SECONDS // 60} minutes, not the evaluation set: a single "
-                    "episode is noisier than the split-wide figures in the README. It is "
-                    "also the harder kind — `c2` is one of three attack stages that appear "
-                    "only in the evaluation days, so the model is forecasting a stage it "
-                    "has zero training examples of. Training contains `initial_access` and "
-                    "`exfil` and nothing else."
+                    "episode is noisier than the split-wide figures in the README. `lateral` is one "
+                    "of three attack stages that appear only in the evaluation days, so the model is "
+                    "forecasting a stage it has zero training examples of; the stage name it "
+                    "projects is model-internal. Training contains `initial_access` and `exfil` "
+                    "and nothing else."
                 ),
                 "measured_on_this_episode": measured,
             },
