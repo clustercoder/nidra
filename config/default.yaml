@@ -97,7 +97,7 @@ features:
   watchdog_floor_s: 2.0
 
 replay:
-  # 60x: one 30 s window every 0.5 s. 0 disables pacing (publish as fast as possible).
+  # 60x: one 60 s window every second. 0 disables pacing (publish as fast as possible).
   default_speed: 60.0
 
 api:

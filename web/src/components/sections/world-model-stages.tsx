@@ -37,7 +37,7 @@ const TABS: Tab[] = [
     Icon: Eye,
     eyebrow: "OBSERVE",
     heading: "From raw traffic to host state",
-    body: "We capture live network flows, aggregate them per host in 30-second windows, and convert the activity into a 45-dimensional state vector.",
+    body: "We capture live network flows, aggregate them per host in 60-second windows, and convert the activity into a 45-dimensional state vector.",
     subHeading: "Why per-host, not per-flow?",
     subBody:
       "A compromise unfolds over time on a machine — scanning, probing, foothold, lateral movement, exfiltration. Per-flow data shows only a slice. Per-host sequences reveal the trajectory.",
@@ -50,8 +50,8 @@ const TABS: Tab[] = [
         color: "blue",
       },
       {
-        icon: "30 s",
-        label: "30-second window",
+        icon: "60 s",
+        label: "60-second window",
         sublabel: "per host",
         color: "lavender",
       },
@@ -238,7 +238,7 @@ export function WorldModelStages() {
               <p className="text-gray-dark mt-2 text-base leading-relaxed">
                 The 45 features capture flow statistics, temporal patterns and
                 protocol behaviours, giving the model a complete picture of what
-                the host is doing in that 30-second window.
+                the host is doing in that 60-second window.
               </p>
             </div>
           </div>

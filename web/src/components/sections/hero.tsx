@@ -22,11 +22,12 @@ export function Hero() {
                 Every 60 seconds NIDRA turns each host&apos;s traffic into 45
                 numbers. It has learned how those numbers move, so it can run
                 them forward six minutes and say where the host is heading.
-                In the Wednesday replay that was{" "}
+                On a day of attacks it never trained on, that forecast{" "}
                 <strong className="font-semibold">
-                  90 seconds of warning before the scan became an intrusion
+                  found 3 of 5 attacks, 1 to 29 minutes after they began
                 </strong>
-                .
+                {" "}&mdash; measured at the real attack rate, with every
+                baseline it did not beat published alongside.
               </p>
               <div className="mt-7! md:max-w-[450px]">
                 <div className="flex flex-wrap items-center gap-3">

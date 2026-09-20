@@ -29,7 +29,7 @@ const SLIDES: Slide[] = [
   {
     heading: "NIDRA learns the dynamics.",
     lead: "No attack labels, no signature list",
-    body: "It learns how a host's state moves from one 30-second window to the next. The training data is ordinary traffic, so there is nothing to keep up to date.",
+    body: "It learns how a host's state moves from one 60-second window to the next. The training data is ordinary traffic, so there is nothing to keep up to date.",
     scene: "dynamics",
     bg: "bg-linear-to-br from-node-lavender/50 via-white to-primary-pink/40",
   },

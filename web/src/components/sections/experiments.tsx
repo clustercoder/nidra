@@ -12,7 +12,7 @@ const EXPERIMENTS = [
     title: "Persistence baseline",
     subtitle: "Can the model beat “the next window looks like this one”?",
     blurb:
-      "If persistence keeps up, the model is not earning its complexity. That result gets published and diagnosed rather than buried.",
+      "If persistence keeps up, the model is not earning its complexity. On the test day it does keep up (0.058 vs 0.065); on the holdout day it does not (0.439 vs 0.295). Both are published and diagnosed rather than buried.",
     chart: true,
   },
   {
@@ -50,7 +50,7 @@ const PRINCIPLES = [
 
 const STATS = [
   { value: 45, prefix: "", suffix: "", label: "features per host state" },
-  { value: 180, prefix: "", suffix: "s", label: "seconds of forecast horizon" },
+  { value: 360, prefix: "", suffix: "s", label: "seconds of forecast horizon" },
   { value: 300, prefix: "<", suffix: "", label: "ms max CPU inference" },
 ];
 
@@ -104,11 +104,13 @@ function CountUp({
   );
 }
 
-/** World model vs persistence, AUC-PR. Placeholder shape, labelled as such. */
+/** World model vs persistence, natural-prevalence AP on the Thursday holdout
+ *  (Run 8, ml/artifacts/metrics/holdout/benchmark.json). The test-day numbers
+ *  are 0.058 vs 0.065 — published in the same record, not shown here. */
 function AblationBars() {
   const bars = [
-    { label: "World model", value: 0.68, cls: "fill-observed" },
-    { label: "Persistence", value: 0.44, cls: "fill-gray-dark" },
+    { label: "World model", value: 0.439, cls: "fill-observed" },
+    { label: "Persistence", value: 0.295, cls: "fill-gray-dark" },
   ];
   const W = 400;
   const H = 260;
@@ -120,7 +122,7 @@ function AblationBars() {
       viewBox={`0 0 ${W} ${H}`}
       className="w-full max-w-[400px]"
       role="img"
-      aria-label="Illustrative bar chart comparing AUC-PR of the world model against the persistence baseline."
+      aria-label="Bar chart: average precision at natural prevalence on the Thursday holdout day, world model 0.439 against persistence 0.295."
     >
       <line
         x1="60"
@@ -187,10 +189,10 @@ function AblationBars() {
         );
       })}
       <text x="60" y="22" className="fill-gray-dark" fontSize="11">
-        AUC-PR at K=6
+        AP at natural prevalence, Thursday holdout (K=6)
       </text>
       <text x="60" y={H - 12} className="fill-gray-dark" fontSize="11" fontStyle="italic">
-        illustrative — pending artifacts/metrics
+        Run 8 — interval [−0.00, +0.28] over 5 episodes; test day 0.058 vs 0.065
       </text>
     </svg>
   );

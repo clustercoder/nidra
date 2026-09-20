@@ -2,12 +2,16 @@ import { ArrowRight } from "lucide-react";
 
 const CHIPS = [
   { value: "45-dim", label: "host state" },
-  { value: "K=6", label: "3-min horizon" },
+  { value: "K=6", label: "6-min horizon" },
   { value: "×5", label: "seed ensemble" },
   { value: "<300 ms", label: "CPU inference" },
 ];
 
-/** AUC-PR against forecast horizon: the world model decays; persistence falls off a cliff. */
+/** Natural-prevalence AP against forecast horizon on the Thursday holdout (Run 8,
+ *  ml/artifacts/metrics/holdout/benchmark.json, task_C_progression): the world
+ *  model's forecast of "attack at t+k" against the same risk head applied to the
+ *  TRUE future state (the oracle — an upper bound on what the head can recognise,
+ *  not a competing forecaster). The forecast decays with horizon; the oracle is flat. */
 function HorizonCurve() {
   const W = 630;
   const H = 404;
@@ -19,8 +23,8 @@ function HorizonCurve() {
   const x = (k: number) => L + ((k - 1) / 5) * (R - L);
   const y = (v: number) => B - v * (B - T);
 
-  const model = [0.82, 0.79, 0.75, 0.72, 0.7, 0.68];
-  const persistence = [0.79, 0.68, 0.58, 0.51, 0.47, 0.44];
+  const model = [0.582, 0.505, 0.454, 0.404, 0.352, 0.285];
+  const oracle = [0.4, 0.393, 0.369, 0.436, 0.451, 0.416];
 
   const path = (vals: number[]) =>
     vals.map((v, i) => `${i === 0 ? "M" : "L"}${x(i + 1)} ${y(v)}`).join(" ");
@@ -30,7 +34,7 @@ function HorizonCurve() {
       viewBox={`0 0 ${W} ${H}`}
       className="w-full max-w-[630px] lg:ml-auto"
       role="img"
-      aria-label="Illustrative line chart: AUC-PR against forecast horizon. The world model declines slowly from k=1 to k=6; the persistence baseline declines faster."
+      aria-label="Line chart: average precision at natural prevalence against forecast horizon on the Thursday holdout day. The world model declines from 0.58 at one minute to 0.29 at six minutes; the oracle on the true future stays near 0.4."
     >
       {/* grid + axes */}
       {[0, 0.25, 0.5, 0.75, 1].map((v) => (
@@ -48,15 +52,15 @@ function HorizonCurve() {
         </text>
       ))}
       <text x={(L + R) / 2} y={B + 42} textAnchor="middle" className="fill-gray-dark" fontSize="11.5">
-        forecast horizon (30 s windows)
+        forecast horizon (60 s windows)
       </text>
       <text x={L} y={T - 20} className="fill-gray-dark" fontSize="11.5">
-        AUC-PR
+        AP (natural prevalence)
       </text>
 
-      {/* persistence baseline — dashed + round markers, distinguishable without colour */}
-      <path d={path(persistence)} fill="none" className="stroke-gray-dark" strokeWidth="2" strokeDasharray="6 5" />
-      {persistence.map((v, i) => (
+      {/* oracle on the true future — dashed + round markers, distinguishable without colour */}
+      <path d={path(oracle)} fill="none" className="stroke-gray-dark" strokeWidth="2" strokeDasharray="6 5" />
+      {oracle.map((v, i) => (
         <circle key={i} cx={x(i + 1)} cy={y(v)} r="3.5" className="fill-gray-dark" />
       ))}
 
@@ -74,11 +78,11 @@ function HorizonCurve() {
         </text>
         <circle cx="126" cy="0" r="4" className="fill-gray-dark" />
         <text x="138" y="3" className="fill-gray-black-soft" fontSize="12">
-          Persistence baseline
+          Oracle: same head on the true future
         </text>
       </g>
       <text x={L} y={H - 8} className="fill-gray-dark" fontSize="11" fontStyle="italic">
-        illustrative — pending artifacts/metrics
+        Run 8, Thursday holdout, natural prevalence — test day: 0.063 → 0.024
       </text>
     </svg>
   );
@@ -111,8 +115,9 @@ export function EvidenceTeaser() {
               ))}
             </div>
             <p className="text-gray-dark text-base">
-              Two baselines run alongside it: persistence, and the same model with
-              the context shuffled.
+              Ten baselines run alongside it on the same rows — persistence, the
+              same head on the true future, a linear dynamics model, four
+              classifiers — and every one it does not beat is published.
             </p>
             <a
               href="#evidence"

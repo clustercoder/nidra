@@ -7,9 +7,9 @@ serving predictor was the stub and the trained ensemble lived on another branch.
 Both of those things are no longer true.
 
 Every number this writes is the trained 5-seed ensemble's own output, pooled the
-way `NidraPredictor` pools it in production (quantile 0.85 over 1,000 sampled
-trajectories), over real windowed CIC-IDS2017 telemetry committed under
-ml/artifacts/processed/. Nothing is synthesised, scripted or hand-picked: the
+way `NidraPredictor` pools it in production (the statistic, calibration and
+threshold frozen on validation in ml/artifacts/weights/operating_point.json), over
+real windowed CIC-IDS2017 telemetry committed under ml/artifacts/processed/. Nothing is synthesised, scripted or hand-picked: the
 hosts are real hosts, the attack is the real Friday-morning Botnet episode, and
 where the model is wrong the fixture shows it being wrong.
 
@@ -34,7 +34,7 @@ import pandas as pd
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from nidra.data.schema import CONTEXT_LENGTH, FEATURE_ORDER, HORIZON_LENGTH  # noqa: E402
+from nidra.data.schema import CONTEXT_LENGTH, FEATURE_ORDER, HORIZON_LENGTH, WINDOW_SECONDS  # noqa: E402
 from nidra.train.pipeline import day_cache_path, declared_packets_tag  # noqa: E402
 from nidra.utils.config import load_config as load_ml_config  # noqa: E402
 from nidra.utils.seed import set_seed  # noqa: E402
@@ -58,7 +58,6 @@ N_WINDOWS = 48
 #: opens on quiet traffic so the rise is visible rather than already underway.
 LEAD_IN = 12
 TENANT = "demo"
-WINDOW_SECONDS = 30
 
 
 def contiguous(ts: np.ndarray) -> bool:
@@ -168,6 +167,15 @@ def build(limit: int | None = None) -> None:
         raise SystemExit("predictor.impl must be 'nidra' — this script exists to show the real model")
 
     predictor = load_predictor()
+    op = getattr(predictor, "_operating_point_summary", lambda: {})()
+    pooling_desc = (
+        f"Risk is pooled with the validation-frozen statistic {op.get('pooling_key')} over "
+        f"{getattr(predictor, 'n_samples_per_member', '?')} sampled rollout trajectories per "
+        f"ensemble member, calibrated per horizon, with the served threshold {op.get('threshold')} "
+        f"(mandated {op.get('threshold_mandated', 0.75)} reported alongside)."
+        if op.get("source", "").startswith("operating_point") else
+        "Risk is pooled with the config statistic; no validation operating point was found."
+    )
     # The cached table's filename is derived through the same function that
     # writes it, never spelled out here: a second copy of the cache key goes
     # stale silently the next time the key changes.
@@ -237,19 +245,20 @@ def build(limit: int | None = None) -> None:
             "summary": (
                 "Real CIC-IDS2017 Friday-morning traffic (Botnet ARES) windowed into the "
                 "committed 45-feature state tables, scored by the trained 5-seed NIDRA "
-                "ensemble through the same predictor the inference worker loads. Risk is "
-                "pooled at the 85th percentile of 1,000 sampled rollout trajectories. "
+                "ensemble through the same predictor the inference worker loads. "
+                + pooling_desc + " "
                 "Every value — risk, confidence bands, horizons, lead times, SHAP signals, "
                 "stage distributions — is the model's own output on real traffic. Nothing "
                 "is synthesised or scripted, including where the model is wrong."
             ),
+            "operating_point": op,
             "episode": {
                 "day": DAY_KEY,
                 "attack": "Botnet ARES",
                 "stage": "c2",
                 "stage_in_training_data": False,
                 "note": (
-                    "This is one host over 24 minutes, not the evaluation set: a single "
+                    f"This is one host over {N_WINDOWS * WINDOW_SECONDS // 60} minutes, not the evaluation set: a single "
                     "episode is noisier than the split-wide figures in the README. It is "
                     "also the harder kind — `c2` is one of three attack stages that appear "
                     "only in the evaluation days, so the model is forecasting a stage it "

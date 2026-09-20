@@ -50,9 +50,13 @@ const DRIVERS = [
   { feature: "mean_iat_slope", value: -0.08 },
 ];
 
+// Run 8 (ml/artifacts/metrics/<split>/benchmark.json): natural-prevalence AP,
+// world model vs persistence (the same risk head on the current state), and the
+// state-forecast skill vs persistence against the ridge two-lag linear reference.
 const ABLATIONS = [
-  { label: "World model vs persistence — AUC-PR", a: 0.68, b: 0.44 },
-  { label: "Time-shuffle control", a: 0.68, b: 0.21 },
+  { label: "Thursday holdout — AP, world model vs persistence", a: 0.439, b: 0.295 },
+  { label: "Friday test — AP, world model vs persistence", a: 0.058, b: 0.065 },
+  { label: "Holdout — state-forecast skill, world model vs ridge two-lag", a: 0.616, b: 0.595 },
 ];
 
 function CardShell({
@@ -211,7 +215,7 @@ function AblationList() {
         </div>
       ))}
       <p className="text-gray-dark text-[11px] italic">
-        illustrative until artifacts/metrics is populated
+        Run 8, natural prevalence; intervals in ml/REAL_DATA_RESULTS.md
       </p>
     </div>
   );
