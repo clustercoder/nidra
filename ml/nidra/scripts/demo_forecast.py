@@ -136,8 +136,8 @@ def main() -> None:
     )
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--day", type=str, default=None,
-                        help="filename under artifacts/processed/ to draw the window from; "
-                             f"defaults to the cached table for '{DEFAULT_DAY_KEY}'")
+                        help="a day key from the config (e.g. friday_portscan) or a filename under "
+                             f"artifacts/processed/; defaults to the cached table for '{DEFAULT_DAY_KEY}'")
     parser.add_argument("--want-risk", type=int, default=1, choices=[0, 1],
                         help="1 = a window labelled as leading to an attack, 0 = a benign window")
     parser.add_argument("--threshold", type=float, default=0.75,
@@ -158,13 +158,14 @@ def main() -> None:
     artifacts = cfg["artifacts"]
 
     processed_dir = resolve_path(cfg, artifacts["processed_dir"])
-    if args.day:
-        table_path = processed_dir / args.day
-    else:
-        day_meta = cfg["dataset"]["days"][DEFAULT_DAY_KEY]
-        table_path = day_cache_path(processed_dir, DEFAULT_DAY_KEY, cfg["windowing"],
+    day_key = args.day if (args.day in cfg["dataset"]["days"]) else (DEFAULT_DAY_KEY if not args.day else None)
+    if day_key is not None:
+        day_meta = cfg["dataset"]["days"][day_key]
+        table_path = day_cache_path(processed_dir, day_key, cfg["windowing"],
                                      cfg["dataset"].get("mvp_row_cap_per_day"),
                                      declared_packets_tag(day_meta))
+    else:
+        table_path = processed_dir / args.day
     if not table_path.exists():
         available = sorted(p.name for p in resolve_path(cfg, artifacts["processed_dir"]).glob("*.parquet"))
         raise SystemExit(
