@@ -29,6 +29,36 @@
           "input_dim": 128
         }
       }
+    },
+    "state+hidden": {
+      "components": [
+        "state",
+        "hidden"
+      ],
+      "run_dir": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/ctu_heads__state+hidden",
+      "seeds": {
+        "0": {
+          "val_auc_pr_natural": 0.4894377446734375,
+          "val_auc_pr": 0.4894377446734375,
+          "best_epoch": 7,
+          "input_dim": 173
+        }
+      }
+    },
+    "state+logvar": {
+      "components": [
+        "state",
+        "logvar"
+      ],
+      "run_dir": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/ctu_heads__state+logvar",
+      "seeds": {
+        "0": {
+          "val_auc_pr_natural": 0.37308071919571073,
+          "val_auc_pr": 0.37308071919571073,
+          "best_epoch": 1,
+          "input_dim": 90
+        }
+      }
     }
   }
 }
