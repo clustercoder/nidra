@@ -187,3 +187,45 @@ at or below chance — **the same failure mode as Run 8's Bot-C2 on Friday, on a
 dataset, a different family and a different year.** That is now a property of the head,
 not of CIC-IDS2017.
 
+
+### 3.2 Head ablation, stage A: validation AP on observed states
+
+All six variants sit on the identical frozen `ctu_dyn` dynamics, the identical
+scaler, the identical rows. The only thing that differs is what the head reads.
+This is the head-training selection metric — natural-prevalence AP on the CTU
+validation captures' observed states — which is cheap enough to screen all six and
+is *not* the forecast number; that is §3.3.
+
+| head input | validation AP | Δ vs Run 8 head | input dim | best epoch |
+|---|---|---|---|---|
+| `hidden` | **0.496** | **+0.143** | 128 | 13 |
+| `state+hidden` | 0.489 | +0.136 | 173 | 7 |
+| `state+hidden+delta+logvar` | 0.470 | +0.117 | 263 | 8 |
+| `state+hidden+logvar` | 0.454 | +0.101 | 218 | 7 |
+| `state+logvar` | 0.373 | +0.020 | 90 | 1 |
+| `state` (Run 8 architecture) | 0.353 | — | 45 | 28 |
+
+Three answers fall out, and two of them are answers to questions the roadmap
+asked directly.
+
+**History is the missing input, and it is worth 40% relative.** Run 8's diagnosis
+said the per-state head could not see what a GRU sequence classifier could. Giving
+the head the encoder's hidden state — the same recurrent summary, under the same
+frozen-head discipline, trained on observed states only — recovers most of that
+gap. This is the phase's central hypothesis and on this screening metric it holds.
+
+**Uncertainty helps, but barely** (§6). `state+logvar` is +0.020 over `state`, and
+adding `logvar` on top of `hidden` makes things *worse* (0.454 vs 0.489). The
+transition's predicted variance carries a little signal about risk and mostly
+carries parameters. The honest answer to "does uncertainty help" is: measurably,
+by about a seventh of what history is worth, and not additively.
+
+**More components is not better.** `hidden` alone beats every richer variant. With
+1,384 positive training sequences, a 263-dimensional input is being fit on very
+little; the best-epoch column shows it — the state-only head needed 28 epochs, the
+history-aware ones converge by 7–13. Nothing here supports adding `delta`.
+
+These are screening results on one seed (§19 Stage A). No architecture is adopted
+on them: the forecast benchmark is the selection metric, and the winner then gets
+multi-seed confirmation.
+

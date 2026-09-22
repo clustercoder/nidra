@@ -27,7 +27,7 @@ from sklearn.metrics import average_precision_score
 
 from nidra.data.normalize import FeatureScaler
 from nidra.data.onset import DEFAULT_ONSET_HORIZONS_MIN, discrete_hazard_targets, survival_to_cumulative
-from nidra.models.heads import OnsetHead
+from nidra.models.heads import OnsetHead, ordered_components
 from nidra.train.pipeline import scale_arrays
 from nidra.train.train_heads import balanced_epoch_indices
 from nidra.utils.config import resolve_path
@@ -50,8 +50,21 @@ def _eligible_states(windowed, scaler: FeatureScaler, horizons: tuple[int, ...])
     return states[eligible], targets[eligible], np.asarray(weight)[eligible], eligible
 
 
+def _onset_parts(components: tuple[str, ...], state: torch.Tensor, ctx, idx, device: str) -> dict:
+    """One batch's inputs for a history-aware onset head. The state carries
+    whatever noise the caller added; the context components are left clean,
+    exactly as in train_heads._risk_logits."""
+    parts = {"state": state}
+    for name in components:
+        if name == "state":
+            continue
+        value = torch.from_numpy(getattr(ctx, name))
+        parts[name] = (value[idx] if idx is not None else value).float().to(device)
+    return parts
+
+
 def train_onset_head_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureScaler, device: str = "cpu",
-                              head_data: dict | None = None) -> dict:
+                              head_data: dict | None = None, model=None, head_tables: dict | None = None) -> dict:
     set_seed(seed)
     rng = np.random.default_rng(seed)
     ocfg = cfg.get("onset", {})
@@ -71,6 +84,12 @@ def train_onset_head_for_seed(cfg: dict, seed: int, windowed: dict, scaler: Feat
     neg_ratio = int(ocfg.get("neg_ratio", 10))
     hard_frac = float(ocfg.get("hard_negative_fraction", 0.5))
     broadest = len(horizons) - 1  # sampling treats "onset within max(h)" as the positive class
+    components = ordered_components(tuple(ocfg.get("components", ("state",))))
+    needs_context = components != ("state",)
+    if needs_context and model is None:
+        raise ValueError(
+            f"onset.components={list(components)} needs the encoder context, so the frozen "
+            f"stage-1 `model` must be passed to train_onset_head_for_seed")
     parameterisation = str(ocfg.get("parameterisation", "independent"))
     if parameterisation not in OnsetHead.PARAMETERISATIONS:
         raise ValueError(f"unknown onset.parameterisation {parameterisation!r}; "
@@ -86,16 +105,33 @@ def train_onset_head_for_seed(cfg: dict, seed: int, windowed: dict, scaler: Feat
             tr.inside_episode[el_tr], tr.minutes_to_onset[el_tr], horizons)
     else:
         s_tr, y_tr, _, el = _eligible_states(windowed["train"], scaler, horizons)
-        s_va, y_va, w_va, _ = _eligible_states(windowed["val"], scaler, horizons)
+        s_va, y_va, w_va, el_va = _eligible_states(windowed["val"], scaler, horizons)
+        el_tr = el
         active_tr = (windowed["train"].X[:, -1, :][~windowed["train"].inside_episode][:, _active_index()] > 0)
         hazard_event, hazard_at_risk = discrete_hazard_targets(
             windowed["train"].inside_episode[el], windowed["train"].minutes_to_onset[el], horizons)
+    ctx_tr = ctx_va = None
+    if needs_context:
+        from nidra.train.train_heads import _trajectory_context
+        from nidra.train.pipeline import geometry_from_config
+        _, L, _ = geometry_from_config(cfg)
+        full_tr, full_va = _trajectory_context(cfg, model, scaler, L, windowed, head_data, head_tables, device)
+        # The onset head trains on ELIGIBLE rows only (origins outside every
+        # episode), so the context has to be masked identically or a row's
+        # history would belong to a different row's state.
+        ctx_tr, ctx_va = full_tr.select(el_tr), full_va.select(el_va)
+        if len(ctx_tr) != len(s_tr) or len(ctx_va) != len(s_va):
+            raise ValueError(f"onset head context misaligned: train {len(ctx_tr)} vs {len(s_tr)}, "
+                             f"val {len(ctx_va)} vs {len(s_va)}")
+
     n_pos_h = {str(h): int(y_tr[:, j].sum()) for j, h in enumerate(horizons)}
     n_pos_val_h = {str(h): int(y_va[:, j].sum()) for j, h in enumerate(horizons)}
     logger.info("seed=%d onset head: train eligible %d (positives by horizon %s), val eligible %d (%s)",
                 seed, len(s_tr), n_pos_h, len(s_va), n_pos_val_h)
 
-    head = OnsetHead(s_tr.shape[1], hidden, horizons).to(device)
+    hidden_size = int(getattr(getattr(model, "encoder", None), "hidden_size", 0) or
+                      cfg.get("model", {}).get("encoder", {}).get("hidden_size", 128))
+    head = OnsetHead(s_tr.shape[1], hidden, horizons, components, hidden_size).to(device)
     head.parameterisation = parameterisation
     event_t = torch.from_numpy(hazard_event.astype("float32"))
     at_risk_t = torch.from_numpy(hazard_at_risk.astype("float32"))
@@ -118,7 +154,7 @@ def train_onset_head_for_seed(cfg: dict, seed: int, windowed: dict, scaler: Feat
             s = s_tr_t[b].to(device)
             if input_noise > 0:
                 s = s + input_noise * torch.randn_like(s)
-            logits = head(s)
+            logits = head(s) if not needs_context else head(**_onset_parts(components, s, ctx_tr, b, device))
             if parameterisation == "hazard":
                 # Discrete-time survival: bucket j contributes only for the
                 # rows still at risk in it. Censored rows (no onset within the
@@ -137,7 +173,9 @@ def train_onset_head_for_seed(cfg: dict, seed: int, windowed: dict, scaler: Feat
             losses.append(loss.item())
         head.eval()
         with torch.no_grad():
-            p_va = torch.sigmoid(head(s_va_t)).cpu().numpy()
+            p_va = torch.sigmoid(
+                head(s_va_t) if not needs_context
+                else head(**_onset_parts(components, s_va_t, ctx_va, None, device))).cpu().numpy()
         if parameterisation == "hazard":
             p_va = survival_to_cumulative(p_va)
         ap_h = {}
@@ -167,6 +205,7 @@ def train_onset_head_for_seed(cfg: dict, seed: int, windowed: dict, scaler: Feat
     head.save(path, parameterisation=parameterisation)
     meta = {
         "horizons_min": list(horizons), "selection_horizon_min": sel_h, "best_epoch": best["epoch"],
+        "components": list(components), "input_dim": int(head.input_dim),
         "parameterisation": parameterisation,
         "n_at_risk_by_bucket": hazard_at_risk.sum(0).tolist(),
         "n_events_by_bucket": hazard_event.sum(0).tolist(),
@@ -186,11 +225,31 @@ def _active_index() -> int:
     return FEATURE_INDEX["is_active"]
 
 
-def score_onset_head(path: Path, states_scaled: np.ndarray) -> tuple[np.ndarray, tuple[int, ...]]:
-    """[N, H] probabilities from a saved head, plus its horizons."""
+def score_onset_head(path: Path, states_scaled: np.ndarray,
+                     context: dict | None = None) -> tuple[np.ndarray, tuple[int, ...]]:
+    """[N, H] probabilities from a saved head, plus its horizons.
+
+    `context` supplies the non-state components a history-aware head declares
+    (as `WorldModel.observed_context` returns them). A head that needs one and
+    is not given it is refused rather than scored on a guess."""
     head = OnsetHead.load(path)
+    needed = [c for c in head.components if c != "state"]
+    if needed and context is None:
+        raise ValueError(f"this onset head reads {needed} as well as the state; pass `context`")
     with torch.no_grad():
-        p = torch.sigmoid(head(torch.from_numpy(np.ascontiguousarray(states_scaled)).float())).numpy()
+        state = torch.from_numpy(np.ascontiguousarray(states_scaled)).float()
+        if not needed:
+            logits = head(state)
+        else:
+            missing = [c for c in needed if context.get(c) is None]
+            if missing:
+                raise ValueError(f"`context` is missing the component(s) {missing} this onset head declares")
+            parts = {"state": state}
+            for c in needed:
+                v = context[c]
+                parts[c] = (v if torch.is_tensor(v) else torch.as_tensor(np.asarray(v))).float()
+            logits = head(**parts)
+        p = torch.sigmoid(logits).numpy()
     if getattr(head, "parameterisation", "independent") == "hazard":
         p = survival_to_cumulative(p)
     return p, head.horizons_min

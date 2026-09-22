@@ -179,22 +179,41 @@ def _task_table(ev: EvalSet, scores: dict[str, np.ndarray], y: np.ndarray, thres
     return out
 
 
-def _score_onset_heads(cfg: dict, seeds: list[int], s_t_scaled: np.ndarray) -> dict[int, dict[str, np.ndarray]]:
+def _score_onset_heads(cfg: dict, seeds: list[int], s_t_scaled: np.ndarray,
+                       models: list[WorldModel] | None = None,
+                       X_scaled: np.ndarray | None = None) -> dict[int, dict[str, np.ndarray]]:
     """Explicit onset supervision (train/train_onset.py) scored on the
     observed state: {horizon_min: {"onset_head_direct": [N]}} averaged over
     the seeds whose head exists. Empty when none was trained."""
     from nidra.train.train_onset import onset_head_path, score_onset_head
     weights_dir = resolve_path(cfg, cfg["artifacts"]["weights_dir"])
     probs, horizons = [], None
-    for seed in seeds:
+    for i, seed in enumerate(seeds):
         path = onset_head_path(weights_dir, seed)
         if path.exists():
-            p, horizons = score_onset_head(path, s_t_scaled)
+            p, horizons = score_onset_head(path, s_t_scaled,
+                                           _onset_context(path, models, i, X_scaled))
             probs.append(p)
     if not probs:
         return {}
     mean = np.mean(np.stack(probs, 0), axis=0)
     return {int(h): {"onset_head_direct": mean[:, j]} for j, h in enumerate(horizons)}
+
+
+@torch.no_grad()
+def _onset_context(path, models, i: int, X_scaled: np.ndarray | None) -> dict | None:
+    """The observed context for a history-aware onset head, from the SAME
+    ensemble member whose head this is — member j's encoder state is not an
+    input member i's head was ever trained against."""
+    from nidra.models.heads import OnsetHead
+    head = OnsetHead.load(path)
+    if head.components == ("state",):
+        return None
+    if not models or X_scaled is None:
+        raise ValueError(f"{path.name} declares components {head.components} but no model was available "
+                         "to rebuild the encoder context")
+    m = models[min(i, len(models) - 1)]
+    return m.observed_context(torch.from_numpy(X_scaled).float())
 
 
 def _attribution(ev: EvalSet, scores: dict[str, np.ndarray], y: np.ndarray, n_resamples: int) -> dict[str, Any]:
@@ -286,7 +305,7 @@ def run(cfg: dict, split: str, seeds: list[int], n_samples: int, out_dir: Path, 
     if gru_classifier is not None and Path(gru_classifier).exists():
         from nidra.eval.gru_classifier import load_and_score
         bundle.baselines["gru_classifier"] = load_and_score(gru_classifier, X_scaled)
-    onset_direct = _score_onset_heads(cfg, seeds, X_scaled[:, -1, :])
+    onset_direct = _score_onset_heads(cfg, seeds, X_scaled[:, -1, :], models, X_scaled)
     logger.info("scoring done (%.0fs)", time.time() - t0)
 
     # operating point

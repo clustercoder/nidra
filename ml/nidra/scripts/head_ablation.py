@@ -28,7 +28,8 @@ import torch
 
 from nidra.data.schema import FEATURE_ORDER
 from nidra.models.build import risk_head_components
-from nidra.scripts.run_experiment import RUNS_DIR, copy_run_artifacts, derive_run_config
+from nidra.scripts.run_experiment import (RUNS_DIR, copy_run_artifacts, derive_run_config,
+                                          dynamics_model_for_onset)
 from nidra.utils.config import load_config
 from nidra.utils.provenance import experiment_record, write_json
 
@@ -119,7 +120,9 @@ def main() -> None:
                 }
             if "onset" in stages:
                 from nidra.train.train_onset import train_onset_head_for_seed
-                ometa = train_onset_head_for_seed(cfg, seed, windowed, scaler, "cpu", head_data=head_data)
+                ometa = train_onset_head_for_seed(cfg, seed, windowed, scaler, "cpu", head_data=head_data,
+                                                  model=dynamics_model_for_onset(cfg, seed),
+                                                  head_tables=head_tables)
                 per_seed.setdefault(str(seed), {})["onset_val_ap"] = ometa["best_val_ap_natural_by_horizon"]
             logger.info("%s seed %d done at %.0fs: %s", tag, seed, time.time() - t0, per_seed[str(seed)])
 

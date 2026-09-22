@@ -57,6 +57,34 @@ def apply_overrides(cfg: dict, overrides: list[str]) -> dict:
     return out
 
 
+def dynamics_model_for_onset(cfg: dict, seed: int):
+    """The frozen stage-1 model an onset head needs to rebuild its encoder
+    context, or None when the configured head reads only the state.
+
+    Loaded from the checkpoint rather than kept from stage 1 so a heads-only
+    or onset-only run behaves the same as a full one. Only the dynamics keys
+    are read: the checkpoint's risk head may be a different architecture than
+    this run's config asks for, and the onset head does not use it.
+    """
+    from nidra.models.build import world_model_from_config
+    from nidra.models.heads import ordered_components
+
+    if ordered_components(tuple(cfg.get("onset", {}).get("components", ("state",)))) == ("state",):
+        return None
+    weights = resolve_path(cfg, cfg["artifacts"]["weights_dir"]) / f"model_seed_{seed}.pt"
+    if not weights.exists():
+        raise FileNotFoundError(f"onset head needs the stage-1 checkpoint {weights}, which does not exist")
+    model = world_model_from_config(cfg)
+    checkpoint = torch.load(weights, map_location="cpu")
+    dynamics = {k: v for k, v in checkpoint.items() if k.startswith(("encoder.", "transition."))}
+    missing = {k for k in model.state_dict() if k.startswith(("encoder.", "transition."))} - set(dynamics)
+    if missing:
+        raise ValueError(f"{weights} has no dynamics weights for {sorted(missing)[:3]}...")
+    model.load_state_dict(dynamics, strict=False)
+    model.eval()
+    return model
+
+
 def derive_run_config(base_path: str | None, label: str, overrides: list[str], run_dir: Path) -> Path:
     base = load_config(base_path)
     cfg = {k: v for k, v in base.items() if not k.startswith("_")}
@@ -172,7 +200,9 @@ def main() -> None:
             logger.info("seed %d heads done at %.0fs", seed, time.time() - t0)
         if "onset" in stages:
             from nidra.train.train_onset import train_onset_head_for_seed
-            ometa = train_onset_head_for_seed(cfg, seed, windowed, scaler, "cpu", head_data=head_data)
+            ometa = train_onset_head_for_seed(cfg, seed, windowed, scaler, "cpu", head_data=head_data,
+                                              model=dynamics_model_for_onset(cfg, seed),
+                                              head_tables=head_tables)
             seed_result["onset"] = {k: v for k, v in ometa.items() if k != "history"}
             seed_result["onset_history"] = ometa.get("history")
             logger.info("seed %d onset head done at %.0fs: best val AP by horizon %s", seed, time.time() - t0,

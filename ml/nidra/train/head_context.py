@@ -70,6 +70,13 @@ class HeadContext:
     def as_components(self) -> dict[str, np.ndarray]:
         return {"hidden": self.hidden, "delta": self.delta, "logvar": self.logvar}
 
+    def select(self, mask: np.ndarray) -> "HeadContext":
+        """A new context over the selected rows. The onset head trains on
+        eligible origins only, and masking the states without masking their
+        context would pair each state with a different row's history."""
+        return HeadContext(hidden=self.hidden[mask], delta=self.delta[mask], logvar=self.logvar[mask],
+                           host_id=self.host_id[mask], window_ts=self.window_ts[mask])
+
 
 def _host_windows(scaled: np.ndarray, L: int, zero_state: np.ndarray) -> np.ndarray:
     """[n, L, F] trailing-L windows for one host's chronological sequence,

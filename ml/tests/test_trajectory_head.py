@@ -42,7 +42,9 @@ class TestTrajectoryRiskHead:
         assert head.input_dim == 45
 
     def test_components_must_be_known(self):
-        with pytest.raises(ValueError, match="unknown trajectory head component"):
+        # The message names the offending component; the wording is shared
+        # with the onset head, which uses the same component machinery.
+        with pytest.raises(ValueError, match="the_future"):
             TrajectoryRiskHead(components=("state", "the_future"), n_features=45, hidden_size=16)
 
     def test_at_least_one_component_is_required(self):

@@ -52,57 +52,6 @@ class StageHead(nn.Module):
         return self.net(state)
 
 
-class OnsetHead(nn.Module):
-    """F -> hidden -> H logits: P(an attack episode BEGINS within h_j minutes
-    | state), one output per horizon in `horizons_min`. Trained on observed
-    states at origins OUTSIDE any episode (data/onset.py), then frozen —
-    the same discipline as the risk head. Stored as its own artifact
-    (`onset_head_seed_<s>.pt`) so the WorldModel checkpoint format is
-    unchanged."""
-
-    def __init__(self, n_features: int = 45, hidden: int = 64, horizons_min: tuple[int, ...] = (1, 3, 5, 10, 15, 30)):
-        super().__init__()
-        self.horizons_min = tuple(int(h) for h in horizons_min)
-        self.parameterisation = "independent"
-        self.net = nn.Sequential(
-            nn.Linear(n_features, hidden),
-            nn.ReLU(),
-            nn.Linear(hidden, len(self.horizons_min)),
-        )
-
-    def forward(self, state: torch.Tensor) -> torch.Tensor:
-        """state: [..., F]. Returns raw logits [..., H]."""
-        return self.net(state)
-
-    #: How the H outputs are read. "independent": output j is the logit of
-    #: P(onset within h_j) directly, each fit with its own BCE — the Run 8
-    #: parameterisation, whose probabilities need not be monotone in j and
-    #: were observed not to be. "hazard": output j is the logit of
-    #: P(onset in bucket j | none before it), fit only on rows still at risk
-    #: in bucket j, and read out as 1 - prod(1 - p) — coherent by
-    #: construction and able to use censored rows. The ARCHITECTURE is
-    #: identical either way, which is what makes the comparison controlled.
-    PARAMETERISATIONS = ("independent", "hazard")
-
-    def save(self, path, parameterisation: str = "independent") -> None:
-        if parameterisation not in self.PARAMETERISATIONS:
-            raise ValueError(f"unknown onset parameterisation {parameterisation!r}")
-        torch.save({"state_dict": self.state_dict(), "n_features": self.net[0].in_features,
-                    "hidden": self.net[0].out_features, "horizons_min": self.horizons_min,
-                    "parameterisation": parameterisation}, path)
-
-    @classmethod
-    def load(cls, path, map_location: str = "cpu") -> "OnsetHead":
-        ckpt = torch.load(path, map_location=map_location)
-        head = cls(ckpt["n_features"], ckpt["hidden"], tuple(ckpt["horizons_min"]))
-        head.parameterisation = ckpt.get("parameterisation", "independent")
-        head.load_state_dict(ckpt["state_dict"])
-        head.eval()
-        for p in head.parameters():
-            p.requires_grad_(False)
-        return head
-
-
 #: Everything a rollout step can offer a risk head, and the name each goes by
 #: in `TrajectoryRiskHead`'s component list.
 #:
@@ -121,6 +70,114 @@ class OnsetHead(nn.Module):
 #: transition's uncertainty does grow with k) and through the per-horizon
 #: Platt calibration already fit on validation.
 TRAJECTORY_COMPONENTS: tuple[str, ...] = ("state", "hidden", "delta", "logvar")
+
+
+
+
+def component_widths(components: tuple[str, ...], n_features: int, hidden_size: int) -> list[int]:
+    """Per-component input width, in TRAJECTORY_COMPONENTS order. One table,
+    so the risk head and the onset head cannot disagree about what `hidden`
+    is worth."""
+    widths = {"state": int(n_features), "hidden": int(hidden_size),
+              "delta": int(n_features), "logvar": int(n_features)}
+    unknown = [c for c in components if c not in widths]
+    if unknown:
+        raise ValueError(f"unknown component(s) {unknown}; expected from {TRAJECTORY_COMPONENTS}")
+    return [widths[c] for c in ordered_components(components)]
+
+
+def ordered_components(components: tuple[str, ...]) -> tuple[str, ...]:
+    """Declared order, deduplicated. The concatenation layout must not depend
+    on how a caller spelled the list."""
+    unknown = [c for c in components if c not in TRAJECTORY_COMPONENTS]
+    if unknown:
+        raise ValueError(f"unknown component(s) {unknown}; expected from {TRAJECTORY_COMPONENTS}")
+    ordered = tuple(c for c in TRAJECTORY_COMPONENTS if c in set(components))
+    if not ordered:
+        raise ValueError("a component head needs at least one component")
+    return ordered
+
+
+def concat_components(components: tuple[str, ...], parts: dict) -> torch.Tensor:
+    """Concatenate the declared components along the last axis. A declared
+    component that is not supplied is an error, never a zero fill — a head
+    silently scoring on zeros looks like a working head with a puzzling loss
+    curve."""
+    pieces = []
+    for name in ordered_components(components):
+        value = parts.get(name)
+        if value is None:
+            raise ValueError(f"this head requires component {name!r}, which was not supplied")
+        pieces.append(value)
+    return torch.cat(pieces, dim=-1)
+
+
+class OnsetHead(nn.Module):
+    """F -> hidden -> H logits: P(an attack episode BEGINS within h_j minutes
+    | state), one output per horizon in `horizons_min`. Trained on observed
+    states at origins OUTSIDE any episode (data/onset.py), then frozen —
+    the same discipline as the risk head. Stored as its own artifact
+    (`onset_head_seed_<s>.pt`) so the WorldModel checkpoint format is
+    unchanged."""
+
+    def __init__(self, n_features: int = 45, hidden: int = 64,
+                 horizons_min: tuple[int, ...] = (1, 3, 5, 10, 15, 30),
+                 components: tuple[str, ...] = ("state",), hidden_size: int = 128):
+        super().__init__()
+        self.horizons_min = tuple(int(h) for h in horizons_min)
+        self.parameterisation = "independent"
+        self.components = ordered_components(tuple(components))
+        self.n_features = int(n_features)
+        self.hidden_size = int(hidden_size)
+        self.input_dim = sum(component_widths(self.components, n_features, hidden_size))
+        self.net = nn.Sequential(
+            nn.Linear(self.input_dim, hidden),
+            nn.ReLU(),
+            nn.Linear(hidden, len(self.horizons_min)),
+        )
+
+    def forward(self, state: torch.Tensor | None = None, **parts: torch.Tensor) -> torch.Tensor:
+        """state: [..., F], positionally, for the state-only head every
+        existing call site builds. A head declaring more components takes them
+        all as keywords and refuses a bare tensor. Returns raw logits
+        [..., H]."""
+        if self.components == ("state",):
+            if state is None:
+                state = parts.get("state")
+            return self.net(state)
+        if state is not None:
+            parts = {**parts, "state": state}
+        return self.net(concat_components(self.components, parts))
+
+    #: How the H outputs are read. "independent": output j is the logit of
+    #: P(onset within h_j) directly, each fit with its own BCE — the Run 8
+    #: parameterisation, whose probabilities need not be monotone in j and
+    #: were observed not to be. "hazard": output j is the logit of
+    #: P(onset in bucket j | none before it), fit only on rows still at risk
+    #: in bucket j, and read out as 1 - prod(1 - p) — coherent by
+    #: construction and able to use censored rows. The ARCHITECTURE is
+    #: identical either way, which is what makes the comparison controlled.
+    PARAMETERISATIONS = ("independent", "hazard")
+
+    def save(self, path, parameterisation: str = "independent") -> None:
+        if parameterisation not in self.PARAMETERISATIONS:
+            raise ValueError(f"unknown onset parameterisation {parameterisation!r}")
+        torch.save({"state_dict": self.state_dict(), "n_features": self.n_features,
+                    "hidden": self.net[0].out_features, "horizons_min": self.horizons_min,
+                    "components": list(self.components), "hidden_size": self.hidden_size,
+                    "parameterisation": parameterisation}, path)
+
+    @classmethod
+    def load(cls, path, map_location: str = "cpu") -> "OnsetHead":
+        ckpt = torch.load(path, map_location=map_location)
+        head = cls(ckpt["n_features"], ckpt["hidden"], tuple(ckpt["horizons_min"]),
+                   tuple(ckpt.get("components", ("state",))), int(ckpt.get("hidden_size", 128)))
+        head.parameterisation = ckpt.get("parameterisation", "independent")
+        head.load_state_dict(ckpt["state_dict"])
+        head.eval()
+        for p in head.parameters():
+            p.requires_grad_(False)
+        return head
 
 
 class TrajectoryRiskHead(nn.Module):
@@ -148,18 +205,10 @@ class TrajectoryRiskHead(nn.Module):
     def __init__(self, components: tuple[str, ...] = ("state", "hidden"), n_features: int = 45,
                  hidden_size: int = 128, hidden: int = 64):
         super().__init__()
-        unknown = [c for c in components if c not in TRAJECTORY_COMPONENTS]
-        if unknown:
-            raise ValueError(f"unknown trajectory head component(s) {unknown}; expected from {TRAJECTORY_COMPONENTS}")
-        ordered = tuple(c for c in TRAJECTORY_COMPONENTS if c in set(components))
-        if not ordered:
-            raise ValueError("TrajectoryRiskHead needs at least one component")
-        self.components = ordered
+        self.components = ordered_components(tuple(components))
         self.n_features = int(n_features)
         self.hidden_size = int(hidden_size)
-        widths = {"state": self.n_features, "hidden": self.hidden_size,
-                  "delta": self.n_features, "logvar": self.n_features}
-        self.input_dim = sum(widths[c] for c in ordered)
+        self.input_dim = sum(component_widths(self.components, n_features, hidden_size))
         self.net = nn.Sequential(
             nn.Linear(self.input_dim, hidden),
             nn.ReLU(),
@@ -171,13 +220,7 @@ class TrajectoryRiskHead(nn.Module):
         raw logits [..., 1]. A declared component that is not supplied is an
         error, never a zero fill — a head silently scoring on zeros would
         look like a working head with a puzzling loss curve."""
-        pieces = []
-        for name in self.components:
-            value = parts.get(name)
-            if value is None:
-                raise ValueError(f"TrajectoryRiskHead requires component {name!r}, which was not supplied")
-            pieces.append(value)
-        return self.net(torch.cat(pieces, dim=-1))
+        return self.net(concat_components(self.components, parts))
 
     def save(self, path) -> None:
         torch.save({"state_dict": self.state_dict(), "components": list(self.components),
