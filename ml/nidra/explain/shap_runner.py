@@ -24,6 +24,7 @@ import torch
 from sklearn.cluster import KMeans
 
 from nidra.data.schema import FEATURE_ORDER
+from nidra.models.heads import TrajectoryRiskHead
 from nidra.models.world_model import WorldModel
 
 
@@ -50,11 +51,44 @@ def load_background(path: str | Path) -> np.ndarray | None:
     return np.load(path) if path.exists() else None
 
 
-def _risk_predict_fn(model: WorldModel):
+def _risk_predict_fn(model: WorldModel, context: dict | None = None):
+    """X: [n, 45] states -> [n] risk probability.
+
+    For a history-aware head this is a CONDITIONAL attribution: the head's
+    other inputs — the encoder's hidden state, the realized change, the
+    predicted log-variance — are held at the values the real origin had while
+    SHAP perturbs the state. That is a well-posed question ("holding this
+    host's history fixed, which state features move the risk?") and it is the
+    only one KernelSHAP over 45 named features can answer.
+
+    A trajectory head with no context is refused rather than zero-filled. An
+    explanation of a head fed zeros is an explanation of a different head,
+    and it would look entirely plausible.
+    """
+    traj = isinstance(model.risk_head, TrajectoryRiskHead)
+    if traj:
+        needed = [c for c in model.risk_head.components if c != "state"]
+        if context is None:
+            raise ValueError(
+                f"this risk head reads {needed} as well as the state; pass `context` "
+                f"(WorldModel.observed_context(x)) so the attribution holds them fixed")
+        missing = [c for c in needed if context.get(c) is None]
+        if missing:
+            raise ValueError(f"`context` is missing the component(s) {missing} this risk head declares")
+
     def f(X: np.ndarray) -> np.ndarray:
         with torch.no_grad():
-            risk, _ = model.score_states(torch.from_numpy(X).float())
-        return risk.numpy()
+            states = torch.from_numpy(X).float()
+            if not traj:
+                risk, _ = model.score_states(states)
+                return risk.numpy()
+            n = states.shape[0]
+            parts = {"state": states}
+            for c in needed:
+                v = context[c]
+                v = v if torch.is_tensor(v) else torch.as_tensor(np.asarray(v)).float()
+                parts[c] = v.reshape(1, -1).expand(n, -1)
+            return torch.sigmoid(model.risk_head(**parts).squeeze(-1)).numpy()
     return f
 
 
@@ -84,9 +118,13 @@ def explain_current_risk(
     background: np.ndarray,
     model: WorldModel,
     nsamples: int | str = 100,
+    context: dict | None = None,
 ) -> list[dict]:
-    """(a) Why is the current observed state S_t risky? state: [45]."""
-    explainer = shap.KernelExplainer(_risk_predict_fn(model), background)
+    """(a) Why is the current observed state S_t risky? state: [45].
+
+    `context` is required when the risk head reads more than the state, and
+    ignored when it does not; see `_risk_predict_fn`."""
+    explainer = shap.KernelExplainer(_risk_predict_fn(model, context), background)
     shap_values = explainer.shap_values(state.reshape(1, -1), nsamples=nsamples, silent=True)
     shap_values = np.asarray(shap_values).reshape(-1)
     return _format_attributions(shap_values, state, FEATURE_ORDER)

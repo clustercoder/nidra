@@ -16,7 +16,7 @@ import torch
 
 from nidra.data.schema import FEATURE_ORDER
 from nidra.eval.baselines import world_model_forecast
-from nidra.models.world_model import WorldModel
+from nidra.models.world_model import RolloutOutput, WorldModel
 
 COUNTERFACTUAL_LABEL = "model-internal what-if"
 
@@ -76,7 +76,8 @@ def counterfactual_rollout(
         cur[:, feature_idx] = clamp_value
         prev[:, feature_idx] = clamp_value
 
-    traj = []
+    anchor = x_tiled[:, -1, :]
+    traj, mus, logvars, hiddens = [], [], [], []
     for _ in range(K):
         mu, logvar = model.transition(h_t, cur, prev)
         nxt = cur + mu
@@ -86,17 +87,30 @@ def counterfactual_rollout(
         if feature_idx is not None:
             nxt[:, feature_idx] = clamp_value  # re-clamp after every step
         traj.append(nxt)
+        mus.append(mu)
+        logvars.append(logvar)
         h_t, h = model.encoder(nxt.unsqueeze(1), h)
+        hiddens.append(h_t)
         prev, cur = cur, nxt
 
-    states = torch.stack(traj, dim=1)  # [B*S, K, F]
     BS = B * max(n_samples, 1)
     S = BS // B
-    states = states.reshape(B, S, K, model.n_features)
+    shape = (B, S, K, model.n_features)
+    states = torch.stack(traj, dim=1).reshape(shape)
 
-    risk, stage = model.score_states(states.reshape(B * S, K, model.n_features))
-    risk = risk.reshape(B, S, K)
-    stage = stage.reshape(B, S, K, -1)
+    # Scored through score_trajectory, not score_states: a history-aware head
+    # reads the encoder state, the realized change and the predicted variance
+    # of each step, and a counterfactual explained by a head that was fed
+    # something else is an explanation of a different model. For the per-state
+    # head the two are identical, so no shipped number moves.
+    out = RolloutOutput(
+        states=states,
+        mus=torch.stack(mus, dim=1).reshape(shape),
+        logvars=torch.stack(logvars, dim=1).reshape(shape),
+        hiddens=torch.stack(hiddens, dim=1).reshape(B, S, K, -1),
+        anchor=anchor.reshape(B, S, model.n_features),
+    )
+    risk, stage = model.score_trajectory(out)
 
     return {
         "label": COUNTERFACTUAL_LABEL,
