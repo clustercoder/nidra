@@ -1560,3 +1560,22 @@ CIC-only reflects the mixture rather than a cost of combining. And per D130 most
 survives the within-host test. An aggregate replication shows the effect is not a fluke of one
 split; it does not show the effect is the one being claimed. Stage A screening, one seed per
 cell, validation only; Stage B (3 seeds) is queued behind the cross-dataset matrix.
+
+**D132 — the stage-balanced risk objective, pre-registered before running.** (2026-09-23)
+D128 left the §12 direction motivated by evidence rather than speculation: the risk head ranks
+recon and c2 below chance where the stage head ranks them at 0.638 and 0.854, and no scalar
+fusion recovers it because one pooled ranking cannot hold both orderings.
+`train_heads.stage_balanced_positives` (default false, so every earlier run reproduces bit for
+bit) weights each positive by the inverse frequency of its own STAGE and rescales so the
+positive class's total weight is unchanged — the positive/negative balance, pos_weight, the
+sampler, the frozen dynamics, the seed and the data are all held fixed, and only the mix
+inside the positive class moves. `risk_head_loss` grew an optional per-row `sample_weight`
+normalised by its own total, so the loss scale does not track the weight total and the
+learning rate need not move with it.
+The criteria are written in the report (§3.13) BEFORE the run, because the expected outcome
+includes aggregate AP going DOWN — AP on CTU is dominated by exfil and the intervention
+deliberately stops exfil owning the gradient — and a criterion chosen afterwards would be one
+fitted to the result. Primary: recon and c2 rise above chance. Secondary: within-host ROC does
+not fall. Guardrail: exfil does not fall below 0.85. A fall in aggregate AP with all three met
+is a success and will be reported as one with the cost stated (§32). Criterion 1 failing kills
+the §12 direction, and that will be reported too.

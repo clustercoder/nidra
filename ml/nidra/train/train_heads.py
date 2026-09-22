@@ -76,6 +76,42 @@ def compute_class_weights(stage_idx: np.ndarray, n_classes: int) -> torch.Tensor
     return torch.tensor(weights, dtype=torch.float32)
 
 
+def stage_balanced_sample_weights(risk_labels: np.ndarray, stage_labels: np.ndarray) -> np.ndarray:
+    """Per-row weights that rebalance the POSITIVE class across attack stages.
+
+    `risk_label` pools every stage into one positive class, so the stage
+    holding most of the positives holds most of the gradient. On CTU that is
+    exfil at 172 of 213 attack windows, and the resulting head ranks recon and
+    c2 below chance (§3.9). Each positive is weighted by the inverse frequency
+    of its own stage, then the positive weights are rescaled so their TOTAL is
+    unchanged: the positive/negative balance and `pos_weight` keep meaning
+    exactly what they did, and the only thing that moves is the mix inside the
+    positive class. Without that rescaling the experiment would confound the
+    stage mix with a change in overall positive emphasis.
+
+    Grouping is by distinct value, so `stage_labels` may be the integer stage
+    indices the trainer carries or the string labels the tests use.
+
+    Pre-onset positives carry the benign stage — they are the window BEFORE an
+    attack — and form their own group, which is right: they are a distinct
+    kind of positive and on CTU they are 29% of them (§3.10). Negatives are
+    weighted 1.0 throughout.
+    """
+    risk = np.asarray(risk_labels).astype(int)
+    stages = np.asarray(stage_labels)
+    if len(risk) != len(stages):
+        raise ValueError(f"{len(risk)} labels against {len(stages)} stages")
+    w = np.ones(len(risk), dtype="float64")
+    pos = risk == 1
+    if not pos.any():
+        return w
+    groups, counts = np.unique(stages[pos], return_counts=True)
+    per_group = {g: 1.0 / c for g, c in zip(groups, counts)}
+    raw = np.array([per_group[g] for g in stages[pos]], dtype="float64")
+    w[pos] = raw * (pos.sum() / raw.sum())            # same total mass, different mix
+    return w
+
+
 def balanced_epoch_indices(risk: np.ndarray, active: np.ndarray, rng: np.random.Generator,
                            pos_repeat: int, neg_ratio: int, hard_negative_fraction: float) -> np.ndarray:
     """One epoch of balanced batches: every positive `pos_repeat` times, and
@@ -286,10 +322,16 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
 
     pos_weight = compute_pos_weight(risk_train).to(device) if sampling == "imbalanced" else None
     class_weights = compute_class_weights(stage_train, len(STAGE_LABELS)).to(device)
+    # §3.9: the pooled risk label lets the most common attack stage own the
+    # gradient. Off by default, so every earlier run reproduces bit for bit.
+    stage_balanced = bool(hcfg.get("stage_balanced_positives", False))
+    risk_sample_w = (torch.from_numpy(stage_balanced_sample_weights(risk_train, stage_train).astype("float32"))
+                     if stage_balanced else None)
     logger.info("seed=%d heads: sampling=%s input_noise=%.2f context_noise=%.2f pos_repeat=%d neg_ratio=%d "
-                "hard_neg=%.2f selecting on %s; "
+                "hard_neg=%.2f stage_balanced=%s selecting on %s; "
                 "train pos=%d/%d (active %.3f) val pos=%d/%d (%s)",
-                seed, sampling, input_noise, context_noise, pos_repeat, neg_ratio, hard_frac, selection_metric,
+                seed, sampling, input_noise, context_noise, pos_repeat, neg_ratio, hard_frac, stage_balanced,
+                selection_metric,
                 int(risk_train.sum()), len(risk_train), float(active_train.mean()), int(risk_val.sum()), len(risk_val),
                 "every row of the split" if head_data is not None else "windowed subsample, natural weights")
 
@@ -339,7 +381,8 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
             opt_risk.zero_grad()
             r_loss = risk_head_loss(_risk_logits(model.risk_head, parts_train, b, device, input_noise, s_in,
                                                  context_noise),
-                                    risk_y, pos_weight)
+                                    risk_y, pos_weight,
+                                    sample_weight=None if risk_sample_w is None else risk_sample_w[b].to(device))
             r_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.risk_head.parameters(), hcfg["grad_clip"])
             opt_risk.step()

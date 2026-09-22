@@ -842,3 +842,51 @@ evidence the effect is the one we want.
 This is §19 Stage A screening. One seed per cell, selection on validation only.
 Stage B — three seeds for the two surviving variants — is queued behind the
 cross-dataset matrix.
+
+### 3.13 Pre-registration: the stage-balanced risk objective (§12)
+
+Written **before** the run, because the expected outcome includes a metric going
+down and a criterion decided afterwards would be a criterion fitted to the result.
+
+**The hypothesis.** §3.9 found the risk head ranks recon and c2 *below chance*
+(ROC 0.320 and 0.434) while the stage head, trained on the same observed states
+with class weights, ranks them at 0.638 and 0.854 — and §3.9 also showed no scalar
+fusion of the two recovers it, because one pooled ranking cannot hold both
+orderings. The proposed mechanism is the objective: `risk_label` pools every stage
+into one positive class, so the stage with most positives owns the gradient. On CTU
+that is exfil at 172 of 213 attack windows.
+
+**The intervention.** `train_heads.stage_balanced_positives` (default `false`, so
+every earlier run reproduces bit for bit) weights each positive by the inverse
+frequency of its own stage, then rescales so the positive class's **total** weight
+is unchanged. The positive/negative balance, `pos_weight`, the sampler, the frozen
+encoder and transition, the seed and the data are all held fixed. The only thing
+that moves is the mix *inside* the positive class. Pre-onset positives carry the
+benign stage and form their own group, which is correct — on CTU they are 29% of
+the positives and a distinct kind of row (§3.10).
+
+**What would count as working**, in order:
+
+1. **Primary:** the risk head's per-stage ROC on `recon` and `c2` rises above 0.5
+   on observed validation states, from 0.320 and 0.434. Below-chance ranking is the
+   defect being targeted; anything that leaves it below chance has not addressed it.
+2. **Secondary:** within-host ROC (§3.11) does not fall. A gain that shows up only
+   in the aggregate is the host-identity failure again.
+3. **Guardrail:** exfil's ROC does not fall below 0.85 (from 0.915). Rebalancing
+   that fixes the rare stages by breaking the common one is not an improvement.
+
+**What would NOT count.** A rise in aggregate validation AP alone. Under this
+intervention aggregate AP is *expected to fall*, because AP on CTU is dominated by
+exfil and the objective deliberately stops exfil from owning the gradient. §32 says
+a model with slightly lower overall AP but better generalisation may be
+scientifically preferable; this is the case that tests whether we mean it. A fall
+in aggregate AP with criteria 1–3 met is a **success** and will be reported as one,
+with the AP cost stated.
+
+**What would kill it.** Criterion 1 failing. If forcing the rare stages to own an
+equal share of the gradient still leaves them below chance, the pooled objective is
+not the explanation and the §12 direction is wrong — which is a useful thing to
+learn, and will be reported whichever way it lands.
+
+One seed, CTU-only, validation only, both head variants, same `ctu_dyn` checkpoint
+as §3.4. Screening. Queued behind the cross-dataset matrix; the machine is full.

@@ -163,8 +163,30 @@ def teacher_forcing_schedule(epoch: int, total_epochs: int, start_p: float, end_
     return start_p + (end_p - start_p) * frac
 
 
-def risk_head_loss(logits: torch.Tensor, labels: torch.Tensor, pos_weight: torch.Tensor | None = None) -> torch.Tensor:
-    return F.binary_cross_entropy_with_logits(logits.squeeze(-1), labels.float(), pos_weight=pos_weight)
+def risk_head_loss(logits: torch.Tensor, labels: torch.Tensor, pos_weight: torch.Tensor | None = None,
+                   sample_weight: torch.Tensor | None = None) -> torch.Tensor:
+    """BCE with the usual positive upweighting, optionally reweighted per row.
+
+    `sample_weight` exists for the stage-balanced objective. The pooled
+    `risk_label` makes every positive equal, so whichever attack stage supplies
+    most of the positives supplies most of the gradient: on CTU that is exfil
+    at 172 of 213 attack windows, and the resulting head ranks recon and c2
+    BELOW chance while the stage head — trained on the same states with class
+    weights — ranks them at 0.638 and 0.854. Per-row weights let the positive
+    class be rebalanced across stages without touching the positive/negative
+    balance, which is what makes the two runs a controlled comparison.
+    """
+    per_row = F.binary_cross_entropy_with_logits(logits.squeeze(-1), labels.float(),
+                                                 pos_weight=pos_weight, reduction="none")
+    if sample_weight is None:
+        return per_row.mean()
+    w = sample_weight.to(per_row.dtype)
+    total = w.sum()
+    if total <= 0:
+        return per_row.mean()
+    # Normalised by the weight total, so the loss keeps the scale an unweighted
+    # mean would have and the learning rate does not have to move with it.
+    return (per_row * w).sum() / total
 
 
 def stage_head_loss(logits: torch.Tensor, labels: torch.Tensor, class_weights: torch.Tensor | None = None) -> torch.Tensor:
