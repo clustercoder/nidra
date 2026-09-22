@@ -43,6 +43,15 @@ class SplitAccounting:
     epochs: int
     context_length: int
 
+    #: Splits the sampler and the epoch loop actually touch. test and holdout
+    #: have neither, and printing a coverage for them reads as a claim that
+    #: they were trained on.
+    TRAINED_ON = ("train", "val")
+
+    @property
+    def trained_on(self) -> bool:
+        return self.split in self.TRAINED_ON
+
     @property
     def origin_coverage(self) -> float:
         """Fraction of the eligible population drawn in ONE epoch. Capped at
@@ -67,6 +76,8 @@ class SplitAccounting:
 
     @property
     def total_state_exposures(self) -> int:
+        if not self.trained_on:
+            return 0
         return int(self.sampled_per_epoch) * int(self.epochs) * int(self.context_length)
 
 
@@ -93,15 +104,17 @@ def accounting_markdown(rows: list[SplitAccounting], title: str | None = None) -
            "sampled / epoch | coverage / epoch | mean touches | state exposures |",
            "|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
+        sampling = (f"{_n(r.sampled_per_epoch)} | {r.origin_coverage:.1%} | {r.expected_origin_touches:.1f} | "
+                    f"{_n(r.total_state_exposures)}") if r.trained_on else "— | — | — | —"
         out.append(
             f"| {r.split} | {r.captures} | {_n(r.raw_flows)} | {_n(r.canonical_states)} | {_n(r.active_states)} | "
-            f"{_n(r.eligible_origins)} | {_n(r.positive_origins)} | {_n(r.sampled_per_epoch)} | "
-            f"{r.origin_coverage:.1%} | {r.expected_origin_touches:.1f} | {_n(r.total_state_exposures)} |")
+            f"{_n(r.eligible_origins)} | {_n(r.positive_origins)} | {sampling} |")
     t = coverage_table(rows)
     out += ["", f"Totals: {t['captures']} captures, {_n(t['raw_flows'])} raw flows, "
                f"{_n(t['canonical_states'])} canonical states ({_n(t['active_states'])} active), "
                f"{_n(t['eligible_origins'])} eligible origins of which {_n(t['positive_origins'])} positive, "
-               f"{_n(t['total_state_exposures'])} state exposures over training."]
+               f"{_n(t['total_state_exposures'])} state exposures over training. "
+               f"Sampling columns apply to the splits the model is fit on; test and holdout are read once."]
     return "\n".join(out)
 
 
@@ -110,7 +123,8 @@ def _split_accounting(cfg: dict, split: str, epochs: int, audit: dict | None) ->
     import numpy as np
 
     from nidra.data.dataset import enumerate_candidates
-    from nidra.train.pipeline import build_all_splits, geometry_from_config, resolve_sample_caps
+    from nidra.train.pipeline import build_all_splits, geometry_from_config
+    from nidra.train.train_dynamics import resolve_sample_caps
 
     _, L, K = geometry_from_config(cfg)
     splits = build_all_splits(cfg)

@@ -53,6 +53,31 @@ class TestArithmetic:
             _acc().split = "val"
 
 
+class TestSplitsThatAreNotTrainedOn:
+    """test and holdout have no sampler and no epochs. Printing "sampled
+    492,417, coverage 100%, 20 touches" for them says the model was trained
+    on the test split."""
+
+    def test_they_are_marked_as_not_trained_on(self):
+        assert _acc(split="test").trained_on is False
+        assert _acc(split="holdout").trained_on is False
+        assert _acc(split="train").trained_on is True
+        assert _acc(split="val").trained_on is True
+
+    def test_they_report_no_exposures(self):
+        assert _acc(split="test").total_state_exposures == 0
+
+    def test_the_table_leaves_their_sampling_columns_empty(self):
+        row = [line for line in accounting_markdown([_acc(split="test")]).splitlines()
+               if line.startswith("| test |")][0]
+        assert row.count("—") == 4          # sampled, coverage, touches, exposures
+        assert "100.0%" not in row
+
+    def test_totals_only_count_exposures_that_happened(self):
+        rows = [_acc(split="train"), _acc(split="test")]
+        assert coverage_table(rows)["total_state_exposures"] == _acc(split="train").total_state_exposures
+
+
 class TestMarkdown:
     def test_every_split_is_a_row(self):
         md = accounting_markdown([_acc(split="train"), _acc(split="val", sampled_per_epoch=50_000)])
