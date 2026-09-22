@@ -1448,3 +1448,36 @@ configuration — so the published claim is unchanged: **NIDRA has not demonstra
 warning.** What CTU-13 establishes is that the ceiling is a data property (10 positive
 training origins at one minute out of 1,417,909 eligible) rather than obviously a model
 property.
+
+**D126 — Context noise is not adopted: it closes the exposure gap by removing the
+transition model's contribution.** (2026-09-23) `train_heads.context_noise` was written
+from the measurement in D124 and does exactly what it was designed to do. At σ=0.1 the
+`state+hidden` rollout's validation AP rises 0.473 → 0.480, the oracle 0.506 → 0.536 and
+the k=6 tail 0.574 → 0.585. It also lifts `persistence_rollout` from 0.440 to 0.490, which
+takes the transition ablation margin from +0.033 [+0.0002, +0.055] to −0.010 [−0.075,
++0.020]. The two effects are one effect: a head made robust to a perturbed hidden state is
+robust to *which* windows the encoder ingested, so it neither suffers from feeding the
+encoder its own predictions nor benefits from those predictions being good. +0.007 AP,
+inside the noise of 283 positives, does not buy the only statistically supported transition
+signal the project has. σ=0.3 is worse on every column. The knob stays, defaulting to 0.0,
+because the diagnosis behind it is correct and a mechanism that closes the gap without
+flattening the head's sensitivity to its input is the obvious next thing to try.
+
+**D127 — `ctu_4:c2` and `ctu_4:recon` fail for opposite reasons, and a supervised probe is
+how we know.** (2026-09-23) `nidra/scripts/group_separability.py` fits a gradient-boosted
+probe on the training captures' rows for an attack STAGE and scores a validation group —
+cross-host and cross-capture, so it cannot answer with host identity. Rbot C2 (23 windows)
+comes back at ROC **0.443**, below chance: capture 4's C2 does not resemble captures 1–3's
+C2 in 32 flow features at Δ=60, and no head architecture reaches it. Rbot recon (17
+windows) comes back at ROC **0.970** where NIDRA scores chance — the signal transfers
+across hosts and the model is not finding it, on a stage early enough in the kill chain to
+be where advance warning would come from. That is the phase's most actionable gap.
+Two methodological notes travel with the probe. Its first version scored rows that no fold
+could score at a default 0.0, which put every positive at the bottom and produced a
+confident ROC of 0.100 for all four groups — a bug that read as a finding; rows a fold
+cannot score are now dropped. And every attack group on the CTU validation captures has its
+positives on exactly ONE host, so neither the probe nor the model separates "learned the
+behaviour" from "learned the host"; the host-leaky within-split probe reaches ROC
+0.913–0.996 on all four groups including the one that does not transfer at all, which is
+the measurement of what host identity alone buys. The same caveat applies to Run 8's Friday
+Bot-C2 result.
