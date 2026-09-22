@@ -149,6 +149,43 @@ def _per_attack_group(ev: EvalSet, scores: dict[str, np.ndarray], y: np.ndarray,
     return out
 
 
+def _host_identity(ev: EvalSet, scores: dict[str, np.ndarray], y: np.ndarray) -> dict[str, Any]:
+    """How much of each system's ranking is "which host" rather than "which
+    window"?
+
+    Both corpora put every attack group's positives on a single host, so an
+    aggregate AP cannot separate recognising a family's behaviour from
+    recognising the machine it ran on. Collapsing every score to its host's
+    mean keeps only identity; restricting to the hosts that carry positives
+    keeps only timing. A system whose host-mean ROC is ~1.0 and whose
+    within-host ROC is ~0.5 has learned the host.
+
+    Reported per system rather than computed afterwards because the scores,
+    the labels and the host ids are all in hand here and nowhere else.
+    Within-host ROC is prevalence-independent and so comparable across splits
+    and datasets; the lift is not, and the base rate is reported beside it.
+    """
+    from nidra.scripts.silent_positive_audit import floor_stratum_probe
+
+    out: dict[str, Any] = {}
+    every_row = np.ones(len(y), dtype=bool)
+    for name, s in scores.items():
+        try:
+            p = floor_stratum_probe(s, y, ev.arrays.host_id, every_row)
+        except Exception as exc:
+            # A reporting block, not a result. It is about to run unattended
+            # over the whole cross-dataset matrix, and a diagnostic that can
+            # fail an evaluation run is worse than a missing column.
+            logger.warning("host/timing decomposition skipped for %s: %s", name, exc)
+            continue
+        out[name] = {"ap": p.ap, "roc": p.roc, "host_mean_ap": p.host_mean_ap, "host_mean_roc": p.host_mean_roc,
+                     "n_positive_hosts": p.n_positive_hosts, "within_host_rows": p.within_host_rows,
+                     "within_host_prevalence": p.within_host_prevalence, "within_host_ap": p.within_host_ap,
+                     "within_host_lift": p.within_host_lift, "within_host_roc": p.within_host_roc,
+                     "is_host_identity": p.is_host_identity}
+    return out
+
+
 def load_models(cfg: dict, seeds: list[int]) -> list[WorldModel]:
     weights_dir = resolve_path(cfg, cfg["artifacts"]["weights_dir"])
     models = []
@@ -358,6 +395,7 @@ def run(cfg: dict, split: str, seeds: list[int], n_samples: int, out_dir: Path, 
         "task_C_progression": _progression(ev, bundle, applied["risk_k_calibrated"], threshold),
         "per_attack_group": _per_attack_group(ev, scores, y_pub, threshold, bundle, X_scaled, Y_scaled,
                                               scaler.model_mask, cfg.get("dataset", {}).get("days")),
+        "host_identity_published_label": _host_identity(ev, scores, y_pub),
         "attribution_published_label": _attribution(ev, scores, y_pub, n_resamples),
         "attribution_detection": _attribution(ev, scores, y_det, n_resamples),
         "state_forecast": state_forecast_report(

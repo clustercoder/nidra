@@ -1,0 +1,412 @@
+{
+  "stage": "head_ablation",
+  "recorded_at": "2026-09-22T23:41:34Z",
+  "git_commit": "05458199f0b1b201acd7c369342dc070d5a8d04e",
+  "config_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/combined_heads__prep/config.yaml",
+  "config_hash": "5574a9d1e086c1f1",
+  "schema_version": "1.0",
+  "n_features": 45,
+  "geometry": {
+    "window_seconds": 60,
+    "context_length_L": 30,
+    "horizon_length_K": 6,
+    "history_minutes": 30.0,
+    "horizon_minutes": 6.0,
+    "min_windows_per_host": 36
+  },
+  "dataset": {
+    "name": "CIC-IDS2017 (TrafficLabelling CSVs + project tshark packet parquet) + CTU-13 (Argus binetflow, flow-only)",
+    "flow_timebase": "utc12h",
+    "feature_regime": "cross_core",
+    "ctu13_internal_cidrs": [
+      "147.32.0.0/16"
+    ],
+    "days": {
+      "monday": {
+        "role": "benign_baseline",
+        "format": "cicflowmeter",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Monday-WorkingHours.pcap_ISCX.csv",
+          "bytes": 268649908,
+          "mtime": "2017-08-10T17:15:46Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Monday-WorkingHours_packets.parquet",
+          "bytes": 147461456,
+          "mtime": "2026-09-07T11:19:48Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/monday__w60__Monday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 8259248,
+          "mtime": "2026-09-19T18:52:53Z"
+        }
+      },
+      "tuesday": {
+        "role": "train",
+        "format": "cicflowmeter",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Tuesday-WorkingHours.pcap_ISCX.csv",
+          "bytes": 174696560,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Tuesday-WorkingHours_packets.parquet",
+          "bytes": 144575051,
+          "mtime": "2026-09-11T05:53:26Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/tuesday__w60__Tuesday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 6761403,
+          "mtime": "2026-09-19T18:54:48Z"
+        }
+      },
+      "wednesday": {
+        "role": "train",
+        "format": "cicflowmeter",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Wednesday-workingHours.pcap_ISCX.csv",
+          "bytes": 285642925,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Wednesday-workingHours_packets.parquet",
+          "bytes": 167783673,
+          "mtime": "2026-09-11T06:00:54Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/wednesday__w60__Wednesday-workingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 6930474,
+          "mtime": "2026-09-19T18:56:55Z"
+        }
+      },
+      "thursday_web": {
+        "role": "holdout",
+        "format": "cicflowmeter",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv",
+          "bytes": 92030223,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Thursday-WorkingHours_packets.parquet",
+          "bytes": 117663088,
+          "mtime": "2026-09-11T06:06:08Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/thursday_web__w60__Thursday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 2526113,
+          "mtime": "2026-09-19T18:58:13Z"
+        }
+      },
+      "thursday_infiltration": {
+        "role": "holdout",
+        "format": "cicflowmeter",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv",
+          "bytes": 108723183,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Thursday-WorkingHours_packets.parquet",
+          "bytes": 117663088,
+          "mtime": "2026-09-11T06:06:08Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/thursday_infiltration__w60__Thursday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 3190235,
+          "mtime": "2026-09-19T18:59:38Z"
+        }
+      },
+      "friday_morning": {
+        "role": "test",
+        "format": "cicflowmeter",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Morning.pcap_ISCX.csv",
+          "bytes": 75386737,
+          "mtime": "2017-08-17T14:16:06Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/friday_morning__w60__Friday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 2676780,
+          "mtime": "2026-09-19T19:00:56Z"
+        }
+      },
+      "friday_portscan": {
+        "role": "test",
+        "format": "cicflowmeter",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv",
+          "bytes": 101874777,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/friday_portscan__w60__Friday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 1810713,
+          "mtime": "2026-09-19T19:02:06Z"
+        }
+      },
+      "friday_ddos": {
+        "role": "test",
+        "format": "cicflowmeter",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv",
+          "bytes": 96101069,
+          "mtime": "2018-06-07T16:33:50Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/friday_ddos__w60__Friday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 892035,
+          "mtime": "2026-09-19T19:03:04Z"
+        }
+      },
+      "ctu_1": {
+        "role": "train",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/1/capture20110810.binetflow",
+          "bytes": 386629271,
+          "mtime": "2014-07-18T08:32:58Z"
+        },
+        "packets_parquet": null,
+        "family": "neris",
+        "scenario": 1,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_1__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 3913615,
+          "mtime": "2026-09-22T19:29:09Z"
+        }
+      },
+      "ctu_2": {
+        "role": "train",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/2/capture20110811.binetflow",
+          "bytes": 247231783,
+          "mtime": "2014-07-18T08:32:52Z"
+        },
+        "packets_parquet": null,
+        "family": "neris",
+        "scenario": 2,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_2__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 2698498,
+          "mtime": "2026-09-22T19:27:33Z"
+        }
+      },
+      "ctu_3": {
+        "role": "train",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/3/capture20110812.binetflow",
+          "bytes": 639643247,
+          "mtime": "2014-07-18T08:34:21Z"
+        },
+        "packets_parquet": null,
+        "family": "rbot",
+        "scenario": 3,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_3__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 16096482,
+          "mtime": "2026-09-22T19:35:51Z"
+        }
+      },
+      "ctu_4": {
+        "role": "val",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/4/capture20110815.binetflow",
+          "bytes": 153789874,
+          "mtime": "2014-07-18T08:33:46Z"
+        },
+        "packets_parquet": null,
+        "family": "rbot",
+        "scenario": 4,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_4__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 2647798,
+          "mtime": "2026-09-22T19:28:07Z"
+        }
+      },
+      "ctu_6": {
+        "role": "val",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/6/capture20110816.binetflow",
+          "bytes": 76780048,
+          "mtime": "2014-07-18T13:45:15Z"
+        },
+        "packets_parquet": null,
+        "family": "menti",
+        "scenario": 6,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_6__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 1446807,
+          "mtime": "2026-09-22T19:26:52Z"
+        }
+      },
+      "ctu_8": {
+        "role": "test",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/8/capture20110816-3.binetflow",
+          "bytes": 403955463,
+          "mtime": "2014-07-18T08:35:16Z"
+        },
+        "packets_parquet": null,
+        "family": "murlo",
+        "scenario": 8,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_8__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 6587364,
+          "mtime": "2026-09-22T19:32:57Z"
+        }
+      },
+      "ctu_9": {
+        "role": "test",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/9/capture20110817.binetflow",
+          "bytes": 285841002,
+          "mtime": "2014-07-18T08:42:06Z"
+        },
+        "packets_parquet": null,
+        "family": "neris",
+        "scenario": 9,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_9__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 3574796,
+          "mtime": "2026-09-22T19:30:37Z"
+        }
+      },
+      "ctu_10": {
+        "role": "test",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/10/capture20110818.binetflow",
+          "bytes": 179074339,
+          "mtime": "2014-07-18T08:35:09Z"
+        },
+        "packets_parquet": null,
+        "family": "rbot",
+        "scenario": 10,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_10__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 3154480,
+          "mtime": "2026-09-22T19:29:47Z"
+        }
+      },
+      "ctu_13": {
+        "role": "holdout",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/13/capture20110815-3.binetflow",
+          "bytes": 262668288,
+          "mtime": "2014-07-18T08:36:03Z"
+        },
+        "packets_parquet": null,
+        "family": "virut",
+        "scenario": 13,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_13__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 4485724,
+          "mtime": "2026-09-22T19:31:34Z"
+        }
+      },
+      "ctu_12": {
+        "role": "holdout",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/12/capture20110819.binetflow",
+          "bytes": 44718958,
+          "mtime": "2014-07-18T08:35:17Z"
+        },
+        "packets_parquet": null,
+        "family": "nsis_ay",
+        "scenario": 12,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_12__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 829203,
+          "mtime": "2026-09-22T19:26:34Z"
+        }
+      }
+    }
+  },
+  "seed": null,
+  "ensemble_seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "split": null,
+  "threshold": 0.75,
+  "pooling": null,
+  "calibration": null,
+  "checkpoints": {
+    "weights": {
+      "seed_0": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/combined_heads__prep/artifacts/weights/model_seed_0.pt",
+        "sha256": "15b9930307b930d70801852280ffead1dd16f6ed6fc61a3190b3acc0b174a8f0"
+      },
+      "seed_1": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/combined_heads__prep/artifacts/weights/model_seed_1.pt",
+        "sha256": null
+      },
+      "seed_2": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/combined_heads__prep/artifacts/weights/model_seed_2.pt",
+        "sha256": null
+      },
+      "seed_3": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/combined_heads__prep/artifacts/weights/model_seed_3.pt",
+        "sha256": null
+      },
+      "seed_4": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/combined_heads__prep/artifacts/weights/model_seed_4.pt",
+        "sha256": null
+      }
+    },
+    "scaler": {
+      "robust_scaler.joblib": null,
+      "feature_scaler.json": "bb3fbbc38576292cc3808008cb00ae4d69f8be9b5d24e6f45962e3cd2095cea1",
+      "scaler_metadata.json": "2e74760a8856e0605c10338e4262e2431c02768ae9b75bc6917b8b784b873799",
+      "shap_background.npy": "79d7b5c53f375f92e2495a234716f4e4998014acac1d37837398d06be173e20d"
+    },
+    "calibration": {
+      "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/combined_heads__prep/artifacts/weights/risk_calibration.json",
+      "sha256": null
+    }
+  },
+  "platform": {
+    "python": "3.14.7",
+    "machine": "arm64",
+    "system": "Darwin"
+  },
+  "metrics": null,
+  "label": "combined_heads",
+  "init_from": "comb_dyn",
+  "variants": [
+    "state",
+    "state+hidden"
+  ],
+  "seeds": [
+    0
+  ],
+  "context_length": 30,
+  "seconds": 987.8
+}

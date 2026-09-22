@@ -171,6 +171,38 @@ def attack_group_table(m: dict, split: str) -> str:
     return "\n".join(lines)
 
 
+def host_identity_table(m: dict, split: str) -> str:
+    """Per system: is the ranking the host, or the moment?
+
+    Both corpora put each attack group's positives on one host, so an
+    aggregate AP cannot tell those apart. Within-host ROC can, and it is
+    prevalence-independent, so it is the column to compare across splits and
+    datasets. Within-host lift is not comparable that way — the base rate
+    beside it differs — and is shown for reading a single row, not for
+    ranking rows against each other.
+    """
+    hi = m.get("host_identity_published_label") or {}
+    if not hi:
+        return f"_{split}: no host/timing decomposition in this benchmark_"
+    lines = ["| system | AP | ROC | host-mean ROC | positive hosts | within-host base rate | "
+             "within-host AP | within-host lift | within-host ROC | verdict |",
+             "|---|---|---|---|---|---|---|---|---|---|"]
+    for name in SYSTEM_ORDER:
+        if name not in hi:
+            continue
+        h = hi[name]
+        lift = _f(h.get("within_host_lift"), 2)
+        verdict = "**host identity**" if h.get("is_host_identity") else "carries timing signal"
+        lines.append(f"| {name} | {_f(h.get('ap'))} | {_f(h.get('roc'))} | {_f(h.get('host_mean_roc'), 4)} | "
+                     f"{h.get('n_positive_hosts', '—')} | {_f(h.get('within_host_prevalence'), 4)} | "
+                     f"{_f(h.get('within_host_ap'))} | {lift if lift == '—' else lift + '×'} | "
+                     f"{_f(h.get('within_host_roc'), 4)} | {verdict} |")
+    lines += ["", "Within-host ROC is the column that survives the single-host confound: it asks, on the "
+                  "infected host alone, whether the system orders the attack windows above that host's "
+                  "own benign ones."]
+    return "\n".join(lines)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", required=True, help="run dir holding artifacts/metrics/<split>/benchmark.json, or the metrics dir itself")
@@ -189,7 +221,8 @@ def main() -> None:
         sections += [f"### Systems — {split}", systems_table(m, split), "", f"### Attribution — {split}", attribution_table(m, split), "",
                      f"### Horizon — {split}", horizon_table(m, split), "", f"### Onset forecasting — {split}", onset_table(m, split), "",
                      f"### Episodes — {split}", episode_table(m, split), "",
-                     f"### Per attack group — {split}", attack_group_table(m, split), ""]
+                     f"### Per attack group — {split}", attack_group_table(m, split), "",
+                     f"### Host identity vs timing — {split}", host_identity_table(m, split), ""]
     text = "\n".join(sections)
     if args.out:
         Path(args.out).write_text(text)

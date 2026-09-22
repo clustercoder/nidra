@@ -106,3 +106,26 @@ def test_attack_group_table_without_single_host_groups_has_no_footnote():
 def test_attack_group_table_handles_a_benchmark_without_groups():
     from nidra.scripts.report_tables import attack_group_table
     assert "no per-group breakdown" in attack_group_table({}, "test")
+
+
+def test_host_identity_table_reports_the_within_host_column():
+    """The decomposition's whole point is that aggregate AP cannot separate
+    'learned the family' from 'learned the host'; the table has to carry the
+    column that can."""
+    from nidra.scripts.report_tables import host_identity_table
+    m = {"host_identity_published_label": {
+        "world_model": {"ap": 0.489, "roc": 0.744, "host_mean_roc": 0.9995, "n_positive_hosts": 2,
+                        "within_host_prevalence": 0.7579, "within_host_ap": 0.8951,
+                        "within_host_lift": 1.18, "within_host_roc": 0.6621, "is_host_identity": False},
+        "persistence": {"ap": 0.3, "roc": 0.6, "host_mean_roc": 0.999, "n_positive_hosts": 2,
+                        "within_host_prevalence": 0.7579, "within_host_ap": 0.76,
+                        "within_host_lift": 1.0, "within_host_roc": 0.50, "is_host_identity": True}}}
+    md = host_identity_table(m, "val")
+    assert "0.6621" in md and "1.18×" in md
+    assert "**host identity**" in md and "carries timing signal" in md
+    assert "Within-host ROC" in md
+
+
+def test_host_identity_table_handles_a_benchmark_without_it():
+    from nidra.scripts.report_tables import host_identity_table
+    assert "no host/timing decomposition" in host_identity_table({}, "test")
