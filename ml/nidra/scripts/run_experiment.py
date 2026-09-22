@@ -28,7 +28,7 @@ from typing import Any
 import torch
 import yaml
 
-from nidra.utils.config import PROJECT_ROOT, load_config
+from nidra.utils.config import PROJECT_ROOT, load_config, resolve_path
 from nidra.utils.provenance import experiment_record, write_json
 
 logger = logging.getLogger(__name__)

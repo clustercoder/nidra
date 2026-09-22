@@ -65,7 +65,7 @@ def summarise(rows: list[dict]) -> dict:
     def stat(key):
         v = np.array([r[key] for r in rows if np.isfinite(r.get(key, np.nan))], dtype="float64")
         return {"mean": float(v.mean()), "sd": float(v.std()), "n": int(len(v))} if len(v) else None
-    return {k: stat(k) for k in ("share_recent", "mean_age_min", "drop_top", "drop_random_mean",
+    return {k: stat(k) for k in ("share_recent", "mean_age_min", "drop_top_m", "drop_random_m_mean",
                                  "beats_random_fraction", "forecast_score")}
 
 
@@ -81,7 +81,7 @@ def comparison_markdown(per_run: dict[str, dict], n_origins: int, split: str) ->
         return "—" if not s else f"{s['mean']:.{nd}f} ± {s['sd']:.{nd}f}"
     for label, s in per_run.items():
         out.append(f"| {label} | {f(s['forecast_score'])} | {f(s['share_recent'])} | {f(s['mean_age_min'], 1)} | "
-                   f"{f(s['drop_top'])} | {f(s['drop_random_mean'])} | {f(s['beats_random_fraction'], 2)} |")
+                   f"{f(s['drop_top_m'])} | {f(s['drop_random_m_mean'])} | {f(s['beats_random_fraction'], 2)} |")
     return "\n".join(out)
 
 

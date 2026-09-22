@@ -385,3 +385,37 @@ negative result; `logvar` is not adopted.
 
 Adding `delta` costs another 0.006 on top of that. Nothing beyond
 `state+hidden` earns its parameters.
+
+### 3.5 Does the history-aware head actually use history? (§27)
+
+The ablation says the hidden state is worth +0.061 AP. That is a claim about a
+number. Integrated gradients through the rollout back to the input history
+answer the mechanism question: 24 highest-risk validation origins, the same
+origins for every head, `reports/tables/ctu_explanation_comparison.md`.
+
+| head | share of \|attribution\| in the last 5 of 30 windows | attribution-weighted mean age | drop from deleting the top-8 cells | drop from 8 random cells | beats random |
+|---|---|---|---|---|---|
+| `state` | 0.631 ± 0.341 | 6.1 ± 5.9 min | 0.579 ± 0.490 | 0.006 ± 0.020 | 0.75 |
+| `hidden` | 0.342 ± 0.252 | 11.2 ± 4.9 min | 0.100 ± 0.270 | 0.005 ± 0.023 | 0.45 |
+| `state+hidden` | 0.368 ± 0.244 | 11.4 ± 4.5 min | 0.055 ± 0.199 | 0.000 ± 0.000 | 0.67 |
+
+Uniform attribution over a 30-window history would be 0.167 recent and 14.5
+minutes of mean age.
+
+**Yes — and it is not a small effect.** The Run 8 head puts 63% of its
+attribution in the last five minutes of a thirty-minute history and has a mean
+attribution age of 6 minutes. The history-aware heads put 34–37% there and
+reach back 11 minutes. They are not a per-state head with extra parameters;
+they read roughly twice as far into the past.
+
+**The cost is that they are harder to explain with a short list.** Deleting the
+eight highest-attributed cells of 1,350 collapses the Run 8 head's forecast by
+0.579 — its score depends on a handful of cells — and moves the history-aware
+heads by 0.100 and 0.055. That is diffuse dependence rather than unfaithful
+attribution, but it has a practical consequence: a top-8 explanation of a
+history-aware forecast is a much weaker statement, and for `hidden` alone the
+top-8 beats a random 8 only 45% of the time, which is no better than chance.
+`state+hidden` retains 67%, another reason to prefer it over `hidden`.
+
+This is reported as a property of the selected model, not as a selection
+signal — no head was chosen on it.

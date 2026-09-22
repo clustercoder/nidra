@@ -46,9 +46,9 @@ class TestTemporalProfile:
 
 class TestSummary:
     def _rows(self):
-        return [{"share_recent": 0.4, "mean_age_min": 8.0, "drop_top": 0.2, "drop_random_mean": 0.05,
+        return [{"share_recent": 0.4, "mean_age_min": 8.0, "drop_top_m": 0.2, "drop_random_m_mean": 0.05,
                  "beats_random_fraction": 0.9, "forecast_score": 0.7},
-                {"share_recent": 0.6, "mean_age_min": 6.0, "drop_top": 0.3, "drop_random_mean": 0.05,
+                {"share_recent": 0.6, "mean_age_min": 6.0, "drop_top_m": 0.3, "drop_random_m_mean": 0.05,
                  "beats_random_fraction": 1.0, "forecast_score": 0.8}]
 
     def test_it_averages_each_statistic(self):
