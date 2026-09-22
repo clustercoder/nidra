@@ -52,7 +52,7 @@ def prepared(tmp_path, monkeypatch):
 
     fits: list[int] = []
     real_fit = td.fit_scaler
-    monkeypatch.setattr(td, "fit_scaler", lambda arrays: (fits.append(1), real_fit(arrays))[1])
+    monkeypatch.setattr(td, "fit_scaler", lambda arrays, **kw: (fits.append(1), real_fit(arrays, **kw))[1])
     # The SHAP background is not what these tests are about.
     monkeypatch.setattr(td, "build_shap_background", lambda x, n_centroids: x[:n_centroids])
     monkeypatch.setattr(td, "save_background", lambda *a, **k: None)

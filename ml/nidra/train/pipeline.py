@@ -12,11 +12,12 @@ import numpy as np
 import pandas as pd
 
 from nidra.data.dataset import WindowedArrays, build_windowed_arrays
+from nidra.data.ctu_load import CTU_INTERNAL_CIDRS, load_binetflow
 from nidra.data.flow_load import load_cicflowmeter_csv
 from nidra.data.join import build_day_inputs
 from nidra.data.labels import attach_risk_label, label_stage_table, reattach_risk_label
 from nidra.data.normalize import FeatureScaler
-from nidra.data.schema import CONTEXT_LENGTH, FEATURE_INDEX, HORIZON_LENGTH, WINDOW_SECONDS
+from nidra.data.schema import CONTEXT_LENGTH, FEATURE_INDEX, HORIZON_LENGTH, WINDOW_SECONDS, regime_kinds
 from nidra.data.splits import SplitResult, assert_no_episode_leakage, assert_no_temporal_overlap, build_splits
 from nidra.data.windowize import CIC2017_TIMEBASE_TAG, FUSION_TAG, windowize_day
 from nidra.utils.config import resolve_path
@@ -24,9 +25,39 @@ from nidra.utils.config import resolve_path
 logger = logging.getLogger(__name__)
 
 
+#: Flow formats this pipeline can read. `cicflowmeter` is CIC-IDS2017's
+#: published CSV; `ctu_binetflow` is CTU-13's Argus bidirectional NetFlow
+#: (nidra/data/ctu_load.py). Both land on the same internal columns, so
+#: everything after the loader is shared.
+FLOW_FORMATS = ("cicflowmeter", "ctu_binetflow")
+
+#: Label taxonomy that goes with each format by default (labels.py).
+_DEFAULT_DIALECT = {"cicflowmeter": "cic", "ctu_binetflow": "ctu"}
+
+
+def day_format(day_meta: dict) -> str:
+    """The flow format of one config day entry, defaulting to the CIC-IDS2017
+    CSV so every existing config keeps working untouched."""
+    fmt = str(day_meta.get("format", "cicflowmeter"))
+    if fmt not in FLOW_FORMATS:
+        raise ValueError(f"unknown flow format {fmt!r}; expected one of {FLOW_FORMATS}")
+    return fmt
+
+
+def _load_raw_flows(path: Path, flow_format: str, row_cap: int | None,
+                    internal_cidrs: tuple[str, ...] | None):
+    if flow_format == "cicflowmeter":
+        return load_cicflowmeter_csv(path, row_cap=row_cap)
+    if flow_format == "ctu_binetflow":
+        return load_binetflow(path, row_cap=row_cap, internal_cidrs=internal_cidrs)
+    raise ValueError(f"unknown flow format {flow_format!r}; expected one of {FLOW_FORMATS}")
+
+
 def load_and_label_day(flow_csv_path: str | Path, window_seconds: int, min_windows_per_host: int,
                         packets_parquet_path: str | Path | None = None, row_cap: int | None = None,
-                        cache_path: str | Path | None = None, horizon_k: int = HORIZON_LENGTH) -> pd.DataFrame:
+                        cache_path: str | Path | None = None, horizon_k: int = HORIZON_LENGTH,
+                        flow_format: str = "cicflowmeter", label_dialect: str | None = None,
+                        internal_cidrs: tuple[str, ...] | None = CTU_INTERNAL_CIDRS) -> pd.DataFrame:
     """Full per-day pipeline: load CSV -> join/window -> windowize -> label.
     `packets_parquet_path` is optional; when absent, the day runs in
     flow-only mode (packet features zero-filled, logged). `row_cap` bounds
@@ -50,12 +81,20 @@ def load_and_label_day(flow_csv_path: str | Path, window_seconds: int, min_windo
         logger.info("load_and_label_day: using cached labelled table %s", cache_path)
         return pd.read_parquet(cache_path)
 
-    raw, report = load_cicflowmeter_csv(flow_csv_path, row_cap=row_cap)
+    if flow_format not in FLOW_FORMATS:
+        raise ValueError(f"unknown flow format {flow_format!r}; expected one of {FLOW_FORMATS}")
+    dialect = label_dialect or _DEFAULT_DIALECT[flow_format]
+    raw, report = _load_raw_flows(Path(flow_csv_path), flow_format, row_cap, internal_cidrs)
     packets_raw = pd.read_parquet(packets_parquet_path) if packets_parquet_path else pd.DataFrame()
 
-    flows_w, packets_w = build_day_inputs(raw, packets_raw, window_seconds)
+    # CTU-13's Argus records already carry a true epoch and none of the
+    # CIC-IDS2017 CSV clock defects, so neither correction is applied to them.
+    flows_w, packets_w = build_day_inputs(
+        raw, packets_raw, window_seconds,
+        timestamp_is_epoch=(flow_format == "ctu_binetflow"),
+    )
     states = windowize_day(flows_w, packets_w, window_seconds, min_windows_per_host)
-    stage_table, label_report = label_stage_table(flows_w)
+    stage_table, label_report = label_stage_table(flows_w, dialect=dialect)
     if label_report["unmapped_labels"]:
         logger.warning("load_and_label_day: unmapped raw labels in %s: %s", flow_csv_path, label_report["unmapped_labels"])
     labelled = attach_risk_label(states, stage_table, horizon_k=horizon_k, window_seconds=window_seconds)
@@ -85,8 +124,18 @@ def declared_packets_tag(day_meta: dict) -> str:
     return Path(packets).name if packets else FLOW_ONLY_TAG
 
 
+def host_scope_tag(internal_cidrs: tuple[str, ...] | None) -> str:
+    """Cache-key tag for the monitored-network host filter. A table built
+    over the whole Internet-facing source population is a different table
+    from one built over 147.32.0.0/16, with the same day key."""
+    if not internal_cidrs:
+        return "allhosts"
+    return "_".join(str(c).replace("/", "-") for c in internal_cidrs)
+
+
 def day_cache_path(processed_dir: str | Path, day_key: str, windowing_cfg: dict,
-                    row_cap: int | None, packets_tag: str) -> Path:
+                    row_cap: int | None, packets_tag: str,
+                    flow_format: str = "cicflowmeter", host_scope: str | None = None) -> Path:
     """Cache key encodes everything that changes the resulting table: the
     window length, packet availability (a day gains real packet features the
     moment its PCAP is extracted — the cache must not keep serving the old
@@ -103,9 +152,15 @@ def day_cache_path(processed_dir: str | Path, day_key: str, windowing_cfg: dict,
     every geometry. The Δ=30 tables (`__m36__...utc12h.parquet`, no fusion
     tag) are kept under the old key as the historical record; this loader
     does not read them."""
+    if flow_format == "cicflowmeter":
+        # Unchanged key: the Δ=60 CIC tables already on disk must keep hitting.
+        return Path(processed_dir) / (
+            f"{day_key}__w{windowing_cfg['window_seconds']}"
+            f"__{packets_tag}__cap{row_cap}__{CIC2017_TIMEBASE_TAG}__{FUSION_TAG}.parquet"
+        )
     return Path(processed_dir) / (
-        f"{day_key}__w{windowing_cfg['window_seconds']}"
-        f"__{packets_tag}__cap{row_cap}__{CIC2017_TIMEBASE_TAG}__{FUSION_TAG}.parquet"
+        f"{day_key}__{flow_format}__w{windowing_cfg['window_seconds']}"
+        f"__{packets_tag}__cap{row_cap}__{host_scope or 'allhosts'}__{FUSION_TAG}.parquet"
     )
 
 
@@ -125,6 +180,27 @@ def _resolve_packets_path(dataset_cfg: dict, day_meta: dict, day_key: str) -> Pa
                         path, day_key)
         return None
     return path
+
+
+#: Which dataset a format belongs to, for the `source_dataset` column that
+#: lets a combined CIC+CTU split still be reported per dataset.
+_DATASET_OF_FORMAT = {"cicflowmeter": "cic2017", "ctu_binetflow": "ctu13"}
+
+
+def _flow_dirs(dataset_cfg: dict) -> dict[str, Path]:
+    """Base directory for each flow format present in the config. A format
+    that no day uses need not be configured."""
+    dirs: dict[str, Path] = {}
+    if dataset_cfg.get("cic2017_flow_dir"):
+        dirs["cicflowmeter"] = Path(dataset_cfg["cic2017_flow_dir"]).expanduser()
+    if dataset_cfg.get("ctu13_dir"):
+        dirs["ctu_binetflow"] = Path(dataset_cfg["ctu13_dir"]).expanduser()
+    needed = {day_format(m) for m in dataset_cfg.get("days", {}).values()}
+    missing = needed - set(dirs)
+    if missing:
+        keys = {"cicflowmeter": "cic2017_flow_dir", "ctu_binetflow": "ctu13_dir"}
+        raise KeyError(f"cfg['dataset'] must set {[keys[m] for m in sorted(missing)]} for the configured days")
+    return dirs
 
 
 def geometry_from_config(cfg: dict) -> tuple[int, int, int]:
@@ -160,24 +236,25 @@ def build_all_splits(cfg: dict) -> SplitResult:
     min_windows = int(windowing_cfg.get("min_windows_per_host", L + K))
     if min_windows < L + K:
         raise ValueError(f"windowing.min_windows_per_host={min_windows} is below L+K={L + K}; no sample could be built")
-    raw_dir = dataset_cfg.get("cic2017_flow_dir")
-    if raw_dir is None:
-        raise KeyError("cfg['dataset'] must set 'cic2017_flow_dir'")
-    flow_dir = Path(raw_dir).expanduser()
+    flow_dirs = _flow_dirs(dataset_cfg)
+    internal_cidrs = tuple(dataset_cfg.get("ctu13_internal_cidrs", CTU_INTERNAL_CIDRS) or ())
+    host_scope = host_scope_tag(internal_cidrs)
     row_cap = dataset_cfg.get("mvp_row_cap_per_day")
     processed_dir = cfg.get("artifacts", {}).get("processed_dir")
     processed_dir = resolve_path(cfg, processed_dir) if processed_dir else None
 
     day_tables: dict[str, pd.DataFrame] = {}
     for day_key, day_meta in dataset_cfg["days"].items():
-        csv_path = flow_dir / day_meta["file"]
+        fmt = day_format(day_meta)
+        csv_path = flow_dirs[fmt] / day_meta["file"]
         # Resolution order matters. A cache written under the DECLARED packet
         # tag is authoritative and needs no raw inputs at all — this is what
         # lets a clone run evaluation with only the committed
         # artifacts/processed/ tables. Only on a cache miss do we fall back
         # to recomputing, which does require the raw CSV.
         declared_cache = (
-            day_cache_path(processed_dir, day_key, windowing_cfg, row_cap, declared_packets_tag(day_meta))
+            day_cache_path(processed_dir, day_key, windowing_cfg, row_cap, declared_packets_tag(day_meta),
+                           flow_format=fmt, host_scope=host_scope)
             if processed_dir is not None else None
         )
         if declared_cache is not None and declared_cache.exists():
@@ -187,6 +264,7 @@ def build_all_splits(cfg: dict) -> SplitResult:
                 min_windows_per_host=1,
                 cache_path=declared_cache,
                 horizon_k=K,
+                flow_format=fmt,
             )
             continue
 
@@ -202,7 +280,8 @@ def build_all_splits(cfg: dict) -> SplitResult:
         # the declared tag when the packet parquet is missing locally — a
         # degraded flow-only table must never land under a full-feature key.
         actual_tag = Path(packets_parquet_path).name if packets_parquet_path else FLOW_ONLY_TAG
-        cache_path = (day_cache_path(processed_dir, day_key, windowing_cfg, row_cap, actual_tag)
+        cache_path = (day_cache_path(processed_dir, day_key, windowing_cfg, row_cap, actual_tag,
+                                     flow_format=fmt, host_scope=host_scope)
                       if processed_dir is not None else None)
         day_tables[day_key] = load_and_label_day(
             csv_path,
@@ -212,6 +291,8 @@ def build_all_splits(cfg: dict) -> SplitResult:
             row_cap=row_cap,
             cache_path=cache_path,
             horizon_k=K,
+            flow_format=fmt,
+            internal_cidrs=internal_cidrs or None,
         )
 
     # The cached table is unfiltered and K-agnostic: apply this config's
@@ -220,7 +301,17 @@ def build_all_splits(cfg: dict) -> SplitResult:
     # table was cached under.
     for day_key in list(day_tables):
         table = _filter_min_windows(day_tables[day_key], min_windows)
-        day_tables[day_key] = reattach_risk_label(table, K) if not table.empty else table
+        if not table.empty:
+            table = reattach_risk_label(table, K)
+            # Which capture each row came from, so the validation block is
+            # carved per capture rather than per calendar date (several CTU
+            # scenarios share a date) and so per-source reporting is possible
+            # once two datasets are concatenated.
+            table = table.assign(
+                split_group=day_key,
+                source_dataset=str(dataset_cfg["days"][day_key].get("dataset", _DATASET_OF_FORMAT[day_format(dataset_cfg["days"][day_key])])),
+            )
+        day_tables[day_key] = table
 
     splits_cfg = cfg["splits"]
     splits = build_splits(
@@ -238,17 +329,42 @@ def build_all_splits(cfg: dict) -> SplitResult:
     return splits
 
 
-def fit_scaler(train_arrays: WindowedArrays) -> FeatureScaler:
+def training_dataset_tag(cfg: dict) -> str:
+    """Which datasets this config's TRAIN days come from, e.g. `cic2017`,
+    `ctu13`, or `cic2017+ctu13`. Part of the scaler's identity: normalizing
+    a combined training population with a single-dataset scaler is a silent
+    error, not a loud one."""
+    days = cfg.get("dataset", {}).get("days", {})
+    train_keys = cfg.get("splits", {}).get("train_days", [])
+    tags = sorted({
+        str(days[k].get("dataset", _DATASET_OF_FORMAT[day_format(days[k])]))
+        for k in train_keys if k in days
+    })
+    return "+".join(tags) if tags else "unknown"
+
+
+def feature_regime(cfg: dict) -> str:
+    """Which feature regime this run uses (schema.FEATURE_REGIMES). `full`
+    unless the config says otherwise, so every existing config is unchanged."""
+    return str(cfg.get("features", {}).get("regime", "full"))
+
+
+def fit_scaler(train_arrays: WindowedArrays, regime: str = "full") -> FeatureScaler:
     """Fit the FeatureScaler on the TRAIN split's raw states only — both the
     history (X) and future targets (Y) come from the same underlying state
     table, so fitting on the union of both is still "training period only";
     it is never fit on val/test/holdout arrays. Statistics are computed on
     active windows (see normalize.py); the sampled training windows contain
-    ~98% silent rows and a scaler fit on those was the identity."""
+    ~98% silent rows and a scaler fit on those was the identity.
+
+    `regime` declares the cross-dataset feature subset (schema.regime_kinds).
+    Declaring it here rather than at each model call site means the choice is
+    serialized with the scaler and cannot be lost between training and
+    serving."""
     all_train_states = np.concatenate([train_arrays.X.reshape(-1, train_arrays.X.shape[-1]),
                                         train_arrays.Y.reshape(-1, train_arrays.Y.shape[-1])], axis=0)
     active = all_train_states[:, FEATURE_INDEX["is_active"]] > 0
-    return FeatureScaler().fit(all_train_states, active_mask=active)
+    return FeatureScaler(kinds=regime_kinds(regime)).fit(all_train_states, active_mask=active)
 
 
 def scale_arrays(arrays: WindowedArrays, scaler: FeatureScaler) -> tuple[np.ndarray, np.ndarray]:

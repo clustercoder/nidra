@@ -8,7 +8,7 @@ time block is held out for validation — never a random sample — with the
 cutoff nudged earlier if it would otherwise cut through a live attack
 episode.
 
-The trailing block is taken PER TRAINING DAY (`per_day=True`, the default
+The trailing block is taken PER TRAINING CAPTURE (`per_day=True`, the default
 from the Δ=60 rebuild on): the training days are consecutive calendar days,
 so a single trailing fraction of the concatenated timeline is just the end
 of the last day — for CIC-IDS2017 that was the last ~3.5 hours of
@@ -79,6 +79,24 @@ def capture_day(window_ts: pd.Series) -> pd.Series:
     return (window_ts.astype("int64") // 86_400).astype("int64")
 
 
+def block_group(df: pd.DataFrame) -> pd.Series:
+    """Which contiguous capture each row belongs to, for per-capture
+    validation blocking.
+
+    `split_group` (the config day key, attached in train.pipeline) when the
+    table carries it, otherwise the UTC calendar day. The distinction only
+    matters once more than one capture can share a calendar date, which
+    CIC-IDS2017 never does and CTU-13 does three times over (scenarios 4, 5
+    and 13 all start on 2011-08-15; 6, 7 and 8 on 08-16; 10 and 11 on
+    08-18). Blocking those by date would hand a whole scenario to
+    validation and leave its neighbour entirely in train — a partition by
+    capture, not the trailing-time-block partition the split is supposed to
+    be."""
+    if "split_group" in df.columns:
+        return df["split_group"].astype(str)
+    return capture_day(df["window_ts"]).astype(str)
+
+
 DEFAULT_PRE_ONSET_MARGIN_S = 1800  # the 30-minute pre-onset span the benchmark evaluates lead time on
 
 
@@ -124,9 +142,9 @@ def temporal_train_val_split(train_df: pd.DataFrame, val_fraction: float,
         val_part = train_df[train_df["window_ts"] >= cutoff].reset_index(drop=True)
         return train_part, val_part
 
-    days = capture_day(train_df["window_ts"])
+    days = block_group(train_df)
     is_val = np.zeros(len(train_df), dtype=bool)
-    for day in np.unique(days):
+    for day in pd.unique(days):
         mask = (days == day).to_numpy()
         cutoff = _trailing_block_cutoff(train_df.loc[mask], val_fraction, pre_onset_margin_s)
         is_val |= mask & (train_df["window_ts"].to_numpy() >= cutoff)

@@ -236,6 +236,10 @@ artifacts/*
 # Raw CIC-IDS2017 dataset (CSVs + PCAPs) and any tshark-extracted parquet — large,
 # not a repository deliverable. See REAL_DATA_RESULTS.md for how to obtain it.
 cicids2017/
+# CTU-13: 74GB of captures and 2.7GB of Argus binetflow, plus live malware
+# binaries the release ships alongside each scenario. Never committed, never
+# executed — only the .binetflow files are read (nidra/data/ctu_load.py).
+CTU-13-Dataset/
 *.parquet
 
 # ---------------------------------------------------------------- frontend --

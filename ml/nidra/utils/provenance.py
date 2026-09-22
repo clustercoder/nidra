@@ -51,32 +51,50 @@ def dataset_version(cfg: dict, hash_processed: bool = True) -> dict[str, Any]:
     the declared packet parquet, and the content hash of every cached
     windowed table actually used (those are small and are the thing the
     model reads)."""
-    from nidra.train.pipeline import day_cache_path, declared_packets_tag
+    from nidra.data.ctu_load import CTU_INTERNAL_CIDRS
+    from nidra.train.pipeline import (_flow_dirs, day_cache_path, day_format, declared_packets_tag,
+                                       host_scope_tag)
     from nidra.utils.config import resolve_path
 
     dataset_cfg = cfg.get("dataset")
     if not dataset_cfg or "days" not in dataset_cfg:
         return {"name": "unspecified (no dataset block in config)", "flow_timebase": _flow_timebase_tag(), "days": {}}
-    flow_dir = Path(dataset_cfg["cic2017_flow_dir"]).expanduser()
-    packets_dir = Path(dataset_cfg.get("packets_dir") or dataset_cfg["cic2017_flow_dir"]).expanduser()
+    flow_dirs = _flow_dirs(dataset_cfg)
+    packets_dir = Path(dataset_cfg.get("packets_dir") or dataset_cfg.get("cic2017_flow_dir") or ".").expanduser()
     processed_dir = resolve_path(cfg, cfg.get("artifacts", {}).get("processed_dir", "artifacts/processed"))
     row_cap = dataset_cfg.get("mvp_row_cap_per_day")
+    internal_cidrs = tuple(dataset_cfg.get("ctu13_internal_cidrs", CTU_INTERNAL_CIDRS) or ())
+    host_scope = host_scope_tag(internal_cidrs)
 
     days: dict[str, Any] = {}
+    sources: set[str] = set()
     for day_key, day_meta in dataset_cfg["days"].items():
+        fmt = day_format(day_meta)
+        sources.add(fmt)
         entry: dict[str, Any] = {
             "role": day_meta.get("role"),
-            "flow_csv": file_stat(flow_dir / day_meta["file"]),
+            "format": fmt,
+            "flow_file": file_stat(flow_dirs[fmt] / day_meta["file"]),
             "packets_parquet": file_stat(packets_dir / day_meta["packets"]) if day_meta.get("packets") else None,
         }
-        cache = day_cache_path(processed_dir, day_key, cfg["windowing"], row_cap, declared_packets_tag(day_meta))
+        if fmt == "ctu_binetflow":
+            entry["family"] = day_meta.get("family")
+            entry["scenario"] = day_meta.get("scenario")
+        cache = day_cache_path(processed_dir, day_key, cfg["windowing"], row_cap, declared_packets_tag(day_meta),
+                                flow_format=fmt, host_scope=host_scope)
         entry["processed_table"] = file_stat(cache)
         if hash_processed and cache.exists():
             entry["processed_table_sha256"] = file_digest(cache)
         days[day_key] = entry
+    names = {
+        "cicflowmeter": "CIC-IDS2017 (TrafficLabelling CSVs + project tshark packet parquet)",
+        "ctu_binetflow": "CTU-13 (Argus binetflow, flow-only)",
+    }
     return {
-        "name": "CIC-IDS2017 (TrafficLabelling CSVs + project tshark packet parquet)",
+        "name": " + ".join(names[s] for s in sorted(sources)) or "unspecified",
         "flow_timebase": _flow_timebase_tag(),
+        "feature_regime": cfg.get("features", {}).get("regime", "full"),
+        "ctu13_internal_cidrs": list(internal_cidrs),
         "days": days,
     }
 

@@ -1,0 +1,444 @@
+{
+  "label": "run9-ctu13",
+  "written_utc": "2026-09-22T19:29:00Z",
+  "git": {
+    "head": "ad1430c3e0f8999c93d60fd3f0d954a19924276b",
+    "branch": "research/run9-ctu13",
+    "baseline_ref": "baseline-run8",
+    "baseline_sha": "ad1430c3e0f8999c93d60fd3f0d954a19924276b",
+    "worktree_clean": false,
+    "tags": [
+      "baseline-delta30-run7",
+      "baseline-run8"
+    ]
+  },
+  "environment": {
+    "python": "3.14.7",
+    "executable": "/Users/manteksinghburn/nidra/ml/.venv/bin/python",
+    "packages": {
+      "numpy": "2.5.3",
+      "pandas": "3.0.5",
+      "scikit-learn": "1.9.1",
+      "scipy": "1.18.1",
+      "pyarrow": "25.0.1",
+      "shap": "0.52.0",
+      "matplotlib": "3.11.2",
+      "pyyaml": "6.0.3"
+    }
+  },
+  "hardware": {
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "processor": "Apple M1",
+    "logical_cpus": "8",
+    "memory_bytes": "17179869184",
+    "torch": "2.14.0",
+    "torch_mps_available": true,
+    "torch_cuda_available": false,
+    "torch_default_threads": 4
+  },
+  "configs": {
+    "config/default.yaml": {
+      "config_hash": "cb9b625e1bc3565c",
+      "lineage": [
+        "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/config/default.yaml"
+      ],
+      "feature_regime": "full",
+      "train_days": [
+        "monday",
+        "tuesday",
+        "wednesday"
+      ],
+      "test_days": [
+        "friday_morning",
+        "friday_portscan",
+        "friday_ddos"
+      ],
+      "holdout_days": [
+        "thursday_web",
+        "thursday_infiltration"
+      ]
+    },
+    "config/ctu13.yaml": {
+      "config_hash": "6a3581e1d59c0e62",
+      "lineage": [
+        "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/config/default.yaml",
+        "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/config/ctu13.yaml"
+      ],
+      "feature_regime": "cross_core",
+      "train_days": [
+        "ctu_1",
+        "ctu_2",
+        "ctu_3"
+      ],
+      "test_days": [
+        "ctu_4",
+        "ctu_6",
+        "ctu_7",
+        "ctu_8",
+        "ctu_9",
+        "ctu_10",
+        "ctu_11"
+      ],
+      "holdout_days": [
+        "ctu_5",
+        "ctu_13",
+        "ctu_12"
+      ]
+    }
+  },
+  "raw_datasets": {
+    "config/default.yaml": {
+      "monday": {
+        "format": "cicflowmeter",
+        "role": "benign_baseline",
+        "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Monday-WorkingHours.pcap_ISCX.csv",
+        "bytes": 268649908,
+        "mtime": "2017-08-10T17:15:46Z",
+        "sha256": "96f26aea87d513073769b48ce204c2921791149e1c6225f7db65a3fed7973820",
+        "packets": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Monday-WorkingHours_packets.parquet",
+          "bytes": 147461456,
+          "mtime": "2026-09-07T11:19:48Z",
+          "sha256": "521b83c409739910e68e8a0abe98ab494cc9f7f5689ac9cd42fbab23e25938c0"
+        }
+      },
+      "tuesday": {
+        "format": "cicflowmeter",
+        "role": "train",
+        "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Tuesday-WorkingHours.pcap_ISCX.csv",
+        "bytes": 174696560,
+        "mtime": "2017-08-17T14:16:02Z",
+        "sha256": "ae9c88e10c41a8eb1ff454ae98bc513454925097d0b0b57180f94e79de445815",
+        "packets": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Tuesday-WorkingHours_packets.parquet",
+          "bytes": 144575051,
+          "mtime": "2026-09-11T05:53:26Z",
+          "sha256": "80bfede59bfe61283faa60f79eb64cd29a3a8fd2e83eed1dfe46e092623ce75f"
+        }
+      },
+      "wednesday": {
+        "format": "cicflowmeter",
+        "role": "train",
+        "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Wednesday-workingHours.pcap_ISCX.csv",
+        "bytes": 285642925,
+        "mtime": "2017-08-17T14:16:02Z",
+        "sha256": "ed538e85b84181e8897dedb3d37d365982f44b27eccd67c477581a8b65f3d170",
+        "packets": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Wednesday-workingHours_packets.parquet",
+          "bytes": 167783673,
+          "mtime": "2026-09-11T06:00:54Z",
+          "sha256": "518ceed413ca9dbfc3ed0bdd09fe91dabebda4e813f844f221c4f43654ffe75d"
+        }
+      },
+      "thursday_web": {
+        "format": "cicflowmeter",
+        "role": "holdout",
+        "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv",
+        "bytes": 92030223,
+        "mtime": "2017-08-17T14:16:02Z",
+        "sha256": "e3deaff483d18b53b100a441dff9b8919416df8876b4edcc0f0d1e4bf48397d0",
+        "packets": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Thursday-WorkingHours_packets.parquet",
+          "bytes": 117663088,
+          "mtime": "2026-09-11T06:06:08Z",
+          "sha256": "0e4af3476a670dd0698aa81355056d4d6c2016e76fe3c8e6d701e078eb9f101c"
+        }
+      },
+      "thursday_infiltration": {
+        "format": "cicflowmeter",
+        "role": "holdout",
+        "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv",
+        "bytes": 108723183,
+        "mtime": "2017-08-17T14:16:02Z",
+        "sha256": "d74238e054023c8bd4d8056650463cadb25c100fb0e26ebd4272c07b5c022c4b",
+        "packets": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Thursday-WorkingHours_packets.parquet",
+          "bytes": 117663088,
+          "mtime": "2026-09-11T06:06:08Z",
+          "sha256": "0e4af3476a670dd0698aa81355056d4d6c2016e76fe3c8e6d701e078eb9f101c"
+        }
+      },
+      "friday_morning": {
+        "format": "cicflowmeter",
+        "role": "test",
+        "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Morning.pcap_ISCX.csv",
+        "bytes": 75386737,
+        "mtime": "2017-08-17T14:16:06Z",
+        "sha256": "c061cd98f39d8054aeaed6244a5129a20b3985983d0d022b860ae8aa07fe8d21",
+        "packets": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z",
+          "sha256": "984de220a21234f43bafb461aa3cf8f21ce0de5a1c92fe082b5add92bc148f71"
+        }
+      },
+      "friday_portscan": {
+        "format": "cicflowmeter",
+        "role": "test",
+        "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv",
+        "bytes": 101874777,
+        "mtime": "2017-08-17T14:16:02Z",
+        "sha256": "7e2ddaa80a5849ba629463296b6128436c161b4a32e8034bb5beae06b0c45e08",
+        "packets": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z",
+          "sha256": "984de220a21234f43bafb461aa3cf8f21ce0de5a1c92fe082b5add92bc148f71"
+        }
+      },
+      "friday_ddos": {
+        "format": "cicflowmeter",
+        "role": "test",
+        "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv",
+        "bytes": 96101069,
+        "mtime": "2018-06-07T16:33:50Z",
+        "sha256": "1f779b4f0d78f9225554c4de53b5a2c07912b60dcd136ee4c5c1d0d2496b7cc4",
+        "packets": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z",
+          "sha256": "984de220a21234f43bafb461aa3cf8f21ce0de5a1c92fe082b5add92bc148f71"
+        }
+      }
+    },
+    "config/ctu13.yaml": {
+      "ctu_1": {
+        "format": "ctu_binetflow",
+        "role": "train",
+        "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/1/capture20110810.binetflow",
+        "bytes": 386629271,
+        "mtime": "2014-07-18T08:32:58Z",
+        "sha256": "d5fafadc606100b3dc4080dbf851a40d78c522c222576a0bcc375cbf13e0c106"
+      },
+      "ctu_2": {
+        "format": "ctu_binetflow",
+        "role": "train",
+        "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/2/capture20110811.binetflow",
+        "bytes": 247231783,
+        "mtime": "2014-07-18T08:32:52Z",
+        "sha256": "366b87099b5cbbf41b7464eefccc224b10497101a4597f4f5dab6b8259aa3cf8"
+      },
+      "ctu_3": {
+        "format": "ctu_binetflow",
+        "role": "train",
+        "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/3/capture20110812.binetflow",
+        "bytes": 639643247,
+        "mtime": "2014-07-18T08:34:21Z",
+        "sha256": "a5e7311e25ff280e302ee5786b1aabf48dacfa6edaf25412f3aa1adbe1006039"
+      },
+      "ctu_4": {
+        "format": "ctu_binetflow",
+        "role": "test",
+        "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/4/capture20110815.binetflow",
+        "bytes": 153789874,
+        "mtime": "2014-07-18T08:33:46Z",
+        "sha256": "a2feb2d6253c2560fbffdfcc3e92b6c9235f1ea7c43a5f8d7902d7e352e84171"
+      },
+      "ctu_6": {
+        "format": "ctu_binetflow",
+        "role": "test",
+        "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/6/capture20110816.binetflow",
+        "bytes": 76780048,
+        "mtime": "2014-07-18T13:45:15Z",
+        "sha256": "b1b49932c7ce0c4e344431fbc229e4f91be06772abfe7a2e6e7d4b0d439d61d7"
+      },
+      "ctu_7": {
+        "format": "ctu_binetflow",
+        "role": "test",
+        "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/7/capture20110816-2.binetflow",
+        "bytes": 15630512,
+        "mtime": "2014-07-18T08:34:10Z",
+        "sha256": "f224baab443b56b2f0812cf2f9cdbb0f118b8af70095c196d9ead6a92c72ef0f"
+      },
+      "ctu_8": {
+        "format": "ctu_binetflow",
+        "role": "test",
+        "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/8/capture20110816-3.binetflow",
+        "bytes": 403955463,
+        "mtime": "2014-07-18T08:35:16Z",
+        "sha256": "c2ff96c8908f1b24b2ff9dc2033ca9fd034b994f3a59e0cc4f1f53a0615c4ec0"
+      },
+      "ctu_9": {
+        "format": "ctu_binetflow",
+        "role": "test",
+        "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/9/capture20110817.binetflow",
+        "bytes": 285841002,
+        "mtime": "2014-07-18T08:42:06Z",
+        "sha256": "7974f3cb3f4b707d7543194b6cd96c52af804d4a11aad2645036fd6f3e635abe"
+      },
+      "ctu_10": {
+        "format": "ctu_binetflow",
+        "role": "test",
+        "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/10/capture20110818.binetflow",
+        "bytes": 179074339,
+        "mtime": "2014-07-18T08:35:09Z",
+        "sha256": "8ae44d50e48fdff5b810b741b7824999ccf474081676562a54aa2b23d55d556f"
+      },
+      "ctu_11": {
+        "format": "ctu_binetflow",
+        "role": "test",
+        "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/11/capture20110818-2.binetflow",
+        "bytes": 14596615,
+        "mtime": "2014-07-18T08:35:01Z",
+        "sha256": "d761b4513ee42be57193fe8f442e9234e73ac81f4fbd01248e37c23ca8ec1cf2"
+      },
+      "ctu_5": {
+        "format": "ctu_binetflow",
+        "role": "holdout",
+        "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/5/capture20110815-2.binetflow",
+        "bytes": 17766203,
+        "mtime": "2014-07-18T08:33:42Z",
+        "sha256": "ec67980705e59d794eb2cea5a39d6ea23507a531036e1a8a6cc16c8985d15da9"
+      },
+      "ctu_13": {
+        "format": "ctu_binetflow",
+        "role": "holdout",
+        "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/13/capture20110815-3.binetflow",
+        "bytes": 262668288,
+        "mtime": "2014-07-18T08:36:03Z",
+        "sha256": "a4dbb317f53eaaef2538d1cc1cd228bda3743a84779032601d5762742c4daad1"
+      },
+      "ctu_12": {
+        "format": "ctu_binetflow",
+        "role": "holdout",
+        "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/12/capture20110819.binetflow",
+        "bytes": 44718958,
+        "mtime": "2014-07-18T08:35:17Z",
+        "sha256": "615e28233cb3c494b74c1016af940394c2765df9a285413256e65b0ebd11bbca"
+      }
+    }
+  },
+  "baseline_artifacts": {
+    "weights_dir": {
+      "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/weights",
+      "files": {
+        ".gitkeep": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "gru_classifier.pt": {
+          "bytes": 107247,
+          "sha256": "24a46410cd3df061482e345636f471c924068e33370f7270359c2a6850cbd2f5"
+        },
+        "gru_classifier.pt.json": {
+          "bytes": 1063,
+          "sha256": "3ebcd08f29f3aad477dd0d9394c70ce7866c178e049743b9525f009ea5abedff"
+        },
+        "model_seed_0.pt": {
+          "bytes": 1186801,
+          "sha256": "93e41bcf1c31a2e801711bb5cced73cf5b4f5f9e3c2f2e7425d317dcf7d14305"
+        },
+        "model_seed_0_metadata.json": {
+          "bytes": 39485,
+          "sha256": "9f900efa42b85e650458110c36b15ee004c1e2eb93091880a7b8e0fd856b49df"
+        },
+        "model_seed_1.pt": {
+          "bytes": 1186801,
+          "sha256": "ac6d5e83015d0f6c5c104f21b00d2f504b0cb5ddef36f27b3f514f8b0b8dbb15"
+        },
+        "model_seed_1_metadata.json": {
+          "bytes": 39425,
+          "sha256": "0575f2324cf3cf3f0b2c80ab153f79ecaabbfb51da8ccb34c989f5faeab66ac8"
+        },
+        "model_seed_2.pt": {
+          "bytes": 1186801,
+          "sha256": "fbd58d64810522fe1530f285541bc2d455661fbe63ab2d35c7d65b53ebc74291"
+        },
+        "model_seed_2_metadata.json": {
+          "bytes": 35302,
+          "sha256": "73cf0b2525c213646ecdc948caca06cfc17fcac14c4d9751520883eff13a7b7c"
+        },
+        "model_seed_3.pt": {
+          "bytes": 1186801,
+          "sha256": "1a4c2fe7ea88511040577f242bc529839db9fb4672c52afae407909fe05c1bea"
+        },
+        "model_seed_3_metadata.json": {
+          "bytes": 44258,
+          "sha256": "d439c12f556fca3cfd51d5aa6f7051dccc59be710368d00ffd4c79416d44c584"
+        },
+        "model_seed_4.pt": {
+          "bytes": 1186801,
+          "sha256": "f29868df1e581413b326d5524db66dc81412a2f0c71fc2a8aed04117fcaa7f1e"
+        },
+        "model_seed_4_metadata.json": {
+          "bytes": 39450,
+          "sha256": "e14ae5c2da6c4cb3524e94e7aa2ac743a066d21ca56bd0acb105a119fb4cfd56"
+        },
+        "onset_head_seed_0.pt": {
+          "bytes": 16001,
+          "sha256": "71cbbc7ad2d9a390d7c5f5d0d70235025b45ebaa62caae9c8e53bf3f267223b5"
+        },
+        "onset_head_seed_0.pt.json": {
+          "bytes": 3308,
+          "sha256": "634667e689b99c316ec52bcce04ac481c423e93941d550e57ec9e7ec888a03c0"
+        },
+        "onset_head_seed_1.pt": {
+          "bytes": 16001,
+          "sha256": "04fe871beb989acf1835a1392f351414cbae578ed8960d10efa507e0114ba979"
+        },
+        "onset_head_seed_1.pt.json": {
+          "bytes": 3302,
+          "sha256": "9bf68906ce8382cfd0b07d1bc9c1c7b18323282b665a1c4265c417d4150f88aa"
+        },
+        "onset_head_seed_2.pt": {
+          "bytes": 16001,
+          "sha256": "5be3d038f23bef76f599fbf84275a3bcfebd8fbbf02157d2070a31cd695e9cc1"
+        },
+        "onset_head_seed_2.pt.json": {
+          "bytes": 3289,
+          "sha256": "5281aea570aeaf5d73419025b8f4e81b854d78764687b7e1756c8819a95cde7e"
+        },
+        "onset_head_seed_3.pt": {
+          "bytes": 16001,
+          "sha256": "c1dda44f005d7cb50913bd34e7c030fe2267d4f6b8ad1a90cd28b8695ede3205"
+        },
+        "onset_head_seed_3.pt.json": {
+          "bytes": 3300,
+          "sha256": "90aced8162c616aee1cda08be20722302b67c79121466948b672539b76a4c8cd"
+        },
+        "onset_head_seed_4.pt": {
+          "bytes": 16001,
+          "sha256": "23fa7907f258e0a688a6e2498869992502088bb83cfb8dfd2f4ed9d9c89c95f0"
+        },
+        "onset_head_seed_4.pt.json": {
+          "bytes": 6981,
+          "sha256": "358a7e0c185d8b88f1ce199e63f02d85ec5afc590b597257005efb536dda5334"
+        },
+        "operating_point.json": {
+          "bytes": 3992,
+          "sha256": "790282a860397640c3f27742a2739e6bd213ca8882a29fc88a557e0b3799a469"
+        }
+      }
+    },
+    "scaler_dir": {
+      "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/scaler",
+      "files": {
+        ".gitkeep": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "feature_scaler.json": {
+          "bytes": 3439,
+          "sha256": "10af73ab97c2fbfea072da4946046e7179f5713ba77904e4c133a102f4365120"
+        },
+        "preprocessing_audit.json": {
+          "bytes": 47922,
+          "sha256": "51e667d4b5423ae2aeb4c8cfbc01b595528b5f900bee93d924a16913c7fe761d"
+        },
+        "preprocessing_audit.md": {
+          "bytes": 5138,
+          "sha256": "7105a4a719ec2ca3cc3b9a9a50c3ef77e0b766fd1db50bc85955f23a1db5c0eb"
+        },
+        "scaler_metadata.json": {
+          "bytes": 4851,
+          "sha256": "411b0c4ecdaaa76b25bfb5fe6f18c7932563cd667ba3b4ab6141c405a62c1ba0"
+        },
+        "shap_background.npy": {
+          "bytes": 18128,
+          "sha256": "30c76d19b5a44f502c169a73288909a5c6b5c21b80ac9fbeeeb8507b4c4ed42c"
+        }
+      }
+    }
+  }
+}

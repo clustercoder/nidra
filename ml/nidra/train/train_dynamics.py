@@ -26,7 +26,8 @@ from nidra.data.windowize import CIC2017_TIMEBASE_TAG
 from nidra.explain.shap_runner import build_shap_background, save_background
 from nidra.models.world_model import WorldModel
 from nidra.train.losses import dynamics_loss, free_running_metrics, teacher_forcing_schedule
-from nidra.train.pipeline import build_all_splits, fit_scaler, geometry_from_config, scale_arrays
+from nidra.train.pipeline import (build_all_splits, feature_regime, fit_scaler, geometry_from_config,
+                                   scale_arrays, training_dataset_tag)
 from nidra.utils.config import load_config, resolve_path
 from nidra.utils.seed import set_seed
 
@@ -51,7 +52,7 @@ def resolve_sample_caps(cfg: dict, max_train_samples: int | None,
     return resolved_train, resolved_val
 
 
-def _scaler_matches_data(meta_path: Path) -> bool:
+def _scaler_matches_data(meta_path: Path, regime: str = "full", dataset_tag: str = "cic2017") -> bool:
     """Is a saved scaler safe to reuse for the data now in hand?
 
     Reuse across ENSEMBLE SEEDS is required — five members must share one input
@@ -74,6 +75,18 @@ def _scaler_matches_data(meta_path: Path) -> bool:
         return False
     found = meta.get("flow_timebase")
     method = meta.get("method")
+    # A scaler is also specific to the feature regime it was fit under and to
+    # the training POPULATION it was fit on: a CIC-only scaler reused for a
+    # CIC+CTU run would normalize CTU states by CIC's statistics with nothing
+    # to show for it in any log line.
+    if meta.get("feature_regime", "full") != regime:
+        logger.warning("scaler at %s was fit under feature regime %r, this run is %r — refitting",
+                        meta_path, meta.get("feature_regime", "full"), regime)
+        return False
+    if meta.get("training_datasets", "cic2017") != dataset_tag:
+        logger.warning("scaler at %s was fit on %r, this run trains on %r — refitting",
+                        meta_path, meta.get("training_datasets", "cic2017"), dataset_tag)
+        return False
     if found == CIC2017_TIMEBASE_TAG and method == SCALER_METHOD_TAG:
         return True
     if method != SCALER_METHOD_TAG:
@@ -113,14 +126,19 @@ def prepare_training_data(cfg: dict, max_train_samples: int | None, max_val_samp
     }
 
     scaler_path, meta_path = FeatureScaler.default_paths(scaler_dir)
-    if scaler_path.exists() and meta_path.exists() and _scaler_matches_data(meta_path):
+    regime = feature_regime(cfg)
+    dataset_tag = training_dataset_tag(cfg)
+    if scaler_path.exists() and meta_path.exists() and _scaler_matches_data(meta_path, regime, dataset_tag):
         logger.info("loading existing scaler (fit once across the ensemble, never refit per seed)")
         scaler = FeatureScaler.load(scaler_path, meta_path)
     else:
-        logger.info("fitting scaler on TRAIN split only (%d train samples)", len(windowed["train"].X))
-        scaler = fit_scaler(windowed["train"])
+        logger.info("fitting scaler on TRAIN split only (%d train samples, regime=%s, datasets=%s)",
+                    len(windowed["train"].X), regime, dataset_tag)
+        scaler = fit_scaler(windowed["train"], regime=regime)
         scaler.save(scaler_path, meta_path, extra_metadata={
             "n_train_samples": int(len(windowed["train"].X)),
+            "feature_regime": regime,
+            "training_datasets": dataset_tag,
             "flow_timebase": CIC2017_TIMEBASE_TAG,
             "config_hash": cfg.get("_config_hash"),
             "git_commit": cfg.get("_git_commit"),

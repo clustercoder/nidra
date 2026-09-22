@@ -168,3 +168,72 @@ def validate_state_array_width(width: int) -> None:
             f"State array width {width} does not match FEATURE_ORDER length "
             f"{len(FEATURE_ORDER)}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Cross-dataset feature regimes
+# ---------------------------------------------------------------------------
+# NIDRA trains on two datasets with different flow instrumentation, and the
+# 45-feature state is not equally available in both. A REGIME is the named
+# answer to "which of the 45 may this experiment use", declared here once
+# rather than reconstructed at each call site.
+#
+# FEATURE_ORDER stays 45 wide — it is a cross-service contract — and the
+# excluded columns are declared `drop` in the FeatureScaler, which is the
+# mechanism the pipeline already has for a feature the model must never
+# read: the column is forced to 0 in scaled space and left out of
+# `model_mask`, so it contributes nothing to the dynamics loss, the state
+# metrics, or any head.
+#
+# What CTU-13's Argus binetflow cannot produce (see data/ctu_load.py):
+#   - the 11 packet aggregates. CTU-13 ships PCAPs, but the public ones
+#     contain ONLY the botnet's own traffic (the full captures were withheld
+#     for privacy), so deriving packet features from them would hand the
+#     model a perfect label: every host with packet data is the infected
+#     one. They are unavailable, not merely missing.
+#   - `iat_max`: Argus reports no per-packet timing, only a flow duration
+#     and a packet total, so a flow's maximum inter-arrival gap does not
+#     exist in the record.
+#   - `d_retrans_rate`: the backward delta of a packet-level feature.
+#
+# What it produces differently rather than not at all: the six TCP flag
+# ratios. CICFlowMeter counts how many packets carried each flag; Argus
+# records which flags were seen per direction. SYN/FIN/RST/URG agree closely
+# (about one per direction in a normal connection), ACK and PSH do not (a
+# bulk transfer carries thousands). `cross_strict` removes all eight
+# flag-derived columns; `cross_core` keeps them and the shift is measured
+# rather than assumed (data/dataset_shift.py).
+_PACKET_FEATURES_UNAVAILABLE_IN_CTU: list[str] = FEATURE_ORDER[15:26]
+_NO_PER_PACKET_TIMING: list[str] = ["iat_max", "d_retrans_rate"]
+_FLAG_SEMANTICS_DIFFER: list[str] = [
+    "syn_ratio", "ack_ratio", "rst_ratio", "fin_ratio", "psh_ratio", "urg_ratio",
+    "d_syn_ratio", "slope3_syn_ratio",
+]
+
+FEATURE_REGIMES: dict[str, list[str]] = {
+    # Everything. The within-dataset regime, and what Run 8 used.
+    "full": [],
+    # Every feature both datasets compute from the same underlying quantity,
+    # plus the flag ratios whose estimator differs. 32 features.
+    "cross_core": _PACKET_FEATURES_UNAVAILABLE_IN_CTU + _NO_PER_PACKET_TIMING,
+    # Only features with identical semantics in both. 24 features.
+    "cross_strict": _PACKET_FEATURES_UNAVAILABLE_IN_CTU + _NO_PER_PACKET_TIMING + _FLAG_SEMANTICS_DIFFER,
+}
+
+
+def regime_dropped_features(regime: str) -> list[str]:
+    """Feature names a regime excludes, in FEATURE_ORDER order."""
+    if regime not in FEATURE_REGIMES:
+        raise ValueError(f"unknown feature regime {regime!r}; expected one of {sorted(FEATURE_REGIMES)}")
+    excluded = set(FEATURE_REGIMES[regime])
+    unknown = excluded - set(FEATURE_ORDER)
+    if unknown:
+        raise ValueError(f"feature regime {regime!r} names features that are not in FEATURE_ORDER: {sorted(unknown)}")
+    return [f for f in FEATURE_ORDER if f in excluded]
+
+
+def regime_kinds(regime: str) -> list[str]:
+    """The per-feature transform list to construct a FeatureScaler with, so
+    that this regime's excluded features are declared drops."""
+    excluded = set(regime_dropped_features(regime))
+    return ["drop" if f in excluded else FEATURE_TRANSFORMS[f] for f in FEATURE_ORDER]

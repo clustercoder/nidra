@@ -68,30 +68,102 @@ _LABEL_RULES: list[tuple[re.Pattern, str]] = [
     (re.compile(r"benign", re.I), "benign"),
 ]
 
+# CTU-13's own taxonomy. Its `Label` column is a sentence, not a class name
+# ("flow=From-Botnet-V42-TCP-CC16-HTTP-Not-Encrypted"), and two of its
+# families of strings read like attacks under the CIC rules above:
+# `flow=Background-TCP-Attempt` carries the word that marks botnet scanning
+# and `flow=To-Background-CVUT-Proxy` carries a hostname. Only flows whose
+# label states the botnet as the SOURCE are attacks — CTU-13 labels every
+# such flow `From-Botnet` and there are no `To-Botnet` flows in the release
+# (verified across all 13 scenarios) — so the dialect is gated on that
+# prefix before any behaviour rule is consulted.
+#
+# The behaviour -> tactic mapping is curated PRESENTATION, the same standing
+# as the CIC one, and follows the same two conventions: flood/impact
+# behaviour lands in `exfil` (the closest terminal bucket among the six
+# frozen stages), and scanning lands in `recon`.
+_CTU_BOTNET_MARKER = re.compile(r"from-botnet", re.I)
+_CTU_RULES: list[tuple[re.Pattern, str]] = [
+    # command and control first: a CC channel is the defining botnet behaviour
+    (re.compile(r"\bcc\d*\b", re.I), "c2"),
+    (re.compile(r"\birc\b", re.I), "c2"),
+    # payload retrieval
+    (re.compile(r"binary-download", re.I), "initial_access"),
+    # monetisation / impact
+    (re.compile(r"spam", re.I), "exfil"),
+    (re.compile(r"http-ad", re.I), "exfil"),
+    (re.compile(r"click", re.I), "exfil"),
+    (re.compile(r"ddos", re.I), "exfil"),
+    (re.compile(r"icmp", re.I), "exfil"),
+    # scanning / failed connection sweeps
+    (re.compile(r"attempt", re.I), "recon"),
+    (re.compile(r"\bps\b", re.I), "recon"),
+]
+#: Anything labelled Botnet that matches no behaviour rule above is still an
+#: attack. A new sub-label must never be able to become a negative.
+_CTU_DEFAULT_ATTACK_STAGE = "c2"
 
-def map_label_to_stage(raw_label: str) -> str:
-    """Map one raw `Label` value (CIC-IDS2017, this project's actual
-    dataset; CSE-CIC-IDS2018 label strings are also matched but dormant —
-    see module docstring) to a curated tactic bucket. Unrecognized labels
-    fall back to 'benign' rather than raising, but this is logged upstream
-    via the unmapped-label report in `label_stage_table`.
+
+def map_label_to_stage(raw_label: str, dialect: str = "cic") -> str:
+    """Map one raw `Label` value to a curated tactic bucket.
+
+    `dialect` selects the label taxonomy: "cic" for CIC-IDS2017's class
+    names (the default; CSE-CIC-IDS2018 strings are also matched but
+    dormant — see module docstring), "ctu" for CTU-13's `flow=...`
+    sentences. The two are not interchangeable and there is no
+    auto-detection: a CTU label read under the CIC rules silently scores
+    every attack as benign, which is exactly the kind of quiet corruption
+    that shows up only as a suspiciously low prevalence.
+
+    Unrecognized labels fall back to 'benign' rather than raising, and are
+    surfaced by the unmapped-label report in `label_stage_table`.
     """
     label = str(raw_label).strip()
+    if dialect == "ctu":
+        if not _CTU_BOTNET_MARKER.search(label):
+            return "benign"
+        for pattern, stage in _CTU_RULES:
+            if pattern.search(label):
+                return stage
+        return _CTU_DEFAULT_ATTACK_STAGE
+    if dialect != "cic":
+        raise ValueError(f"unknown label dialect {dialect!r}; expected 'cic' or 'ctu'")
     for pattern, stage in _LABEL_RULES:
         if pattern.search(label):
             return stage
     return "benign"
 
 
-def label_stage_table(flows_windowed: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+def _label_is_recognised(label: str, dialect: str) -> bool:
+    """Whether any rule of this dialect actually matched, as opposed to the
+    value falling through to the benign default."""
+    text = str(label).strip()
+    if dialect == "ctu":
+        # A Background/Normal flow is a recognised negative, not an unmapped
+        # label; only a string that is neither botnet nor background is one.
+        return bool(
+            _CTU_BOTNET_MARKER.search(text)
+            or re.search(r"background|normal", text, re.I)
+        )
+    return any(p.search(text) for p, _ in _LABEL_RULES)
+
+
+def label_stage_table(flows_windowed: pd.DataFrame, dialect: str = "cic") -> tuple[pd.DataFrame, dict]:
     """Given windowed flow rows (host_id via src_ip, window_ts, label),
     return one row per (host_id, window_ts) with the most severe stage
     present in that window, plus a report of unmapped raw label strings.
+
+    `dialect` picks the label taxonomy — see `map_label_to_stage`.
     """
     df = flows_windowed.copy()
-    df["stage"] = df["label"].map(map_label_to_stage)
+    # One map() per DISTINCT label rather than per row: a CTU scenario
+    # carries millions of flows drawn from a few hundred label strings.
+    vocabulary = pd.unique(df["label"].astype(str))
+    stage_of = {v: map_label_to_stage(v, dialect=dialect) for v in vocabulary}
+    recognised = {v: _label_is_recognised(v, dialect) for v in vocabulary}
+    df["stage"] = df["label"].astype(str).map(stage_of)
 
-    matched = df["label"].apply(lambda l: any(p.search(str(l)) for p, _ in _LABEL_RULES))
+    matched = df["label"].astype(str).map(recognised)
     unmapped = sorted(df.loc[~matched, "label"].unique().tolist())
 
     severity = {name: i for i, name in enumerate(STAGE_LABELS)}  # benign=0 least severe

@@ -83,9 +83,9 @@ def test_load_and_label_day_caches_and_skips_recompute(tmp_path, monkeypatch):
         return pd.DataFrame({"label": ["BENIGN"]}), None
 
     monkeypatch.setattr(pipeline_mod, "load_cicflowmeter_csv", fake_load_csv)
-    monkeypatch.setattr(pipeline_mod, "build_day_inputs", lambda raw, packets, ws: (raw, packets))
+    monkeypatch.setattr(pipeline_mod, "build_day_inputs", lambda raw, packets, ws, **kw: (raw, packets))
     monkeypatch.setattr(pipeline_mod, "windowize_day", lambda flows_w, packets_w, ws, m: pd.DataFrame())
-    monkeypatch.setattr(pipeline_mod, "label_stage_table", lambda flows_w: (pd.DataFrame(), {"unmapped_labels": []}))
+    monkeypatch.setattr(pipeline_mod, "label_stage_table", lambda flows_w, **kw: (pd.DataFrame(), {"unmapped_labels": []}))
     monkeypatch.setattr(pipeline_mod, "attach_risk_label", lambda states, stage_table, horizon_k, window_seconds: labelled_stub)
 
     cache_path = tmp_path / "cache" / "day__cached.parquet"
