@@ -17,7 +17,7 @@ import torch
 import torch.nn as nn
 
 from nidra.models.encoder import Encoder
-from nidra.models.heads import RiskHead, StageHead
+from nidra.models.heads import RiskHead, StageHead, TrajectoryRiskHead
 from nidra.models.transition import Transition
 
 
@@ -26,6 +26,27 @@ class RolloutOutput:
     states: torch.Tensor        # [B, S, K, F] predicted states (S = n_samples)
     mus: torch.Tensor           # [B, S, K, F] per-step predicted deltas
     logvars: torch.Tensor       # [B, S, K, F] per-step predicted log-variances
+    hiddens: torch.Tensor       # [B, S, K, H] encoder state AFTER ingesting step k
+    anchor: torch.Tensor        # [B, S, F] the observed S_t the rollout started from
+
+    def realized_deltas(self) -> torch.Tensor:
+        """[B, S, K, F] backward difference of the trajectory itself,
+        states[k] - states[k-1], with states[-1] taken as the anchor S_t.
+
+        This, rather than `mus`, is what a trajectory head reads. Under a
+        stochastic rollout the realized change is mu + noise, and the head's
+        training pairs are observed backward differences — so using mu would
+        feed the head a quantity at inference that it never saw in training.
+        """
+        prev = torch.cat([self.anchor.unsqueeze(2), self.states[:, :, :-1, :]], dim=2)
+        return self.states - prev
+
+
+#: Where the next state of a rollout comes from. Persistence and the oracle
+#: are the same forward simulation with this one thing changed, so a
+#: comparison against them isolates the transition model rather than
+#: comparing two differently-wired systems. See eval/baselines.py.
+STATE_SOURCES = ("model", "persist", "truth")
 
 
 class WorldModel(nn.Module):
@@ -82,6 +103,8 @@ class WorldModel(nn.Module):
         K: int = 6,
         n_samples: int = 1,
         stochastic: bool = True,
+        state_source: str = "model",
+        truth: torch.Tensor | None = None,
     ) -> RolloutOutput:
         """x: [B, L, F] observed history (already scaled), oldest-first.
         Consumes NO data after the last window of x. Returns predicted
@@ -96,24 +119,60 @@ class WorldModel(nn.Module):
         saliency). Inference/eval call sites that don't need gradients
         (serving, baselines, ablations) wrap their own calls in
         `torch.no_grad()` instead — see eval/baselines.py.
+
+        `state_source` swaps out ONLY where the next state comes from, so
+        the two reference systems run through this identical code path:
+
+            "model"    S_hat[t+k] = S_hat[t+k-1] + mu  — the system under test
+            "persist"  S_hat[t+k] = S_t for every k    — the transition does
+                       nothing; the encoder still advances, so a
+                       history-aware head keeps its history and the only
+                       thing removed is the predicted change
+            "truth"    S_hat[t+k] = the observed S[t+k], from `truth`
+                       [B, >=K, F]  — the oracle upper bound
+
+        "truth" is the ONLY path that reads data after time t, and it exists
+        to bound head quality, never to produce a forecast. `truth` is
+        refused on any other source so no call site can leak one in.
         """
+        if state_source not in STATE_SOURCES:
+            raise ValueError(f"unknown state_source {state_source!r}; expected one of {STATE_SOURCES}")
+        if state_source == "truth":
+            if truth is None:
+                raise ValueError("state_source='truth' needs the observed future states in `truth`")
+            if truth.shape[1] < K:
+                raise ValueError(f"truth has {truth.shape[1]} steps but the rollout is {K} steps long")
+        elif truth is not None:
+            raise ValueError(f"state_source={state_source!r} must not be given `truth` — "
+                             "only the oracle may read data after time t")
         B = x.shape[0]
         if n_samples > 1:
             x_tiled = x.repeat_interleave(n_samples, dim=0)
         else:
             x_tiled = x
 
+        truth_tiled = None
+        if truth is not None:
+            truth_tiled = truth.repeat_interleave(n_samples, dim=0) if n_samples > 1 else truth
+
         h_t, h = self.encoder(x_tiled)
         cur = x_tiled[:, -1, :]
         prev = x_tiled[:, -2, :] if x_tiled.shape[1] > 1 else cur
+        anchor = x_tiled[:, -1, :]
 
-        traj, mus, logvars = [], [], []
-        for _ in range(K):
+        traj, mus, logvars, hiddens = [], [], [], []
+        for k in range(K):
             mu, logvar = self.transition(h_t, cur, prev)
-            nxt = cur + mu
-            if stochastic:
-                noise = torch.randn_like(mu) * (0.5 * logvar).exp()
-                nxt = nxt + noise
+            if state_source == "model":
+                nxt = cur + mu
+                if stochastic:
+                    noise = torch.randn_like(mu) * (0.5 * logvar).exp()
+                    nxt = nxt + noise
+            elif state_source == "persist":
+                nxt = anchor
+                mu = torch.zeros_like(mu)
+            else:
+                nxt = truth_tiled[:, k, :]
             nxt = nxt.clamp(-self.state_clamp, self.state_clamp)
 
             traj.append(nxt)
@@ -121,18 +180,73 @@ class WorldModel(nn.Module):
             logvars.append(logvar)
 
             h_t, h = self.encoder(nxt.unsqueeze(1), h)
+            hiddens.append(h_t)
             prev, cur = cur, nxt
 
+        anchor_out = x_tiled[:, -1, :]
         states = torch.stack(traj, dim=1)      # [B*S, K, F]
         mus_t = torch.stack(mus, dim=1)
         logvars_t = torch.stack(logvars, dim=1)
+        hiddens_t = torch.stack(hiddens, dim=1)
 
         BS = B * max(n_samples, 1)
-        states = states.reshape(B, BS // B, K, self.n_features)
-        mus_t = mus_t.reshape(B, BS // B, K, self.n_features)
-        logvars_t = logvars_t.reshape(B, BS // B, K, self.n_features)
+        S = BS // B
+        states = states.reshape(B, S, K, self.n_features)
+        mus_t = mus_t.reshape(B, S, K, self.n_features)
+        logvars_t = logvars_t.reshape(B, S, K, self.n_features)
+        hiddens_t = hiddens_t.reshape(B, S, K, hiddens_t.shape[-1])
+        anchor_out = anchor_out.reshape(B, S, self.n_features)
 
-        return RolloutOutput(states=states, mus=mus_t, logvars=logvars_t)
+        return RolloutOutput(states=states, mus=mus_t, logvars=logvars_t, hiddens=hiddens_t,
+                             anchor=anchor_out)
+
+    def score_trajectory(self, out: RolloutOutput) -> tuple[torch.Tensor, torch.Tensor]:
+        """Heads applied to a rollout, giving a trajectory-aware risk head the
+        context `score_states` cannot pass it.
+
+        With the default per-state `RiskHead` this is exactly
+        `score_states(out.states)` — every existing call site's numbers are
+        unchanged — and with a `TrajectoryRiskHead` it additionally passes the
+        hidden state, predicted delta and predicted log-variance of each step.
+        Returns (risk_prob [B,S,K], stage_probs [B,S,K,n_stages]).
+        """
+        stage_probs = torch.softmax(self.stage_head(out.states), dim=-1)
+        if isinstance(self.risk_head, TrajectoryRiskHead):
+            logits = self.risk_head(state=out.states, hidden=out.hiddens,
+                                    delta=out.realized_deltas(), logvar=out.logvars).squeeze(-1)
+        else:
+            logits = self.risk_head(out.states).squeeze(-1)
+        return torch.sigmoid(logits), stage_probs
+
+    def observed_context(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
+        """The trajectory-head inputs for the OBSERVED origin state of each
+        history window. x: [B, L, F] scaled history, oldest-first.
+
+        The exact quantities `train.head_context` builds for training, so a
+        head scores an observed state the same way in both places:
+        `hidden` is the encoder over all L windows, `delta` the observed
+        backward difference, `logvar` the transition's prediction for this
+        step conditioned on everything before it.
+        """
+        out, _ = self.encoder.gru(x)
+        h_prev = out[:, -2, :] if x.shape[1] >= 2 else torch.zeros_like(out[:, -1, :])
+        prev1 = x[:, -2, :] if x.shape[1] >= 2 else torch.zeros_like(x[:, -1, :])
+        prev2 = x[:, -3, :] if x.shape[1] >= 3 else torch.zeros_like(x[:, -1, :])
+        _, logvar = self.transition(h_prev, prev1, prev2)
+        return {"state": x[:, -1, :], "hidden": out[:, -1, :], "delta": x[:, -1, :] - prev1, "logvar": logvar}
+
+    def score_observed(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Heads applied to the observed state at the end of each history
+        window. x: [B, L, F]. Equal to `score_states(x[:, -1, :])` for a
+        per-state head; a trajectory head additionally gets the observed
+        context. Returns (risk_prob [B], stage_probs [B, n_stages])."""
+        stage_probs = torch.softmax(self.stage_head(x[:, -1, :]), dim=-1)
+        if isinstance(self.risk_head, TrajectoryRiskHead):
+            parts = self.observed_context(x)
+            logits = self.risk_head(**parts).squeeze(-1)
+        else:
+            logits = self.risk_head(x[:, -1, :]).squeeze(-1)
+        return torch.sigmoid(logits), stage_probs
 
     def score_states(self, states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Apply the (frozen, at inference time) heads to arbitrary states —

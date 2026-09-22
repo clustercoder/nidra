@@ -24,6 +24,7 @@ from nidra.data.preprocessing_audit import write_audit
 from nidra.data.schema import FEATURE_INDEX
 from nidra.data.windowize import CIC2017_TIMEBASE_TAG
 from nidra.explain.shap_runner import build_shap_background, save_background
+from nidra.models.build import world_model_from_config
 from nidra.models.world_model import WorldModel
 from nidra.train.losses import dynamics_loss, free_running_metrics, teacher_forcing_schedule
 from nidra.train.pipeline import (build_all_splits, feature_regime, fit_scaler, geometry_from_config,
@@ -258,20 +259,7 @@ def train_one_seed(cfg: dict, seed: int, epochs_override: int | None, windowed: 
     val_loader = DataLoader(val_ds, batch_size=tcfg["batch_size"], shuffle=False)
     feature_mask = torch.from_numpy(scaler.model_mask.astype("bool")).to(device)
 
-    model = WorldModel(
-        n_features=mcfg["n_features"],
-        hidden_size=mcfg["encoder"]["hidden_size"],
-        encoder_layers=mcfg["encoder"]["num_layers"],
-        encoder_dropout=mcfg["encoder"]["dropout"],
-        transition_mlp_hidden=mcfg["transition"]["mlp_hidden"],
-        logvar_min=mcfg["transition"]["logvar_min"],
-        logvar_max=mcfg["transition"]["logvar_max"],
-        risk_hidden=mcfg["risk_head"]["hidden"],
-        stage_hidden=mcfg["stage_head"]["hidden"],
-        n_stages=mcfg["stage_head"]["n_stages"],
-        state_clamp=mcfg["transition"]["state_clamp"],
-        linear_skip=bool(mcfg["transition"].get("linear_skip", False)),
-    ).to(device)
+    model = world_model_from_config(cfg).to(device)
 
     params = list(model.encoder.parameters()) + list(model.transition.parameters())
     optimizer = torch.optim.AdamW(params, lr=tcfg["lr"], weight_decay=tcfg["weight_decay"])

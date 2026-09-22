@@ -88,7 +88,7 @@ def _rollout_risk(models: list[WorldModel], X: torch.Tensor, K: int, n_samples: 
     for lo in range(0, N, chunk):
         xb = X[lo:lo + chunk]
         B = xb.shape[0]
-        all_states = []
+        all_states, own_risk = [], []
         for m in models:
             m.eval()
             if force_zero_mu or iso_sigma is not None:
@@ -108,16 +108,31 @@ def _rollout_risk(models: list[WorldModel], X: torch.Tensor, K: int, n_samples: 
             else:
                 out = m.rollout(xb, K=K, n_samples=n_samples, stochastic=True)
             all_states.append(out.states)                        # [B, S, K, F]
+            if _is_trajectory(m):
+                # A trajectory head reads its OWN encoder's hidden state, so
+                # the cross-member soft vote below is not defined for it:
+                # member i's head on member j's hidden state is a different
+                # encoder's coordinates. Each member scores its own rollout
+                # and the members are averaged over the sample axis instead,
+                # which keeps the output shape and the pooling semantics.
+                own_risk.append(m.score_trajectory(out)[0])       # [B, S, K]
         states = torch.cat(all_states, dim=1)                    # [B, M*S, K, F]
         S = states.shape[1]
-        flat = states.reshape(B * S, K, -1)
-        risks, stages = [], []
-        for m in models:
-            r, s = m.score_states(flat)
-            risks.append(r.reshape(B, S, K))
-            stages.append(s.reshape(B, S, K, -1))
-        risk_out.append(torch.stack(risks).mean(0).to(torch.float16).numpy())
-        stage_out.append(torch.stack(stages).mean(0).mean(1).numpy())
+        if own_risk:
+            risk_out.append(torch.cat(own_risk, dim=1).to(torch.float16).numpy())
+            with torch.no_grad():
+                stage_out.append(torch.softmax(models[0].stage_head(states), dim=-1).mean(1).numpy()
+                                 if len(models) == 1 else
+                                 torch.stack([torch.softmax(m.stage_head(states), dim=-1) for m in models]).mean(0).mean(1).numpy())
+        else:
+            flat = states.reshape(B * S, K, -1)
+            risks, stages = [], []
+            for m in models:
+                r, s = m.score_states(flat)
+                risks.append(r.reshape(B, S, K))
+                stages.append(s.reshape(B, S, K, -1))
+            risk_out.append(torch.stack(risks).mean(0).to(torch.float16).numpy())
+            stage_out.append(torch.stack(stages).mean(0).mean(1).numpy())
         std_out.append(states.std(dim=1).numpy())
     return np.concatenate(risk_out), np.concatenate(stage_out), np.concatenate(std_out)
 
@@ -137,16 +152,23 @@ def _deterministic(models: list[WorldModel], X: torch.Tensor, K: int, chunk: int
             s = out.states[:, 0]                                 # [B, K, F]
             st.append(s)
             lv.append(out.logvars[:, 0])
-            r, _ = m.score_states(s)
-            rk.append(r)
+            rk.append(m.score_trajectory(out)[0][:, 0])
         states_out.append(torch.stack(st).mean(0).numpy())
         risk_out.append(torch.stack(rk).mean(0).numpy())
         logvar_out.append(torch.stack(lv).mean(0).numpy())
     return np.concatenate(states_out), np.concatenate(risk_out), np.concatenate(logvar_out)
 
 
+def _is_trajectory(model: WorldModel) -> bool:
+    from nidra.models.heads import TrajectoryRiskHead
+    return isinstance(model.risk_head, TrajectoryRiskHead)
+
+
 @torch.no_grad()
 def _heads_on(models: list[WorldModel], states: torch.Tensor) -> tuple[np.ndarray, np.ndarray]:
+    """Per-state heads on bare states. Only valid for a per-state risk head —
+    a trajectory head has no context here — so the callers that must serve
+    both go through `_observed_risk` / `_oracle_risk` instead."""
     risks, stages = [], []
     for m in models:
         m.eval()
@@ -156,14 +178,59 @@ def _heads_on(models: list[WorldModel], states: torch.Tensor) -> tuple[np.ndarra
     return torch.stack(risks).mean(0).numpy(), torch.stack(stages).mean(0).numpy()
 
 
+@torch.no_grad()
+def _observed_risk(models: list[WorldModel], X: torch.Tensor, chunk: int) -> tuple[np.ndarray, np.ndarray]:
+    """Heads on the OBSERVED state at each origin, with the observed context
+    a trajectory head needs (WorldModel.score_observed)."""
+    risks, stages = [], []
+    for lo in range(0, X.shape[0], chunk):
+        xb = X[lo:lo + chunk]
+        r, s = [], []
+        for m in models:
+            m.eval()
+            ri, si = m.score_observed(xb)
+            r.append(ri)
+            s.append(si)
+        risks.append(torch.stack(r).mean(0).numpy())
+        stages.append(torch.stack(s).mean(0).numpy())
+    return np.concatenate(risks), np.concatenate(stages)
+
+
+@torch.no_grad()
+def _oracle_risk(models: list[WorldModel], X: torch.Tensor, Y: torch.Tensor, chunk: int) -> np.ndarray:
+    """Heads on the TRUE future states — the upper bound that separates head
+    error from forecasting error.
+
+    For a trajectory head the oracle is the same forward simulation with the
+    observed future substituted for the predicted one
+    (`state_source="truth"`), so the head gets the hidden state it would have
+    reached had the rollout been perfect. Scoring the true states bare would
+    hand the head zeros for its other inputs and bound the wrong thing.
+    """
+    K = Y.shape[1]
+    out = []
+    for lo in range(0, X.shape[0], chunk):
+        xb, yb = X[lo:lo + chunk], Y[lo:lo + chunk]
+        per_member = []
+        for m in models:
+            m.eval()
+            if _is_trajectory(m):
+                ro = m.rollout(xb, K=K, n_samples=1, stochastic=False, state_source="truth", truth=yb)
+                per_member.append(m.score_trajectory(ro)[0][:, 0])
+            else:
+                per_member.append(m.score_states(yb)[0])
+        out.append(torch.stack(per_member).mean(0).numpy())
+    return np.concatenate(out)
+
+
 def score_world_model(bundle: ScoreBundle, models: list[WorldModel], X_scaled: np.ndarray, Y_scaled: np.ndarray,
                       n_samples_per_member: int, chunk: int = 250, with_ablations: bool = True, seed: int = 0) -> ScoreBundle:
     K = bundle.K
     X = torch.from_numpy(X_scaled).float()
     Y = torch.from_numpy(Y_scaled).float()
     logger.info("scoring world model: N=%d members=%d samples/member=%d K=%d", X.shape[0], len(models), n_samples_per_member, K)
-    bundle.risk_obs, bundle.stage_obs = _heads_on(models, X[:, -1, :])
-    bundle.risk_true_k, _ = _heads_on(models, Y)
+    bundle.risk_obs, bundle.stage_obs = _observed_risk(models, X, chunk)
+    bundle.risk_true_k = _oracle_risk(models, X, Y, chunk)
     bundle.states_det, bundle.risk_det_k, bundle.logvar_mean = _deterministic(models, X, K, chunk)
     bundle.risk_traj, bundle.stage_traj_mean_k, bundle.states_std = _rollout_risk(models, X, K, n_samples_per_member, chunk, seed=seed)
     bundle.n_members = len(models)
@@ -187,6 +254,13 @@ def score_ridge(bundle: ScoreBundle, models: list[WorldModel], ridges: list[Ridg
     F_ev = np.concatenate([X_scaled[:, -1, :], X_scaled[:, -2, :]], axis=1)
     preds = np.stack([np.clip(r.predict(F_ev), -clip, clip) for r in ridges], axis=1).astype("float32")  # [N, K, F]
     bundle.states_ridge = preds
+    if any(_is_trajectory(m) for m in models):
+        # The ridge reference predicts states and nothing else; a trajectory
+        # head has no hidden state to go with them. Left unscored rather than
+        # scored against a fabricated context — the ridge's STATE skill is
+        # what this baseline is for, and it is unaffected.
+        bundle.risk_ridge_k = None
+        return bundle
     bundle.risk_ridge_k, _ = _heads_on(models, torch.from_numpy(preds).float())
     return bundle
 

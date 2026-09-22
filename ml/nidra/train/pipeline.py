@@ -323,6 +323,7 @@ def build_all_splits(cfg: dict) -> SplitResult:
         val_block_per_day=bool(splits_cfg.get("val_block_per_day", True)),
         horizon_k=K,
         pre_onset_margin_s=int(splits_cfg.get("pre_onset_margin_minutes", 30)) * 60,
+        val_days=splits_cfg.get("val_days"),
     )
     assert_no_temporal_overlap(splits)
     assert_no_episode_leakage(splits)

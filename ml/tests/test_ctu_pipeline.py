@@ -118,3 +118,54 @@ class TestPerScenarioValidationBlock:
                             "stage_label": "benign", "risk_label": 0} for i in range(10)])
         train, val = temporal_train_val_split(df, val_fraction=0.3, per_day=True)
         assert len(val) == 3 and len(train) == 7
+
+
+class TestValidationCaptures:
+    """CTU-13 selects on held-out CAPTURES rather than a trailing block.
+
+    The trailing-block carve is right for CIC-IDS2017, where each training
+    day holds one attack in its middle. It is pathological on CTU-13: the
+    episode of scenario 1 spans from 1.3h to past the 70% mark of a 6.1h
+    capture, the no-straddle nudge moves the cut to 0.8h, and 88% of the
+    capture — including every one of its attack windows — lands in
+    validation. Naming validation captures outright avoids the question.
+    """
+
+    @staticmethod
+    def _tables():
+        import numpy as np
+        from nidra.data.schema import FEATURE_ORDER
+
+        def table(day: int, attack_at: list[int], n: int = 20):
+            rows = []
+            for i in range(n):
+                row = {f: 0.0 for f in FEATURE_ORDER}
+                row.update(host_id="h", window_ts=day * 86_400 + 60 * i,
+                           stage_label="c2" if i in attack_at else "benign", risk_label=0)
+                rows.append(row)
+            return pd.DataFrame(rows)
+
+        return {"a": table(1, [5]), "b": table(2, [6]), "v": table(3, [7]), "t": table(4, [8])}
+
+    def test_named_validation_captures_are_used_whole(self):
+        from nidra.data.splits import build_splits
+        tables = self._tables()
+        splits = build_splits(tables, train_days=["a", "b"], test_days=["t"], holdout_days=[],
+                              val_fraction=0.3, val_days=["v"], horizon_k=3)
+        assert len(splits.train) == 40          # both training captures kept whole
+        assert len(splits.val) == 20            # exactly the named capture
+        assert set(splits.val["window_ts"] // 86_400) == {3}
+
+    def test_a_validation_capture_may_not_also_be_a_training_capture(self):
+        from nidra.data.splits import build_splits
+        with pytest.raises(ValueError, match="both training and validation"):
+            build_splits(self._tables(), train_days=["a", "v"], test_days=["t"], holdout_days=[],
+                         val_fraction=0.3, val_days=["v"])
+
+    def test_without_val_days_the_trailing_block_is_unchanged(self):
+        from nidra.data.splits import build_splits
+        tables = self._tables()
+        splits = build_splits(tables, train_days=["a", "b"], test_days=["t"], holdout_days=[],
+                              val_fraction=0.3, horizon_k=3)
+        assert len(splits.train) + len(splits.val) == 40
+        assert len(splits.val) > 0

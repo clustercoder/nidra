@@ -35,6 +35,7 @@ from nidra.eval.calibration import calibration_by_horizon
 from nidra.eval.lead_time_runner import compute_lead_time_report
 from nidra.eval.metrics import standard_metrics
 from nidra.models.world_model import WorldModel
+from nidra.models.build import world_model_from_config
 from nidra.train.pipeline import build_all_splits, geometry_from_config, scale_arrays
 from nidra.utils.config import load_config, resolve_path
 
@@ -42,21 +43,9 @@ logger = logging.getLogger(__name__)
 
 
 def _build_model(cfg: dict) -> WorldModel:
-    mcfg = cfg["model"]
-    return WorldModel(
-        n_features=mcfg["n_features"],
-        hidden_size=mcfg["encoder"]["hidden_size"],
-        encoder_layers=mcfg["encoder"]["num_layers"],
-        encoder_dropout=mcfg["encoder"]["dropout"],
-        transition_mlp_hidden=mcfg["transition"]["mlp_hidden"],
-        logvar_min=mcfg["transition"]["logvar_min"],
-        logvar_max=mcfg["transition"]["logvar_max"],
-        risk_hidden=mcfg["risk_head"]["hidden"],
-        stage_hidden=mcfg["stage_head"]["hidden"],
-        n_stages=mcfg["stage_head"]["n_stages"],
-        state_clamp=mcfg["transition"]["state_clamp"],
-        linear_skip=bool(mcfg["transition"].get("linear_skip", False)),
-    )
+    """Kept as a name many call sites import; the constructor itself lives in
+    models/build.py so every stage builds the same architecture."""
+    return world_model_from_config(cfg)
 
 
 def _warn_if_single_class(y_true: np.ndarray, split_name: str, max_eval_samples: int | None) -> None:

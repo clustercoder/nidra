@@ -136,13 +136,22 @@ def main() -> None:
                 time.time() - t0, len(windowed["train"].X), int(windowed["train"].risk_label.sum()),
                 len(windowed["val"].X), int(windowed["val"].risk_label.sum()), scaler.dropped_features)
     head_data = None
+    head_tables = None
     if "heads" in stages or "onset" in stages:
         # Heads are functions of one state: train and select them on EVERY row
         # of the split, not the dynamics' windowed subsample (train/head_data.py).
         from nidra.train.head_data import build_head_arrays
         from nidra.train.pipeline import build_all_splits
+        from nidra.data.schema import FEATURE_ORDER
+        from nidra.models.build import uses_trajectory_head
         splits = build_all_splits(cfg)
         head_data = {"train": build_head_arrays(splits.train, scaler), "val": build_head_arrays(splits.val, scaler)}
+        if uses_trajectory_head(cfg):
+            # A trajectory head rebuilds the encoder context per seed, which
+            # needs the labelled tables — but only their feature columns and
+            # the (host, window) keys, so the rest of the split is released.
+            keep = ["host_id", "window_ts", *FEATURE_ORDER]
+            head_tables = {name: getattr(splits, name)[keep].copy() for name in ("train", "val")}
         del splits
         logger.info("head data: train %s val %s (%.0fs)", head_data["train"].summary(), head_data["val"].summary(), time.time() - t0)
 
@@ -156,7 +165,8 @@ def main() -> None:
             logger.info("seed %d dynamics done at %.0fs: best epoch %s, %s", seed, time.time() - t0,
                         meta["best_epoch"], json.dumps(meta["best_val_free_running"], default=float)[:300])
         if "heads" in stages:
-            hmeta = train_heads_for_seed(cfg, seed, windowed, scaler, "cpu", head_data=head_data)
+            hmeta = train_heads_for_seed(cfg, seed, windowed, scaler, "cpu", head_data=head_data,
+                                          head_tables=head_tables)
             seed_result["heads"] = {k: v for k, v in hmeta.items() if k not in ("history", "heads_history")}
             seed_result["heads_history"] = hmeta.get("heads_history")
             logger.info("seed %d heads done at %.0fs", seed, time.time() - t0)

@@ -44,9 +44,23 @@ dataset:
     ctu_12: {file: "12/capture20110819.binetflow",   format: ctu_binetflow, dataset: ctu13, role: holdout, family: nsis_ay, scenario: 12, behaviour: "P2P (3 bots)"}
 
 splits:
+  # Validation is held-out CAPTURES, not a trailing block of the training
+  # captures. On CTU-13 the trailing block is pathological: scenario 1's
+  # episode runs from 1.3h to past the 70% mark of a 6.1h capture, the
+  # no-straddle nudge moves the cut to 0.8h, and 88% of the capture — with
+  # every one of its attack windows — lands in validation. Scenario 6 is in
+  # validation on purpose: Menti appears in no training capture, so model
+  # selection is scored on a family transfer rather than on more of what the
+  # model was fit to. Every evaluation capture starts after the last training
+  # capture ends (2011-08-15 10:13).
   train_days: [ctu_1, ctu_2, ctu_3]
-  test_days: [ctu_4, ctu_6, ctu_7, ctu_8, ctu_9, ctu_10, ctu_11]
+  val_days: [ctu_4, ctu_6]
+  test_days: [ctu_8, ctu_9, ctu_10]
   holdout_days: [ctu_5, ctu_13, ctu_12]
+  # Scenarios 7 (21 min) and 11 (15 min) are shorter than L+K = 36 windows,
+  # so no sample can be built from either at this geometry. They are declared
+  # above and simply produce no rows; that is reported, not hidden.
+  unusable_at_this_geometry: [ctu_7, ctu_11]
 
 # CTU-13's Argus records carry no packet-level detail and no per-flow IAT
 # maximum, so those 13 columns are declared drops rather than being fed to the

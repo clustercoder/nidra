@@ -23,9 +23,12 @@ from sklearn.metrics import average_precision_score
 
 from nidra.data.normalize import FeatureScaler
 from nidra.data.schema import FEATURE_INDEX, STAGE_INDEX, STAGE_LABELS
+from nidra.models.build import risk_head_components, uses_trajectory_head, world_model_from_config
+from nidra.models.heads import TrajectoryRiskHead
 from nidra.models.world_model import RiskHead, StageHead, WorldModel
+from nidra.train.head_context import build_head_context
 from nidra.train.losses import risk_head_loss, stage_head_loss
-from nidra.train.pipeline import scale_arrays
+from nidra.train.pipeline import geometry_from_config, scale_arrays
 from nidra.utils.config import load_config, resolve_path
 from nidra.utils.seed import set_seed
 
@@ -120,8 +123,65 @@ def _head_inputs(windowed: dict, scaler: FeatureScaler, head_data: dict | None):
             s_val, windowed["val"].risk_label, _stage_indices(windowed["val"].stage_label), _natural_weights(windowed["val"]))
 
 
+def _trajectory_context(cfg: dict, model: WorldModel, scaler: FeatureScaler, L: int,
+                        windowed: dict, head_data: dict | None, head_tables: dict | None, device: str):
+    """Observed rollout context aligned with whatever `_head_inputs` returned.
+
+    With `head_data` (every row of the split) the context comes from the same
+    labelled tables, which the caller must supply as `head_tables`; without it
+    the windowed subsample is used and the context is read straight off the
+    [N, L, F] history that produced `s_train`.
+    """
+    from nidra.train.head_context import HeadContext
+    from nidra.train.pipeline import scale_arrays
+
+    if head_data is not None:
+        if head_tables is None:
+            raise ValueError(
+                "a trajectory risk head trained on every split row needs the labelled tables "
+                "(`head_tables`) to rebuild the encoder context; pass them alongside `head_data`"
+            )
+        return (build_head_context(head_tables["train"], scaler, model, L, device=device),
+                build_head_context(head_tables["val"], scaler, model, L, device=device))
+
+    def from_windowed(arrays) -> HeadContext:
+        X, _ = scale_arrays(arrays, scaler)
+        with torch.no_grad():
+            parts = model.observed_context(torch.from_numpy(X).float().to(device))
+        n = len(X)
+        return HeadContext(
+            hidden=parts["hidden"].cpu().numpy().astype("float32"),
+            delta=parts["delta"].cpu().numpy().astype("float32"),
+            logvar=parts["logvar"].cpu().numpy().astype("float32"),
+            host_id=np.asarray(arrays.host_id, dtype=object) if getattr(arrays, "host_id", None) is not None else np.empty(n, dtype=object),
+            window_ts=np.asarray(getattr(arrays, "origin_ts", np.zeros(n)), dtype="int64"),
+        )
+
+    return from_windowed(windowed["train"]), from_windowed(windowed["val"])
+
+
+def _risk_logits(head, parts: dict, idx, device: str, input_noise: float, state_with_noise):
+    """Risk logits for one batch, for either head type.
+
+    The state carries the same training-time input noise in both cases (a
+    head must rank PREDICTED states at inference, which carry rollout error
+    the observed training states do not). The context components are left
+    clean: their inference-time counterparts come from the model's own
+    rollout, not from a noisy observation.
+    """
+    if not isinstance(head, TrajectoryRiskHead):
+        return head(state_with_noise)
+    batch = {"state": state_with_noise}
+    for name in head.components:
+        if name == "state":
+            continue
+        value = parts[name]
+        batch[name] = (value[idx] if idx is not None else value).to(device)
+    return head(**batch)
+
+
 def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureScaler, device: str,
-                         head_data: dict | None = None) -> dict:
+                         head_data: dict | None = None, head_tables: dict | None = None) -> dict:
     set_seed(seed)
     rng = np.random.default_rng(seed)
     hcfg = cfg["train_heads"]
@@ -131,33 +191,55 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
     if not weights_path.exists():
         raise FileNotFoundError(f"expected stage-1 weights at {weights_path} — run train_dynamics first")
 
-    model = WorldModel(
-        n_features=mcfg["n_features"],
-        hidden_size=mcfg["encoder"]["hidden_size"],
-        encoder_layers=mcfg["encoder"]["num_layers"],
-        encoder_dropout=mcfg["encoder"]["dropout"],
-        transition_mlp_hidden=mcfg["transition"]["mlp_hidden"],
-        logvar_min=mcfg["transition"]["logvar_min"],
-        logvar_max=mcfg["transition"]["logvar_max"],
-        risk_hidden=mcfg["risk_head"]["hidden"],
-        stage_hidden=mcfg["stage_head"]["hidden"],
-        n_stages=mcfg["stage_head"]["n_stages"],
-        state_clamp=mcfg["transition"]["state_clamp"],
-        linear_skip=bool(mcfg["transition"].get("linear_skip", False)),
-    ).to(device)
-    model.load_state_dict(torch.load(weights_path, map_location=device))
-    # Stage 2 always starts from FRESHLY INITIALIZED heads. The checkpoint at
-    # this path may already carry trained heads (it does whenever this script
-    # is re-run against a completed pipeline), and continuing from those would
-    # make the result depend on how many times the script had been run rather
-    # than on (dynamics weights, data, seed) alone.
-    model.risk_head = RiskHead(mcfg["n_features"], mcfg["risk_head"]["hidden"]).to(device)
+    model = world_model_from_config(cfg).to(device)
+    # Only the DYNAMICS are loaded from stage 1. Stage 2 always starts from
+    # FRESHLY INITIALIZED heads — the checkpoint at this path may already
+    # carry trained ones (it does whenever this script is re-run against a
+    # completed pipeline), and continuing from those would make the result
+    # depend on how many times the script had been run rather than on
+    # (dynamics weights, data, seed) alone.
+    #
+    # Loading the dynamics by name rather than the whole dict is also what
+    # lets several risk-head variants share ONE stage-1 run: the head ablation
+    # is only a controlled comparison if every arm sits on identical frozen
+    # dynamics, and a whole-dict load would reject a checkpoint whose head has
+    # a different width. Every dynamics key is still required to be present.
+    checkpoint = torch.load(weights_path, map_location=device)
+    dynamics = {k: v for k, v in checkpoint.items() if k.startswith(("encoder.", "transition."))}
+    expected = {k for k in model.state_dict() if k.startswith(("encoder.", "transition."))}
+    missing = expected - set(dynamics)
+    if missing:
+        raise ValueError(f"{weights_path} is missing stage-1 parameters {sorted(missing)}")
+    model.load_state_dict(dynamics, strict=False)
+    components = risk_head_components(cfg)
+    if uses_trajectory_head(cfg):
+        model.risk_head = TrajectoryRiskHead(
+            components=components, n_features=mcfg["n_features"],
+            hidden_size=mcfg["encoder"]["hidden_size"], hidden=mcfg["risk_head"]["hidden"],
+        ).to(device)
+    else:
+        model.risk_head = RiskHead(mcfg["n_features"], mcfg["risk_head"]["hidden"]).to(device)
     model.stage_head = StageHead(
         mcfg["n_features"], mcfg["stage_head"]["hidden"], mcfg["stage_head"]["n_stages"]
     ).to(device)
     model.freeze_dynamics()
 
     s_train, risk_train, stage_train, active_train, s_val, risk_val, stage_val, w_val = _head_inputs(windowed, scaler, head_data)
+
+    # A trajectory head additionally reads the encoder hidden state, the
+    # backward delta and the transition's log-variance. Those depend on THIS
+    # seed's frozen dynamics, so they are built per seed — from observed
+    # states only, exactly as train/head_context.py documents.
+    ctx_train = ctx_val = None
+    if uses_trajectory_head(cfg):
+        _, L, _ = geometry_from_config(cfg)
+        ctx_train, ctx_val = _trajectory_context(cfg, model, scaler, L, windowed, head_data, head_tables, device)
+        if len(ctx_train) != len(s_train) or len(ctx_val) != len(s_val):
+            raise ValueError(
+                f"head context is misaligned with head inputs: "
+                f"train {len(ctx_train)} vs {len(s_train)}, val {len(ctx_val)} vs {len(s_val)}"
+            )
+        logger.info("seed=%d trajectory head components=%s input_dim=%d", seed, components, model.risk_head.input_dim)
 
     sampling = hcfg.get("risk_sampling", "imbalanced")
     if sampling not in VALID_SAMPLING:
@@ -177,6 +259,14 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
                 seed, sampling, input_noise, pos_repeat, neg_ratio, hard_frac, selection_metric,
                 int(risk_train.sum()), len(risk_train), float(active_train.mean()), int(risk_val.sum()), len(risk_val),
                 "every row of the split" if head_data is not None else "windowed subsample, natural weights")
+
+    parts_train = {"state": torch.from_numpy(s_train).float()}
+    parts_val = {"state": torch.from_numpy(s_val).float().to(device)}
+    if ctx_train is not None:
+        for name, arr in ctx_train.as_components().items():
+            parts_train[name] = torch.from_numpy(arr).float()
+        for name, arr in ctx_val.as_components().items():
+            parts_val[name] = torch.from_numpy(arr).float().to(device)
 
     s_train_t = torch.from_numpy(s_train).float()
     risk_train_t = torch.from_numpy(risk_train.astype("float32"))
@@ -214,7 +304,8 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
             s_in = s + input_noise * torch.randn_like(s) if input_noise > 0 else s
 
             opt_risk.zero_grad()
-            r_loss = risk_head_loss(model.risk_head(s_in), risk_y, pos_weight)
+            r_loss = risk_head_loss(_risk_logits(model.risk_head, parts_train, b, device, input_noise, s_in),
+                                    risk_y, pos_weight)
             r_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.risk_head.parameters(), hcfg["grad_clip"])
             opt_risk.step()
@@ -230,7 +321,7 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
         model.risk_head.eval()
         model.stage_head.eval()
         with torch.no_grad():
-            val_risk_logits = model.risk_head(s_val_t)
+            val_risk_logits = _risk_logits(model.risk_head, parts_val, None, device, 0.0, s_val_t)
             val_stage_logits = model.stage_head(s_val_t)
             val_risk_loss = risk_head_loss(val_risk_logits, risk_val_t, pos_weight).item()
             val_stage_loss = stage_head_loss(val_stage_logits, stage_val_t, class_weights).item()
@@ -293,6 +384,8 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
         "heads_best_epoch_risk": best_risk["epoch"],
         "heads_best_epoch_stage": best_stage["epoch"],
         "heads_selection_metric": selection_metric,
+        "risk_head_components": list(components),
+        "risk_head_input_dim": int(getattr(model.risk_head, "input_dim", mcfg["n_features"])),
         "heads_data": "all_split_rows" if head_data is not None else "windowed_subsample",
         "heads_n_train": int(len(risk_train)), "heads_n_train_pos": int(risk_train.sum()),
         "heads_n_val": int(len(risk_val)), "heads_n_val_pos": int(risk_val.sum()),

@@ -162,6 +162,7 @@ def build_splits(
     val_block_per_day: bool = True,
     horizon_k: int | None = None,
     pre_onset_margin_s: int = DEFAULT_PRE_ONSET_MARGIN_S,
+    val_days: list[str] | None = None,
 ) -> SplitResult:
     """day_tables: mapping of config day-key -> labelled state table for that
     day (output of labels.attach_risk_label). Concatenates by role, then
@@ -176,12 +177,26 @@ def build_splits(
         parts = [day_tables[k] for k in keys if k in day_tables and not day_tables[k].empty]
         return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
 
+    if val_days:
+        overlap = sorted(set(val_days) & set(train_days))
+        if overlap:
+            raise ValueError(f"{overlap} are listed as both training and validation captures")
+
     train_all = _concat(train_days)
     test_all = _concat(test_days)
     holdout_all = _concat(holdout_days)
 
-    train_part, val_part = temporal_train_val_split(train_all, val_fraction, per_day=val_block_per_day,
-                                                    pre_onset_margin_s=pre_onset_margin_s)
+    if val_days:
+        # Whole held-out captures as validation, instead of a trailing block
+        # of the training captures. Correct when a capture's attack episode
+        # spans most of it — the no-straddle nudge then hands nearly the whole
+        # capture, and every positive in it, to one side of the cut. It is
+        # also the stronger selection signal when the validation capture
+        # carries an attack family the training captures do not.
+        train_part, val_part = train_all, _concat(val_days)
+    else:
+        train_part, val_part = temporal_train_val_split(train_all, val_fraction, per_day=val_block_per_day,
+                                                        pre_onset_margin_s=pre_onset_margin_s)
     if horizon_k is not None:
         from nidra.data.labels import reattach_risk_label
         train_part = reattach_risk_label(train_part, horizon_k) if not train_part.empty else train_part
