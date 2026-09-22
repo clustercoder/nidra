@@ -1430,3 +1430,21 @@ measurement, so it gets an experiment rather than a caveat: `train_heads.context
 applies the regularizer the state component already carries to the context components,
 scaled per component by its own batch standard deviation. It stays inside the frozen-head
 discipline — observed inputs, perturbed — and defaults to 0.0.
+
+**D125 — The discrete-time hazard onset parameterisation is not adopted; the onset head
+does read the encoder's hidden state.** (2026-09-23) A 2×2 on identical frozen dynamics —
+what the head reads × how its horizons are parameterised
+(`experiments/runs/ctu_onset_*`). Hazard is identical to independent per-horizon BCE for
+the state-only head and slightly worse for the history-aware one (validation AP 0.0007 vs
+0.0010 at 3 minutes). Its argument was coherence, which it delivers by construction, but it
+fits each bucket only on the rows still at risk in it and the buckets hold 10 / 20 / 20 /
+50 / 43 / 120 events: splitting 263 events six ways costs more variance than the
+monotonicity is worth. It stays behind `onset.parameterisation` because the argument
+returns with a denser dataset. The hidden state is adopted for the onset head on the same
+evidence as for the risk head: lift over the base rate goes from 2.1× to 4.1× at 3 minutes
+and 2.0× to 3.4× at 5. Both numbers rest on 24 and 40 positive validation origins and none
+of it produces a usable warning — 0 of 8 episodes warned before onset under every
+configuration — so the published claim is unchanged: **NIDRA has not demonstrated advance
+warning.** What CTU-13 establishes is that the ceiling is a data property (10 positive
+training origins at one minute out of 1,417,909 eligible) rather than obviously a model
+property.

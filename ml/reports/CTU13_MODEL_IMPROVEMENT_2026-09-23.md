@@ -419,3 +419,75 @@ top-8 beats a random 8 only 45% of the time, which is no better than chance.
 
 This is reported as a property of the selected model, not as a selection
 signal — no head was chosen on it.
+
+### 2.1 What the cross-dataset feature mask costs, measured on CIC-IDS2017
+
+`cic_core_dyn` is the control arm: the Run 8 protocol with the 13 features CTU-13
+cannot produce declared as drops. Without it, any CIC→CTU number confounds the
+domain change with the feature change.
+
+| run | features | free-running skill vs persistence, mean over k | k=1 → k=6 | 90% coverage |
+|---|---|---|---|---|
+| Run 8, CIC, all 45 (test / holdout) | 45 | 0.587 / 0.616 | — | — |
+| `cic_core_dyn`, CIC, masked (val) | 32 | 0.495 | 0.618 → 0.417 | 0.984 |
+| `ctu_dyn`, CTU, masked (val) | 30 | **0.515** | 0.609 → 0.471 | 0.950 |
+
+Two things worth stating. The mask costs CIC roughly 0.09–0.12 of state-forecast
+skill, so a CIC→CTU transfer number has to be read against 0.495, not against Run
+8's 0.587. And on the same feature set **CTU-13's dynamics are not harder than
+CIC-IDS2017's** — 0.515 against 0.495, with better-calibrated predictive intervals
+(0.950 against 0.984 for a nominal 0.90; CIC's are too wide at this feature set).
+Whatever makes CTU hard for this project, it is not the state-forecasting problem.
+
+### 3.6 Advance warning: the onset head 2×2 (§10, §11)
+
+Four onset heads on the same frozen `ctu_dyn` dynamics: what the head reads
+(`state` vs `state+hidden`) crossed with how its horizons are parameterised
+(independent per-horizon BCE, the Run 8 form, vs the discrete-time hazard).
+The architecture is identical in every cell — only the input width and the loss
+differ — which is what makes this an ablation rather than four models.
+
+The population is the binding constraint and has to be stated first. Of
+1,417,909 eligible training origins (outside every episode, with L windows of
+history) the positives are **10 / 30 / 50 / 100 / 143 / 263** at 1 / 3 / 5 / 10 /
+15 / 30 minutes. Validation has 98,627 eligible origins and **8 / 24 / 40 / 75 /
+90 / 105**. A base rate of 0.008% at one minute is what any of these numbers has
+to be read against.
+
+Validation AP at natural prevalence, with the lift over the base rate in
+brackets:
+
+| head / parameterisation | 1 min | 3 min | 5 min | 10 min | 15 min | 30 min |
+|---|---|---|---|---|---|---|
+| `state`, independent (Run 8) | 0.0002 (2.5×) | 0.0005 (2.1×) | 0.0008 (2.0×) | 0.0015 (2.0×) | 0.0016 (1.8×) | 0.0019 (1.8×) |
+| `state`, hazard | 0.0002 (2.5×) | 0.0005 (2.1×) | 0.0008 (2.0×) | 0.0014 (1.8×) | 0.0016 (1.8×) | 0.0019 (1.8×) |
+| `state+hidden`, independent | 0.0002 (2.5×) | 0.0010 (4.1×) | 0.0014 (3.5×) | 0.0020 (2.6×) | 0.0022 (2.4×) | 0.0024 (2.3×) |
+| `state+hidden`, hazard | 0.0002 (2.5×) | 0.0007 (2.9×) | 0.0009 (2.2×) | 0.0014 (1.8×) | 0.0015 (1.6×) | 0.0017 (1.6×) |
+
+| base rate | 0.00008 | 0.00024 | 0.00041 | 0.00076 | 0.00091 | 0.00106 |
+
+**There is pre-onset signal on CTU-13, and it is small.** The Run 8 onset head
+ranks pre-onset origins 1.8–2.5× better than chance; the history-aware one
+reaches 3.4–4.1× at the 3 and 5 minute horizons, roughly doubling the lift where
+lead time would actually be useful. That is a real effect and it is the second
+place in this phase where the encoder's hidden state is what supplies it.
+
+**It is also nowhere near a usable warning.** Four times a 0.04% base rate is
+0.14%. At the risk head's operating point, 0 of the 8 validation episodes were
+warned before onset under any configuration; detection happens 3.5–4.5 minutes
+*into* the episode. The honest statement stays the one Run 8 made: NIDRA has not
+demonstrated advance warning, on either dataset. What CTU-13 adds is that the
+ceiling is a data property — 10 positive training origins at one minute — and not
+obviously a model property.
+
+**The hazard parameterisation is not adopted** (§11, answered with the ablation it
+asks for). It is identical to independent BCE for the state head and slightly
+*worse* for the history-aware one (0.0007 vs 0.0010 at 3 min). Its argument was
+coherence — independent per-horizon BCE can and did report P(within 1 min) above
+P(within 30 min) — and it delivers that by construction. But it fits each bucket
+only on the rows still at risk in it, and the buckets hold 10 / 20 / 20 / 50 / 43
+/ 120 events; splitting 263 events six ways costs more variance than the
+monotonicity is worth here. Recorded as a negative result. It stays in the code
+behind `onset.parameterisation` because the argument would come back the moment a
+dataset with more onsets appears.
+
