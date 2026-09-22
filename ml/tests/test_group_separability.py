@@ -22,6 +22,15 @@ class TestVerdict:
     def test_a_probe_near_the_base_rate_is_not_separable(self):
         assert _probe(probe_ap=0.0015, base_rate=0.001).separable is False
 
+    def test_high_lift_with_a_below_chance_ranking_is_not_separable(self):
+        """The measured ctu_4:c2 case: 34x lift at a 0.02% base rate with
+        ROC 0.443 — a few positives at the very top of a ranking that is worse
+        than chance overall."""
+        assert _probe(probe_ap=0.008, base_rate=0.00023, probe_roc=0.443).separable is False
+
+    def test_both_conditions_together_are_separable(self):
+        assert _probe(probe_ap=0.008, base_rate=0.00023, probe_roc=0.83).separable is True
+
     def test_a_probe_well_above_it_is(self):
         assert _probe(probe_ap=0.02, base_rate=0.001).separable is True
 
@@ -133,3 +142,46 @@ class TestMarkdown:
     def test_an_unscorable_group_prints_a_dash_not_a_number(self):
         md = probes_markdown([_probe(probe_ap=float("nan"), probe_roc=float("nan"), n_folds=0)], "val")
         assert "| — |" in md
+
+
+class TestTransferProbe:
+    """Fit on one split's rows for the group's stage, score another split's
+    group. The within-split probe on CTU validation has to fall back to
+    row-stratified folds because every group's positives sit on one host, and
+    it can then answer with host identity. This one cannot: the fit never sees
+    the scored host."""
+
+    def _data(self, transferable: bool):
+        rng = np.random.default_rng(5)
+        X_fit = rng.normal(size=(500, 5)).astype("float32")
+        y_fit = np.zeros(500, dtype=int); y_fit[:60] = 1
+        X_fit[:60, 0] += 3.0
+        X_score = rng.normal(size=(300, 5)).astype("float32")
+        y_score = np.zeros(300, dtype=int); y_score[:30] = 1
+        if transferable:
+            X_score[:30, 0] += 3.0           # same behaviour, different host
+        else:
+            X_score[:30, 1] += 3.0           # a different signature entirely
+        return X_fit, y_fit, X_score, y_score, np.array(["victim"] * 30 + [f"h{i}" for i in range(270)])
+
+    def test_a_transferable_signature_is_found(self):
+        from nidra.scripts.group_separability import transfer_probe
+        X_f, y_f, X_s, y_s, hosts = self._data(True)
+        assert transfer_probe(X_f, y_f, X_s, y_s, "g", hosts).probe_roc > 0.9
+
+    def test_a_signature_that_does_not_transfer_is_not(self):
+        from nidra.scripts.group_separability import transfer_probe
+        X_f, y_f, X_s, y_s, hosts = self._data(False)
+        p = transfer_probe(X_f, y_f, X_s, y_s, "g", hosts)
+        assert p.probe_roc < 0.7 and p.separable is False
+
+    def test_it_is_never_marked_host_leaky(self):
+        from nidra.scripts.group_separability import transfer_probe
+        X_f, y_f, X_s, y_s, hosts = self._data(True)
+        assert transfer_probe(X_f, y_f, X_s, y_s, "g", hosts).host_leaky is False
+
+    def test_a_stage_absent_from_the_fit_split_claims_nothing(self):
+        from nidra.scripts.group_separability import transfer_probe
+        X_f, y_f, X_s, y_s, hosts = self._data(True)
+        p = transfer_probe(X_f, np.zeros_like(y_f), X_s, y_s, "g", hosts)
+        assert np.isnan(p.probe_roc) and p.n_folds == 0

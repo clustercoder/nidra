@@ -55,12 +55,20 @@ class GroupProbe:
     def lift(self) -> float:
         return self.probe_ap / self.base_rate if self.base_rate > 0 else float("nan")
 
+    #: A probe must clear BOTH to count as finding the group. Lift alone is
+    #: not enough at a 0.02% base rate: `ctu_4:c2` reached 34x lift with a
+    #: ROC of 0.443, i.e. a handful of positives at the very top of a ranking
+    #: that is below chance overall. ROC alone is not enough either — it is
+    #: insensitive to how the top of the ranking is spent.
+    MIN_LIFT = 3.0
+    MIN_ROC = 0.60
+
     @property
     def separable(self) -> bool:
-        """A probe that cannot reach three times the base rate on labels it was
-        handed is not finding the group. NaN (nothing could be scored) is not
-        separable and not a claim either way — read `n_folds`."""
-        return bool(self.lift >= 3.0)
+        """Can a probe handed the labels find this group at all? NaN (nothing
+        could be scored) is not separable and not a claim either way — read
+        `n_folds`."""
+        return bool(self.lift >= self.MIN_LIFT and self.probe_roc >= self.MIN_ROC)
 
 
 def positive_hosts(hosts: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -143,6 +151,35 @@ def probe_group(X: np.ndarray, y: np.ndarray, hosts: np.ndarray, group: str,
                       n_folds=used, host_leaky=leaky)
 
 
+def transfer_probe(X_fit: np.ndarray, y_fit: np.ndarray, X_score: np.ndarray, y_score: np.ndarray,
+                   group: str, hosts_score: np.ndarray, seed: int = 0) -> GroupProbe:
+    """Fit on one split's rows for this group's STAGE, score another split's
+    group. Cross-host and cross-capture by construction, so unlike the
+    within-split probe it cannot answer with host identity — it asks the
+    question the model is actually asked: does this attack stage look the
+    same on a host the fit never saw?
+    """
+    from sklearn.ensemble import HistGradientBoostingClassifier
+    from sklearn.metrics import average_precision_score, roc_auc_score
+
+    y_fit = np.asarray(y_fit).astype(int)
+    y_score = np.asarray(y_score).astype(int)
+    base = float(y_score.mean()) if len(y_score) else 0.0
+    ok = y_fit.sum() > 0 and (y_fit == 0).sum() > 0 and y_score.sum() > 0 and (y_score == 0).sum() > 0
+    if not ok:
+        return GroupProbe(group=group, n_positive=int(y_score.sum()),
+                          n_positive_hosts=len(positive_hosts(hosts_score, y_score)),
+                          n_rows=int(len(y_score)), base_rate=base, probe_ap=float("nan"),
+                          probe_roc=float("nan"), n_folds=0, host_leaky=False)
+    clf = HistGradientBoostingClassifier(random_state=seed, **PROBE_KWARGS).fit(X_fit, y_fit)
+    sc = clf.predict_proba(X_score)[:, 1]
+    return GroupProbe(group=group, n_positive=int(y_score.sum()),
+                      n_positive_hosts=len(positive_hosts(hosts_score, y_score)),
+                      n_rows=int(len(y_score)), base_rate=base,
+                      probe_ap=float(average_precision_score(y_score, sc)),
+                      probe_roc=float(roc_auc_score(y_score, sc)), n_folds=1, host_leaky=False)
+
+
 def probes_markdown(probes: list[GroupProbe], split: str, forecast_ap: dict[str, float] | None = None) -> str:
     out = [f"### Attack-group separability probe — **{split}**", "",
            "A supervised probe fit directly on each group's one-vs-rest label. It reads the labels of "
@@ -175,18 +212,29 @@ def main() -> None:
     parser.add_argument("--config", required=True)
     parser.add_argument("--split", default="val")
     parser.add_argument("--min-positives", type=int, default=5)
+    parser.add_argument("--fit-split", default=None,
+                        help="fit the probe on this split's rows for the group's STAGE and score --split. "
+                             "Cross-host and cross-capture, so the probe cannot answer with host identity; "
+                             "this is the diagnostic that parallels what the model is asked to do.")
     parser.add_argument("--benchmark", default=None, help="a benchmark.json to read forecast AP from")
     parser.add_argument("--out", default=None)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
     cfg = load_config(args.config)
-    df = getattr(build_all_splits(cfg), args.split)
+    splits = build_all_splits(cfg)
+    df = getattr(splits, args.split)
     scaler = FeatureScaler.load(*FeatureScaler.default_paths(resolve_path(cfg, cfg["artifacts"]["scaler_dir"])))
     X = scaler.transform(df[FEATURE_ORDER].to_numpy(dtype="float32")).astype("float32")
     hosts = df["host_id"].to_numpy()
     capture = df["split_group"].to_numpy() if "split_group" in df.columns else np.full(len(df), "all")
     stage = df["stage_label"].to_numpy()
+
+    X_fit = stage_fit = None
+    if args.fit_split:
+        fit_df = getattr(splits, args.fit_split)
+        X_fit = scaler.transform(fit_df[FEATURE_ORDER].to_numpy(dtype="float32")).astype("float32")
+        stage_fit = fit_df["stage_label"].to_numpy()
 
     keys = [f"{c}:{s}" for c, s in zip(capture, stage)]
     probes = []
@@ -194,7 +242,11 @@ def main() -> None:
         y = np.array([k == group for k in keys], dtype=int)
         if y.sum() < args.min_positives:
             continue
-        probes.append(probe_group(X, y, hosts, group))
+        if args.fit_split:
+            group_stage = group.split(":", 1)[1]
+            probes.append(transfer_probe(X_fit, (stage_fit == group_stage).astype(int), X, y, group, hosts))
+        else:
+            probes.append(probe_group(X, y, hosts, group))
         logger.info("%s: %d positives, probe AP %.4f (%.0fx base)", group, probes[-1].n_positive,
                     probes[-1].probe_ap, probes[-1].lift)
 
