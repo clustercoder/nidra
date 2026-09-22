@@ -169,7 +169,9 @@ def comparison_markdown(rows: list[RunRow], split: str, system: str, reference: 
         head.append("")
     head += [f"Reference system: `{reference}`. AP is at natural prevalence; intervals are episode-cluster "
              f"bootstrap. ΔAP is the paired difference, and is only evidence of an improvement when its "
-             f"interval excludes zero.", "",
+             f"interval excludes zero. Each variant selected its **own operating point** on this split, so "
+             f"the P / R / F1 and FA/h columns are each at a different threshold and rank nothing; AP and "
+             f"ROC-AUC are threshold-free and are what the rows are ordered by.", "",
              "| variant | AP | 95% CI | ΔAP vs reference | 95% CI | sig. | calibrated AP | ROC-AUC | "
              "P / R / F1 | FA/h | oracle AP | gap |",
              "|---|---|---|---|---|---|---|---|---|---|---|---|"]

@@ -161,6 +161,14 @@ class TestMarkdown:
         assert "not a selection split" in md.lower()
         assert SELECTION_SPLIT == "val"
 
+    def test_it_says_the_thresholds_are_not_shared(self):
+        """Each variant selects its own operating point, so the P/R/F1
+        columns are at different thresholds and are not comparable as a
+        column even though they sit in one."""
+        md = comparison_markdown([variant_row("a", _metrics(0.5, (0.4, 0.6)))], "val",
+                                 "world_model", "persistence")
+        assert "own operating point" in md
+
     def test_the_selection_split_carries_no_such_warning(self):
         md = comparison_markdown([variant_row("a", _metrics(0.5, (0.4, 0.6)))], "val",
                                  "world_model_calibrated", "persistence")
