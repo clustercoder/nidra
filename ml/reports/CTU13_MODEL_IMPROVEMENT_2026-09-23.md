@@ -811,3 +811,34 @@ the scores.
 
 Every number here is one seed on validation, which is where §19 says selection may
 happen and nothing else may. No test or holdout split has been read.
+
+### 3.12 The head ablation replicates in all three training regimes (§2, §4, §19 Stage A)
+
+§4 asks for the history-aware head to be tested with the transition model held
+identical. Three dynamics models were trained — CTU-only, CIC-only at the
+`cross_core` 32-feature mask, and CIC+CTU combined — and each one had both head
+variants fitted on top of its own frozen encoder and transition, so within a row
+the only thing that changes is what the head reads.
+
+| training regime | rows (train) | `state` | `state+hidden` | Δ |
+|---|---|---|---|---|
+| CTU-13 only | 1,419,278 | 0.3531 | 0.4894 | +0.1363 |
+| CIC-IDS2017 only | 2,274,548 | 0.6781 | 0.7825 | +0.1044 |
+| CIC + CTU combined | 3,693,826 | 0.3850 | 0.5130 | +0.1280 |
+
+Validation AP at natural prevalence, one seed, head-training metric on observed
+states — not the benchmark's forecast AP, and not comparable to Run 8's numbers.
+The direction holds in all three regimes and the size is similar in all three.
+
+Two things this table does **not** say. The three rows are not comparable *to each
+other*: each regime has its own validation set with its own prevalence and its own
+difficulty, so the combined regime's 0.5130 being below CIC-only's 0.7825 reflects
+the mixture, not a loss from combining. And §3.11 has already shown that on CTU
+most of the +0.1363 is the head getting better at picking out the infected host
+rather than the moment, while on CIC the gain survives the within-host test. An
+aggregate replication is evidence the effect is not a fluke of one split; it is not
+evidence the effect is the one we want.
+
+This is §19 Stage A screening. One seed per cell, selection on validation only.
+Stage B — three seeds for the two surviving variants — is queued behind the
+cross-dataset matrix.

@@ -1547,3 +1547,16 @@ where the model does genuine temporal work. §17's scorecard must carry within-h
 the aggregates, because a scorecard of aggregate AP would have concluded the opposite (CTU's
 gap, +0.136, is the larger one). Host-mean ROC is 0.9995 and 0.9999, so the single-host
 confound is near-total on both. One seed, validation only; no test or holdout read.
+
+**D131 — the history-aware head replicates in all three training regimes, which is not the
+same as replicating the thing we want.** (2026-09-23) Three dynamics models (CTU-only,
+CIC-only at the cross_core mask, CIC+CTU combined), each with both head variants fitted on its
+own frozen encoder and transition, so within a regime the only change is what the head reads:
+val AP 0.3531 -> 0.4894 (CTU), 0.6781 -> 0.7825 (CIC), 0.3850 -> 0.5130 (combined). Same
+direction, similar size, three times. The rows are NOT comparable to each other — each regime
+has its own validation set, prevalence and difficulty, so the combined regime sitting below
+CIC-only reflects the mixture rather than a cost of combining. And per D130 most of CTU's
++0.136 is better recognition of the infected host, not of the moment, while CIC's +0.104
+survives the within-host test. An aggregate replication shows the effect is not a fluke of one
+split; it does not show the effect is the one being claimed. Stage A screening, one seed per
+cell, validation only; Stage B (3 seeds) is queued behind the cross-dataset matrix.
