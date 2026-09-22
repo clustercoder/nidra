@@ -163,6 +163,7 @@ def build_splits(
     horizon_k: int | None = None,
     pre_onset_margin_s: int = DEFAULT_PRE_ONSET_MARGIN_S,
     val_days: list[str] | None = None,
+    val_carve_train_days: list[str] | None = None,
 ) -> SplitResult:
     """day_tables: mapping of config day-key -> labelled state table for that
     day (output of labels.attach_risk_label). Concatenates by role, then
@@ -193,7 +194,22 @@ def build_splits(
         # capture, and every positive in it, to one side of the cut. It is
         # also the stronger selection signal when the validation capture
         # carries an attack family the training captures do not.
-        train_part, val_part = train_all, _concat(val_days)
+        #
+        # `val_carve_train_days` additionally carves a trailing block out of
+        # the NAMED training days, for a combined-dataset run where one
+        # dataset has spare captures to hold out and the other does not:
+        # selecting a two-domain model on one domain's validation alone is a
+        # silent domain mismatch.
+        carve = [d for d in (val_carve_train_days or []) if d in set(train_days)]
+        if carve:
+            carved_in, carved_out = temporal_train_val_split(
+                _concat(carve), val_fraction, per_day=val_block_per_day,
+                pre_onset_margin_s=pre_onset_margin_s)
+            rest = _concat([d for d in train_days if d not in set(carve)])
+            train_part = pd.concat([p for p in (rest, carved_in) if not p.empty], ignore_index=True)
+            val_part = pd.concat([p for p in (_concat(val_days), carved_out) if not p.empty], ignore_index=True)
+        else:
+            train_part, val_part = train_all, _concat(val_days)
     else:
         train_part, val_part = temporal_train_val_split(train_all, val_fraction, per_day=val_block_per_day,
                                                         pre_onset_margin_s=pre_onset_margin_s)

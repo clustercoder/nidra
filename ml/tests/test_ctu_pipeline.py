@@ -169,3 +169,18 @@ class TestValidationCaptures:
                               val_fraction=0.3, horizon_k=3)
         assert len(splits.train) + len(splits.val) == 40
         assert len(splits.val) > 0
+
+    def test_named_captures_and_a_carved_block_can_be_combined(self):
+        from nidra.data.splits import build_splits
+        tables = self._tables()
+        splits = build_splits(tables, train_days=["a", "b", "v"], test_days=["t"], holdout_days=[],
+                              val_fraction=0.3, val_days=[], val_carve_train_days=["a"], horizon_k=3)
+        # no val_days at all falls back to the plain carve over every training day
+        assert len(splits.val) > 0
+
+        splits = build_splits({**tables, "c": tables["a"]}, train_days=["a", "b"], test_days=["t"],
+                              holdout_days=[], val_fraction=0.3, val_days=["v"],
+                              val_carve_train_days=["a"], horizon_k=3)
+        days = set(splits.val["window_ts"] // 86_400)
+        assert days == {1, 3}, "validation should be the named capture plus a block carved off day a"
+        assert len(splits.train) == 20 + (20 - len(splits.val[splits.val["window_ts"] // 86_400 == 1]))

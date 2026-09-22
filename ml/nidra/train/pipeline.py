@@ -324,6 +324,7 @@ def build_all_splits(cfg: dict) -> SplitResult:
         horizon_k=K,
         pre_onset_margin_s=int(splits_cfg.get("pre_onset_margin_minutes", 30)) * 60,
         val_days=splits_cfg.get("val_days"),
+        val_carve_train_days=splits_cfg.get("val_carve_train_days"),
     )
     assert_no_temporal_overlap(splits)
     assert_no_episode_leakage(splits)

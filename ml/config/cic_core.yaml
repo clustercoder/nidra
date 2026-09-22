@@ -1,0 +1,10 @@
+# CIC-IDS2017 only, restricted to the cross-dataset feature core.
+#
+# The control arm for every transfer experiment: identical to the Run 8
+# protocol except that the 13 features CTU-13 cannot produce are declared
+# drops. Comparing this against Run 8 measures what the mask costs on
+# CIC-IDS2017 alone, which is the only way to read a CIC->CTU number.
+extends: default.yaml
+
+features:
+  regime: cross_core
