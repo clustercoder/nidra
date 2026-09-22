@@ -1397,3 +1397,36 @@ naive range overstates the test split by 1.66× and the **holdout by 5.02×** (9
 range over 18.13 h of capture), which would have divided the CTU false-alarm rate by five.
 Counting distinct window timestamps assumes nothing about contiguity, cannot double-count
 overlapping captures, and does not move with the number of hosts in a window.
+
+**D123 — The risk head reads the encoder's hidden state as well as the state, selected on
+CTU-13 validation, and the log-variance is rejected.** (2026-09-23) Six head variants on
+one frozen dynamics run, identical scaler and identical rows (`experiments/runs/ctu_heads__*`,
+`reports/tables/ctu_head_ablation_val.md`). `state+hidden` is adopted at AP 0.473 against
+the Run 8 head's 0.412, and the reason is not the 0.061: with 283 positives and 8 episodes
+that is noise. It is the only variant whose margin over `persistence_rollout` — the same
+head, the same encoder advance, only the predicted change removed — excludes zero
+(+0.033 [+0.0002, +0.055]), the first such interval in the project; its per-horizon AP goes
+0.631 → 0.574 where the Run 8 head's goes 0.560 → 0.209 against a flat oracle; its oracle
+sits ABOVE it at every horizon (+0.034 pooled) where Run 8's sat below (−0.031), which is
+the difference between a head that can use a better state forecast and one that cannot;
+and its served operating point is F1 0.60 at 5.7 false alarms per hour against 0.53 at
+10.2. `logvar` is rejected on measurement: it raised the observed-state screening metric
+(0.373 vs 0.353) and lowered the forecast benchmark (0.396 vs 0.412), and cost 0.037 on top
+of `state+hidden`. `delta` cost a further 0.006. Everything here is one dynamics seed and
+is reported as screening; three-seed confirmation and the test/holdout read follow, and the
+selection is not revisited on them.
+
+**D124 — Pooled AP is not the metric the history-aware head wins on, and that is said
+rather than worked around.** (2026-09-23) `state+hidden` scores 0.473 against 0.481 for the
+same head applied to the observed origin — a forward simulation that loses to looking at
+the present. With the transition disabled the rollout loses as much again, so the cost is
+the encoder ingesting synthetic windows at all, not what the transition predicts: the head
+is fit on hidden states reached over real observations and asked at inference about hidden
+states reached over six of its own. Two consequences. (1) The published composite is a max
+over six correlated horizons while the present-state baseline is one clean score, so the
+per-horizon Task C table — where the head wins at every k and by 2.7× at k=6 — is the
+honest place to read the forecasting claim, and both are reported. (2) The mismatch is a
+measurement, so it gets an experiment rather than a caveat: `train_heads.context_noise`
+applies the regularizer the state component already carries to the context components,
+scaled per component by its own batch standard deviation. It stays inside the frozen-head
+discipline — observed inputs, perturbed — and defaults to 0.0.
