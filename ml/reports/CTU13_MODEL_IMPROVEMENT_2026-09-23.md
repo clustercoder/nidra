@@ -491,3 +491,81 @@ monotonicity is worth here. Recorded as a negative result. It stays in the code
 behind `onset.parameterisation` because the argument would come back the moment a
 dataset with more onsets appears.
 
+
+### 3.7 Context noise: the fix works, and it erases the thing it was meant to protect
+
+§3.3 measured the exposure mismatch: the head is fit on hidden states the encoder
+reached over real observations and asked at inference about hidden states it
+reached over six of its own. `train_heads.context_noise` applies the regularizer
+the state component already carries to the context components, scaled per
+component by its own batch standard deviation. Same head (`state+hidden`), same
+frozen `ctu_dyn` dynamics, same rows.
+
+| σ | world model AP | calibrated | persistence | persistence_rollout | oracle | **ΔAP world model − persistence_rollout** | AP at k=6 |
+|---|---|---|---|---|---|---|---|
+| **0.0** (adopted) | 0.473 | 0.478 | 0.481 | 0.440 | 0.506 | **+0.033 [+0.0002, +0.055]** | 0.574 |
+| 0.1 | 0.480 | 0.484 | 0.500 | 0.490 | 0.536 | −0.010 [−0.075, +0.020] | 0.585 |
+| 0.3 | 0.455 | 0.462 | 0.484 | 0.474 | 0.509 | −0.018 [−0.084, +0.030] | 0.507 |
+
+**Not adopted.** At σ=0.1 it does what it was designed to do: the rollout's AP
+rises 0.473 → 0.480, the oracle rises 0.506 → 0.536, the k=6 tail rises 0.574 →
+0.585. It also lifts `persistence_rollout` from 0.440 to 0.490 — and that is the
+whole story. Making the head robust to a perturbed hidden state makes it robust
+to *which* windows the encoder ingested, so a rollout that freezes the state
+scores as well as one that predicts it, and the transition ablation margin goes
+from +0.033 [+0.0002, +0.055] to −0.010 [−0.075, +0.020].
+
+The exposure mismatch and the transition model's contribution turn out to be the
+same quantity seen from two sides. A head that cannot tell the difference between
+ingesting S_t six times and ingesting six predicted states does not suffer from
+the mismatch and does not benefit from the prediction either. Buying +0.007 AP —
+comfortably inside the noise of 283 positives — at the cost of the only
+statistically supported transition signal in the project is not a trade worth
+making. σ=0.3 is worse on every column.
+
+Recorded as a negative result. `context_noise` stays in the code, defaulting to
+0.0, because the diagnosis it came from is correct and a different mechanism for
+the same problem — one that closes the gap without flattening the head's
+sensitivity to its input — is the obvious next thing to try.
+
+### 3.8 Why is Rbot invisible? A supervised probe says: two different reasons (§26, §31 Q13)
+
+Every head scores `ctu_4:c2` at AP 0.001 and ROC below chance. Before blaming the
+model, `nidra.scripts.group_separability` fits a gradient-boosted probe on the
+**training** captures' rows for that attack *stage* and scores the validation
+group. Fitting on captures 1–3 and scoring capture 4 makes it cross-host and
+cross-capture by construction, so it cannot answer with host identity — it asks
+exactly what the model is asked. It reads labels the model does not, so it is an
+upper bound in the same sense the oracle is: a diagnostic, never a system, and
+nothing in the pipeline reads it.
+
+| group | positives | positive hosts | probe AP | probe ROC | world model ROC | verdict |
+|---|---|---|---|---|---|---|
+| ctu_6:exfil (Menti) | 122 | 1 | 0.814 | 0.992 | 1.000 | model at the ceiling |
+| ctu_4:exfil (Rbot) | 50 | 1 | 0.091 | 0.829 | 0.704 | partial gap |
+| ctu_4:recon (Rbot) | 17 | 1 | 0.033 | **0.970** | ~0.42 | **model failure** |
+| ctu_4:c2 (Rbot) | 23 | 1 | 0.008 | **0.443** | ~0.47 | **not separable at all** |
+
+The two Rbot failures that looked identical in the benchmark have opposite causes.
+
+**Rbot C2 is not there to be found.** A probe handed the C2 label from the
+training captures ranks capture 4's C2 windows *below* chance (ROC 0.443). Rbot's
+command-and-control on this host does not resemble Rbot's command-and-control on
+the training hosts in 32 flow features at Δ=60 s. No head architecture fixes
+that; it is a representation limit, and the honest options are a finer Δ, features
+the flow record does not currently carry, or accepting it.
+
+**Rbot recon is a model failure.** The same probe reaches ROC 0.970 on the same
+capture, on 17 windows, transferring across hosts — the signal is there, it
+generalises, and NIDRA scores it at chance. This is the most actionable finding
+of the phase: a quantified gap with an upper bound attached, on a stage that is
+*early* in the kill chain and therefore exactly where advance warning would come
+from.
+
+**A caveat that applies to every row and to Run 8's Friday result equally: each
+group's positives sit on exactly ONE host.** The validation captures do not
+contain a second infected host for any attack stage, so nothing here — the model's
+numbers included — separates "learned the behaviour" from "learned the host". The
+within-split probe, which is allowed to see other windows from the same host,
+reaches ROC 0.913–0.996 on all four groups, including the one that does not
+transfer at all. That is the measurement of how much host identity alone buys.
