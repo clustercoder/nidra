@@ -50,6 +50,8 @@ class EvalSet:
     inside_episode: np.ndarray          # [N] bool, origin inside a merged attack episode
     minutes_to_onset: np.ndarray        # [N] float, inf if no later onset on the host
     episode_key: np.ndarray             # [N] str, "" if none ("host@start_ts" of the episode the row belongs to / precedes)
+    split_group: np.ndarray = None      # [N] str, which capture/day-file the row came from
+    attack_group: np.ndarray = None     # [N] str, "<capture>:<stage>" of the attack a POSITIVE row forecasts; "" for negatives
     onset_labels: dict[int, np.ndarray] = field(default_factory=dict)   # H minutes -> [N] int
     stratum_counts: dict[str, dict[str, int]] = field(default_factory=dict)
     split: str = ""
@@ -143,9 +145,48 @@ def build_eval_set(
 
     ts_all = df["window_ts"].to_numpy()
     span_hours = float((ts_all.max() - ts_all.min()) / 3600.0) if len(ts_all) else 0.0
+    group_sel, attack_group = _attack_groups(df, cands, select_all, arrays)
     return EvalSet(
         arrays=arrays, stratum=stratum_sel.astype(str), weight=weight, cluster=cluster.astype(str),
         inside_episode=inside_sel, minutes_to_onset=to_onset_sel, episode_key=key_sel.astype(str),
         onset_labels=onset_labels, stratum_counts=counts, split=split, window_seconds=window_seconds, K=K,
         span_hours=span_hours, n_hosts=int(df["host_id"].nunique()),
+        split_group=group_sel, attack_group=attack_group,
     )
+
+
+def _attack_groups(df: pd.DataFrame, cands, select_all: np.ndarray, arrays: WindowedArrays) -> tuple[np.ndarray, np.ndarray]:
+    """Which capture each selected row came from, and — for a POSITIVE row —
+    which kind of attack it is forecasting.
+
+    A split concatenates several captures (CIC-IDS2017 day-files, CTU-13
+    scenarios), and an aggregate AP over all of them hides the case Run 8 ran
+    into: one attack type dominating the positives and dragging the number
+    with it. The group of a positive row is `<capture>:<stage of the first
+    non-benign future window>` — the attack the row is actually predicting,
+    not whatever else is in the same capture. Negatives carry "" because they
+    belong to every group's one-vs-rest comparison.
+    """
+    from nidra.data.schema import STAGE_LABELS
+
+    n = len(select_all)
+    if "split_group" in df.columns:
+        per_row = df["split_group"].astype(str).to_numpy()
+        # candidates index into each host's own sequence; origin_ts + host is
+        # the key back into the table.
+        lookup = dict(zip(zip(df["host_id"].to_numpy(), df["window_ts"].to_numpy()), per_row))
+        group = np.array([lookup.get((h, int(t)), "") for h, t in
+                          zip(cands.host[select_all], cands.origin_ts[select_all])], dtype=object)
+    else:
+        group = np.full(n, "", dtype=object)
+
+    attack = np.full(n, "", dtype=object)
+    future = getattr(arrays, "future_stage_idx", None)
+    if future is not None:
+        risk = arrays.risk_label.astype(int)
+        for i in np.flatnonzero(risk == 1):
+            stages = future[i]
+            nz = np.flatnonzero(stages != 0)
+            if len(nz):
+                attack[i] = f"{group[i]}:{STAGE_LABELS[int(stages[nz[0]])]}"
+    return group.astype(str), attack.astype(str)

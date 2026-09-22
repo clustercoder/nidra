@@ -86,3 +86,50 @@ def onset_targets(inside: np.ndarray, minutes_to_onset: np.ndarray,
     for j, h in enumerate(horizons_min):
         out[:, j] = (eligible & (np.asarray(minutes_to_onset) <= h)).astype("int64")
     return out
+
+
+def discrete_hazard_targets(inside: np.ndarray, minutes_to_onset: np.ndarray,
+                            horizons_min: tuple[int, ...] = DEFAULT_ONSET_HORIZONS_MIN,
+                            ) -> tuple[np.ndarray, np.ndarray]:
+    """Discrete-time survival targets over the same horizon grid.
+
+    The horizons define buckets (0, h1], (h1, h2], ... (h_{H-1}, h_H]. For
+    each origin this returns
+
+        event  [N, H] int   1 in the bucket the onset falls in, 0 elsewhere
+        at_risk[N, H] bool  whether the origin is still "at risk" in that
+                            bucket, i.e. no onset has happened in an earlier
+                            one and the row has not been censored
+
+    which is what a hazard head is fit against: bucket j's loss is evaluated
+    only on the rows that survived to it. The resulting probabilities are
+    coherent by construction — P(onset within h_m) = 1 - prod_{j<=m}(1 - p_j)
+    is monotone in m, which independent per-horizon BCE is not. The Run 8
+    onset head could and did report P(within 1 min) above P(within 30 min).
+
+    Rows inside an episode are not at risk anywhere: an ongoing attack is not
+    a forecast. Rows whose next onset lies beyond the last horizon (including
+    `inf`, meaning the host never attacks again in this capture) are censored
+    at the end — at risk in every bucket, with no event. That is the honest
+    treatment: "no onset within 30 minutes" is what was observed, not "no
+    onset ever".
+    """
+    minutes = np.asarray(minutes_to_onset, dtype="float64")
+    eligible = ~np.asarray(inside, dtype=bool)
+    edges = (0.0,) + tuple(float(h) for h in horizons_min)
+    n, H = len(minutes), len(horizons_min)
+    event = np.zeros((n, H), dtype="int64")
+    at_risk = np.zeros((n, H), dtype=bool)
+    for j in range(H):
+        lo, hi = edges[j], edges[j + 1]
+        in_bucket = eligible & (minutes > lo) & (minutes <= hi)
+        event[:, j] = in_bucket.astype("int64")
+        # at risk in bucket j if no onset strictly before its lower edge
+        at_risk[:, j] = eligible & (minutes > lo)
+    return event, at_risk
+
+
+def survival_to_cumulative(hazards: np.ndarray) -> np.ndarray:
+    """[N, H] per-bucket hazards -> [N, H] P(onset within h_j), monotone."""
+    h = np.clip(np.asarray(hazards, dtype="float64"), 0.0, 1.0)
+    return 1.0 - np.cumprod(1.0 - h, axis=-1)

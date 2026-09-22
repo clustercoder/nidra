@@ -83,6 +83,71 @@ BOOTSTRAP_SYSTEMS = ("world_model", "world_model_deterministic", "persistence", 
                      "ridge_two_lag", "lr_current_state", "lr_flattened_history", "gbdt_current_state", "gru_classifier")
 
 
+PER_GROUP_SYSTEMS = ("world_model_calibrated", "world_model", "persistence", "oracle_true_future",
+                    "gru_classifier", "lr_flattened_history")
+
+
+def _per_attack_group(ev: EvalSet, scores: dict[str, np.ndarray], y: np.ndarray, threshold: float,
+                      bundle, X_scaled: np.ndarray, Y_scaled: np.ndarray, model_mask: np.ndarray,
+                      day_meta: dict | None = None) -> dict[str, Any]:
+    """One-vs-rest breakdown by the kind of attack a positive row forecasts.
+
+    An aggregate AP over a split that concatenates several captures hides
+    exactly what Run 8 ran into: 833 of Friday's 946 positives were Bot-C2 on
+    five workstations, and the aggregate number was theirs. Each group here
+    keeps every negative in the split and only that group's positives, so the
+    numbers are comparable to each other and to the aggregate, and it is
+    visible which attack the system can and cannot see.
+
+    Reported per group, because the four answers need different fixes:
+    the oracle AP (head cannot recognise this attack even on the true future),
+    the world-model AP (forecast quality on top of that), the state forecast
+    error (the transition model on these rows), and the mean predicted
+    log-variance (what the model thinks it knows).
+    """
+    groups = ev.attack_group
+    if groups is None:
+        return {}
+    negatives = y == 0
+    out: dict[str, Any] = {}
+    for name in sorted({g for g in groups if g}):
+        in_group = (groups == name) & (y == 1)
+        rows = np.where(in_group | negatives)[0]
+        yy = y[rows]
+        if yy.sum() == 0:
+            continue
+        w = ev.weight[rows]
+        entry: dict[str, Any] = {
+            "n_positive_rows": int(in_group.sum()),
+            "n_rows": int(len(rows)),
+            "prevalence_natural": float(np.average(yy, weights=w)),
+            "n_episodes": int(len({k for k in ev.episode_key[in_group] if k})),
+            "n_hosts": int(len(set(ev.arrays.host_id[in_group]))),
+            "systems": {},
+        }
+        if day_meta:
+            capture = name.split(":")[0]
+            meta = day_meta.get(capture, {})
+            entry["capture"] = capture
+            entry["family"] = meta.get("family")
+            entry["dataset"] = meta.get("dataset")
+        for system in PER_GROUP_SYSTEMS:
+            if system in scores:
+                entry["systems"][system] = summarize_scores(yy, scores[system][rows], w, threshold)
+        # Where the failure is: the transition model on this group's rows.
+        pos_rows = np.where(in_group)[0]
+        if len(pos_rows) and bundle.states_det is not None:
+            err = ((bundle.states_det[pos_rows] - Y_scaled[pos_rows]) ** 2)[..., model_mask].mean()
+            persist = ((X_scaled[pos_rows, -1:, :] - Y_scaled[pos_rows]) ** 2)[..., model_mask].mean()
+            entry["state_mse_predicted"] = float(err)
+            entry["state_mse_persistence"] = float(persist)
+            entry["state_skill_vs_persistence"] = float(1.0 - err / persist) if persist > 0 else float("nan")
+        if len(pos_rows) and bundle.logvar_mean is not None:
+            entry["mean_predicted_logvar"] = float(bundle.logvar_mean[pos_rows].mean())
+        out[name] = entry
+    return out
+
+
 def load_models(cfg: dict, seeds: list[int]) -> list[WorldModel]:
     weights_dir = resolve_path(cfg, cfg["artifacts"]["weights_dir"])
     models = []
@@ -271,6 +336,8 @@ def run(cfg: dict, split: str, seeds: list[int], n_samples: int, out_dir: Path, 
             for h in ev.onset_labels
         },
         "task_C_progression": _progression(ev, bundle, applied["risk_k_calibrated"], threshold),
+        "per_attack_group": _per_attack_group(ev, scores, y_pub, threshold, bundle, X_scaled, Y_scaled,
+                                              scaler.model_mask, cfg.get("dataset", {}).get("days")),
         "attribution_published_label": _attribution(ev, scores, y_pub, n_resamples),
         "attribution_detection": _attribution(ev, scores, y_det, n_resamples),
         "state_forecast": state_forecast_report(
@@ -334,6 +401,19 @@ def print_summary(results: dict[str, Any], split: str) -> None:
           "| vs ridge:", round(sf.get("skill_vs_ridge", float("nan")), 3))
     for k, v in results["attribution_published_label"].items():
         print(f"  attribution {k:58s} {v['point']:+.3f} [{v['ci_low']:+.3f}, {v['ci_high']:+.3f}]")
+    groups = results.get("per_attack_group") or {}
+    if groups:
+        print(f"{'attack group':38s} {'pos':>5s} {'eps':>4s} {'AP':>6s} {'ROC':>6s} {'R@thr':>6s} {'oracle':>6s} {'persist':>7s} {'stateskill':>10s}")
+        for name in sorted(groups, key=lambda n: -groups[n]["n_positive_rows"]):
+            g = groups[name]
+            sysm = g["systems"]
+            def _ap(k):
+                return sysm.get(k, {}).get("auc_pr", float("nan"))
+            print(f"{name:38s} {g['n_positive_rows']:5d} {g['n_episodes']:4d} {_ap('world_model_calibrated'):6.3f} "
+                  f"{sysm.get('world_model_calibrated', {}).get('roc_auc', float('nan')):6.3f} "
+                  f"{sysm.get('world_model_calibrated', {}).get('at_threshold', {}).get('recall', float('nan')):6.3f} "
+                  f"{_ap('oracle_true_future'):6.3f} {_ap('persistence'):7.3f} "
+                  f"{g.get('state_skill_vs_persistence', float('nan')):10.3f}")
     pe = results["per_episode"]["world_model_calibrated"]
     print(f"episodes: {pe['n_episodes']}, warned pre-onset {pe['n_warned_pre_onset']}, detected within {pe['n_detected_within_episode']}, "
           f"median latency {pe['median_latency_min']} min, median lead {pe['median_lead_time_s']} s")

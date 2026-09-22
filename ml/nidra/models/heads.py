@@ -63,6 +63,7 @@ class OnsetHead(nn.Module):
     def __init__(self, n_features: int = 45, hidden: int = 64, horizons_min: tuple[int, ...] = (1, 3, 5, 10, 15, 30)):
         super().__init__()
         self.horizons_min = tuple(int(h) for h in horizons_min)
+        self.parameterisation = "independent"
         self.net = nn.Sequential(
             nn.Linear(n_features, hidden),
             nn.ReLU(),
@@ -73,14 +74,28 @@ class OnsetHead(nn.Module):
         """state: [..., F]. Returns raw logits [..., H]."""
         return self.net(state)
 
-    def save(self, path) -> None:
+    #: How the H outputs are read. "independent": output j is the logit of
+    #: P(onset within h_j) directly, each fit with its own BCE — the Run 8
+    #: parameterisation, whose probabilities need not be monotone in j and
+    #: were observed not to be. "hazard": output j is the logit of
+    #: P(onset in bucket j | none before it), fit only on rows still at risk
+    #: in bucket j, and read out as 1 - prod(1 - p) — coherent by
+    #: construction and able to use censored rows. The ARCHITECTURE is
+    #: identical either way, which is what makes the comparison controlled.
+    PARAMETERISATIONS = ("independent", "hazard")
+
+    def save(self, path, parameterisation: str = "independent") -> None:
+        if parameterisation not in self.PARAMETERISATIONS:
+            raise ValueError(f"unknown onset parameterisation {parameterisation!r}")
         torch.save({"state_dict": self.state_dict(), "n_features": self.net[0].in_features,
-                    "hidden": self.net[0].out_features, "horizons_min": self.horizons_min}, path)
+                    "hidden": self.net[0].out_features, "horizons_min": self.horizons_min,
+                    "parameterisation": parameterisation}, path)
 
     @classmethod
     def load(cls, path, map_location: str = "cpu") -> "OnsetHead":
         ckpt = torch.load(path, map_location=map_location)
         head = cls(ckpt["n_features"], ckpt["hidden"], tuple(ckpt["horizons_min"]))
+        head.parameterisation = ckpt.get("parameterisation", "independent")
         head.load_state_dict(ckpt["state_dict"])
         head.eval()
         for p in head.parameters():

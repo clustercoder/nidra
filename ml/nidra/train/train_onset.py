@@ -26,7 +26,7 @@ import torch.nn.functional as F
 from sklearn.metrics import average_precision_score
 
 from nidra.data.normalize import FeatureScaler
-from nidra.data.onset import DEFAULT_ONSET_HORIZONS_MIN
+from nidra.data.onset import DEFAULT_ONSET_HORIZONS_MIN, discrete_hazard_targets, survival_to_cumulative
 from nidra.models.heads import OnsetHead
 from nidra.train.pipeline import scale_arrays
 from nidra.train.train_heads import balanced_epoch_indices
@@ -71,6 +71,10 @@ def train_onset_head_for_seed(cfg: dict, seed: int, windowed: dict, scaler: Feat
     neg_ratio = int(ocfg.get("neg_ratio", 10))
     hard_frac = float(ocfg.get("hard_negative_fraction", 0.5))
     broadest = len(horizons) - 1  # sampling treats "onset within max(h)" as the positive class
+    parameterisation = str(ocfg.get("parameterisation", "independent"))
+    if parameterisation not in OnsetHead.PARAMETERISATIONS:
+        raise ValueError(f"unknown onset.parameterisation {parameterisation!r}; "
+                         f"expected one of {OnsetHead.PARAMETERISATIONS}")
 
     if head_data is not None:
         tr, va = head_data["train"], head_data["val"]
@@ -78,16 +82,25 @@ def train_onset_head_for_seed(cfg: dict, seed: int, windowed: dict, scaler: Feat
         s_tr, y_tr = tr.states[el_tr], tr.onset_targets(horizons)[el_tr]
         s_va, y_va, w_va = va.states[el_va], va.onset_targets(horizons)[el_va], np.ones(int(el_va.sum()))
         active_tr = tr.active[el_tr]
+        hazard_event, hazard_at_risk = discrete_hazard_targets(
+            tr.inside_episode[el_tr], tr.minutes_to_onset[el_tr], horizons)
     else:
-        s_tr, y_tr, _, _ = _eligible_states(windowed["train"], scaler, horizons)
+        s_tr, y_tr, _, el = _eligible_states(windowed["train"], scaler, horizons)
         s_va, y_va, w_va, _ = _eligible_states(windowed["val"], scaler, horizons)
         active_tr = (windowed["train"].X[:, -1, :][~windowed["train"].inside_episode][:, _active_index()] > 0)
+        hazard_event, hazard_at_risk = discrete_hazard_targets(
+            windowed["train"].inside_episode[el], windowed["train"].minutes_to_onset[el], horizons)
     n_pos_h = {str(h): int(y_tr[:, j].sum()) for j, h in enumerate(horizons)}
     n_pos_val_h = {str(h): int(y_va[:, j].sum()) for j, h in enumerate(horizons)}
     logger.info("seed=%d onset head: train eligible %d (positives by horizon %s), val eligible %d (%s)",
                 seed, len(s_tr), n_pos_h, len(s_va), n_pos_val_h)
 
     head = OnsetHead(s_tr.shape[1], hidden, horizons).to(device)
+    head.parameterisation = parameterisation
+    event_t = torch.from_numpy(hazard_event.astype("float32"))
+    at_risk_t = torch.from_numpy(hazard_at_risk.astype("float32"))
+    logger.info("seed=%d onset head parameterisation=%s; rows at risk per bucket %s, events %s",
+                seed, parameterisation, hazard_at_risk.sum(0).tolist(), hazard_event.sum(0).tolist())
     opt = torch.optim.AdamW(head.parameters(), lr=lr, weight_decay=weight_decay)
     s_tr_t = torch.from_numpy(s_tr).float()
     y_tr_t = torch.from_numpy(y_tr.astype("float32"))
@@ -105,7 +118,18 @@ def train_onset_head_for_seed(cfg: dict, seed: int, windowed: dict, scaler: Feat
             s = s_tr_t[b].to(device)
             if input_noise > 0:
                 s = s + input_noise * torch.randn_like(s)
-            loss = F.binary_cross_entropy_with_logits(head(s), y_tr_t[b].to(device))
+            logits = head(s)
+            if parameterisation == "hazard":
+                # Discrete-time survival: bucket j contributes only for the
+                # rows still at risk in it. Censored rows (no onset within the
+                # last horizon) are at risk everywhere and carry no event,
+                # which is what they actually tell us.
+                mask = at_risk_t[b].to(device)
+                per = F.binary_cross_entropy_with_logits(logits, event_t[b].to(device), reduction="none")
+                denom = mask.sum().clamp(min=1.0)
+                loss = (per * mask).sum() / denom
+            else:
+                loss = F.binary_cross_entropy_with_logits(logits, y_tr_t[b].to(device))
             opt.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(head.parameters(), 1.0)
@@ -114,6 +138,8 @@ def train_onset_head_for_seed(cfg: dict, seed: int, windowed: dict, scaler: Feat
         head.eval()
         with torch.no_grad():
             p_va = torch.sigmoid(head(s_va_t)).cpu().numpy()
+        if parameterisation == "hazard":
+            p_va = survival_to_cumulative(p_va)
         ap_h = {}
         for j, h in enumerate(horizons):
             ap_h[str(h)] = float(average_precision_score(y_va[:, j], p_va[:, j], sample_weight=w_va)) if y_va[:, j].sum() > 0 else float("nan")
@@ -138,9 +164,12 @@ def train_onset_head_for_seed(cfg: dict, seed: int, windowed: dict, scaler: Feat
     weights_dir = resolve_path(cfg, cfg["artifacts"]["weights_dir"])
     weights_dir.mkdir(parents=True, exist_ok=True)
     path = onset_head_path(weights_dir, seed)
-    head.save(path)
+    head.save(path, parameterisation=parameterisation)
     meta = {
         "horizons_min": list(horizons), "selection_horizon_min": sel_h, "best_epoch": best["epoch"],
+        "parameterisation": parameterisation,
+        "n_at_risk_by_bucket": hazard_at_risk.sum(0).tolist(),
+        "n_events_by_bucket": hazard_event.sum(0).tolist(),
         "best_val_ap_natural_by_horizon": best["val_ap_by_horizon"],
         "n_train_eligible": int(len(s_tr)), "n_train_positives_by_horizon": n_pos_h,
         "n_val_eligible": int(len(s_va)), "n_val_positives_by_horizon": n_pos_val_h,
@@ -162,4 +191,6 @@ def score_onset_head(path: Path, states_scaled: np.ndarray) -> tuple[np.ndarray,
     head = OnsetHead.load(path)
     with torch.no_grad():
         p = torch.sigmoid(head(torch.from_numpy(np.ascontiguousarray(states_scaled)).float())).numpy()
+    if getattr(head, "parameterisation", "independent") == "hazard":
+        p = survival_to_cumulative(p)
     return p, head.horizons_min
