@@ -33,7 +33,10 @@ SELECTION_SPLIT = "val"
 #: statement about two or three attacks, not about the model.
 MIN_INFORMATIVE_CLUSTERS = 5
 
-DEFAULT_SYSTEM = "world_model_calibrated"
+#: The stochastic rollout. Chosen as the default because it is the system
+#: the episode bootstrap is computed for; the calibrated score rides along
+#: in its own column.
+DEFAULT_SYSTEM = "world_model"
 DEFAULT_REFERENCE = "persistence"
 DEFAULT_TASK = "task_published_label"
 
@@ -59,6 +62,7 @@ class RunRow:
     margin_ci_low: float | None
     margin_ci_high: float | None
     oracle_ap: float | None
+    calibrated_ap: float | None
     n_positive: int | None
     n_positive_clusters: int | None
 
@@ -73,7 +77,13 @@ class RunRow:
 
     @property
     def few_episodes(self) -> bool:
-        return (self.n_positive_clusters or 0) < MIN_INFORMATIVE_CLUSTERS
+        """An interval that rests on two or three attacks. An ABSENT interval
+        is a different thing and is not this — only the uncalibrated systems
+        carry a bootstrap, and 'no interval recorded' must not print as
+        'interval from zero episodes'."""
+        if self.n_positive_clusters is None:
+            return False
+        return self.n_positive_clusters < MIN_INFORMATIVE_CLUSTERS
 
     @property
     def margin_excludes_zero(self) -> bool:
@@ -134,6 +144,7 @@ def variant_row(label: str, metrics: dict, system: str = DEFAULT_SYSTEM,
         margin_ci_low=_get(pair, "ci_low"),
         margin_ci_high=_get(pair, "ci_high"),
         oracle_ap=_get(systems.get("oracle_true_future") or {}, "auc_pr"),
+        calibrated_ap=_get(systems.get("world_model_calibrated") or {}, "auc_pr"),
         n_positive=_get(s, "n_pos"),
         n_positive_clusters=_get(boot, "n_positive_clusters"),
     )
@@ -159,16 +170,17 @@ def comparison_markdown(rows: list[RunRow], split: str, system: str, reference: 
     head += [f"Reference system: `{reference}`. AP is at natural prevalence; intervals are episode-cluster "
              f"bootstrap. ΔAP is the paired difference, and is only evidence of an improvement when its "
              f"interval excludes zero.", "",
-             "| variant | AP | 95% CI | ΔAP vs reference | 95% CI | sig. | ROC-AUC | P / R / F1 | FA/h | oracle AP | gap |",
-             "|---|---|---|---|---|---|---|---|---|---|---|"]
+             "| variant | AP | 95% CI | ΔAP vs reference | 95% CI | sig. | calibrated AP | ROC-AUC | "
+             "P / R / F1 | FA/h | oracle AP | gap |",
+             "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in ranked:
         ci = f"[{_f(r.ci_low)}, {_f(r.ci_high)}]" if r.ci_low is not None else "—"
-        if r.few_episodes:
+        if r.ci_low is not None and r.few_episodes:
             ci += f" ({r.n_positive_clusters} positive episodes: not informative)"
         mci = f"[{_f(r.margin_ci_low)}, {_f(r.margin_ci_high)}]" if r.margin_ci_low is not None else "—"
         sig = "yes" if r.margin_excludes_zero else "no"
         head.append(
-            f"| {r.label} | {_f(r.ap)} | {ci} | {_f(r.margin)} | {mci} | {sig} | {_f(r.roc_auc)} | "
+            f"| {r.label} | {_f(r.ap)} | {ci} | {_f(r.margin)} | {mci} | {sig} | {_f(r.calibrated_ap)} | {_f(r.roc_auc)} | "
             f"{_f(r.precision, 2)} / {_f(r.recall, 2)} / {_f(r.f1, 2)} | {_f(r.false_alarms_per_hour, 2)} | "
             f"{_f(r.oracle_ap)} | {_f(r.oracle_gap)} |")
     return "\n".join(head)

@@ -160,14 +160,42 @@ def _trajectory_context(cfg: dict, model: WorldModel, scaler: FeatureScaler, L: 
     return from_windowed(windowed["train"]), from_windowed(windowed["val"])
 
 
-def _risk_logits(head, parts: dict, idx, device: str, input_noise: float, state_with_noise):
+def _noise_like(x: torch.Tensor, sigma: float) -> torch.Tensor:
+    """Gaussian noise at `sigma` times the batch's own standard deviation.
+
+    The context components are on wildly different scales — a GRU hidden
+    state and a clamped log-variance differ by orders of magnitude — so one
+    absolute sigma would be a rounding error on one and destroy the other.
+    A component with no spread in the batch carries no information to
+    perturb and gets nothing."""
+    if sigma <= 0:
+        return torch.zeros_like(x)
+    sd = x.std()
+    if not torch.isfinite(sd) or sd <= 0:
+        return torch.zeros_like(x)
+    return torch.randn_like(x) * (sigma * sd)
+
+
+def _risk_logits(head, parts: dict, idx, device: str, input_noise: float, state_with_noise,
+                 context_noise: float = 0.0):
     """Risk logits for one batch, for either head type.
 
-    The state carries the same training-time input noise in both cases (a
-    head must rank PREDICTED states at inference, which carry rollout error
-    the observed training states do not). The context components are left
-    clean: their inference-time counterparts come from the model's own
-    rollout, not from a noisy observation.
+    The state carries training-time input noise in both cases: a head must
+    rank PREDICTED states at inference, which carry rollout error the observed
+    training states do not.
+
+    `context_noise` extends the same idea to the context components, and it
+    exists because of a measurement. On CTU-13 validation the `hidden` head
+    scores AP 0.489 on the observed origin, 0.459 on the rollout, and 0.459 on
+    a rollout with the transition disabled — the loss appears as soon as the
+    encoder ingests any synthetic window, not because of what the transition
+    predicts. The head was fit on hidden states reached over real observations
+    and is asked at inference about hidden states reached over six of its own.
+
+    This stays inside the frozen-head discipline: the inputs are still
+    observed states from at or before t, perturbed, exactly as the state
+    component already is. Nothing predicted enters head training. It defaults
+    to 0.0, which is the behaviour every run before this one had.
     """
     if not isinstance(head, TrajectoryRiskHead):
         return head(state_with_noise)
@@ -176,7 +204,10 @@ def _risk_logits(head, parts: dict, idx, device: str, input_noise: float, state_
         if name == "state":
             continue
         value = parts[name]
-        batch[name] = (value[idx] if idx is not None else value).to(device)
+        value = (value[idx] if idx is not None else value).to(device)
+        if context_noise > 0 and head.training:
+            value = value + _noise_like(value, context_noise)
+        batch[name] = value
     return head(**batch)
 
 
@@ -245,6 +276,7 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
     if sampling not in VALID_SAMPLING:
         raise ValueError(f"unknown train_heads.risk_sampling {sampling!r}, expected one of {VALID_SAMPLING}")
     input_noise = float(hcfg.get("input_noise", 0.0))
+    context_noise = float(hcfg.get("context_noise", 0.0))
     pos_repeat = int(hcfg.get("pos_repeat", 20))
     neg_ratio = int(hcfg.get("neg_ratio", 10))
     hard_frac = float(hcfg.get("hard_negative_fraction", 0.5))
@@ -254,9 +286,10 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
 
     pos_weight = compute_pos_weight(risk_train).to(device) if sampling == "imbalanced" else None
     class_weights = compute_class_weights(stage_train, len(STAGE_LABELS)).to(device)
-    logger.info("seed=%d heads: sampling=%s input_noise=%.2f pos_repeat=%d neg_ratio=%d hard_neg=%.2f selecting on %s; "
+    logger.info("seed=%d heads: sampling=%s input_noise=%.2f context_noise=%.2f pos_repeat=%d neg_ratio=%d "
+                "hard_neg=%.2f selecting on %s; "
                 "train pos=%d/%d (active %.3f) val pos=%d/%d (%s)",
-                seed, sampling, input_noise, pos_repeat, neg_ratio, hard_frac, selection_metric,
+                seed, sampling, input_noise, context_noise, pos_repeat, neg_ratio, hard_frac, selection_metric,
                 int(risk_train.sum()), len(risk_train), float(active_train.mean()), int(risk_val.sum()), len(risk_val),
                 "every row of the split" if head_data is not None else "windowed subsample, natural weights")
 
@@ -304,7 +337,8 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
             s_in = s + input_noise * torch.randn_like(s) if input_noise > 0 else s
 
             opt_risk.zero_grad()
-            r_loss = risk_head_loss(_risk_logits(model.risk_head, parts_train, b, device, input_noise, s_in),
+            r_loss = risk_head_loss(_risk_logits(model.risk_head, parts_train, b, device, input_noise, s_in,
+                                                 context_noise),
                                     risk_y, pos_weight)
             r_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.risk_head.parameters(), hcfg["grad_clip"])
@@ -389,7 +423,8 @@ def train_heads_for_seed(cfg: dict, seed: int, windowed: dict, scaler: FeatureSc
         "heads_data": "all_split_rows" if head_data is not None else "windowed_subsample",
         "heads_n_train": int(len(risk_train)), "heads_n_train_pos": int(risk_train.sum()),
         "heads_n_val": int(len(risk_val)), "heads_n_val_pos": int(risk_val.sum()),
-        "heads_recipe": {"risk_sampling": sampling, "input_noise": input_noise, "pos_repeat": pos_repeat,
+        "heads_recipe": {"risk_sampling": sampling, "input_noise": input_noise,
+                         "context_noise": context_noise, "pos_repeat": pos_repeat,
                          "neg_ratio": neg_ratio, "hard_negative_fraction": hard_frac,
                          "separate_optimizers": True},
         "heads_pos_weight": None if pos_weight is None else pos_weight.item(),

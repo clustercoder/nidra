@@ -95,6 +95,21 @@ class TestRow:
         assert variant_row("s", _metrics(0.5, (0.1, 0.9), n_clusters=3)).few_episodes is True
         assert variant_row("s", _metrics(0.5, (0.4, 0.6), n_clusters=40)).few_episodes is False
 
+    def test_no_recorded_interval_is_not_the_same_as_too_few_episodes(self):
+        """Only the uncalibrated systems carry a bootstrap. A system without
+        one has an unknown interval, which must not be reported as an
+        interval resting on zero episodes."""
+        m = _metrics(0.5, (0.4, 0.6))
+        del m["task_published_label"]["systems"]["world_model"]["auc_pr_bootstrap"]
+        row = variant_row("s", m, system="world_model")
+        assert row.ci_low is None
+        assert row.few_episodes is False
+        assert "positive episodes" not in comparison_markdown([row], "val", "world_model", "persistence")
+
+    def test_the_calibrated_score_is_carried_alongside(self):
+        row = variant_row("s", _metrics(0.5, (0.4, 0.6)), system="world_model")
+        assert row.calibrated_ap == pytest.approx(0.5)
+
     def test_the_oracle_gap_is_carried_so_head_quality_is_visible(self):
         row = variant_row("s", _metrics(0.5, (0.4, 0.6)))
         assert row.oracle_ap == pytest.approx(0.7)
@@ -102,9 +117,15 @@ class TestRow:
 
     def test_a_system_absent_from_the_record_is_an_error_naming_the_system(self):
         m = _metrics(0.5, (0.4, 0.6))
-        del m["task_published_label"]["systems"]["world_model_calibrated"]
-        with pytest.raises(KeyError, match="world_model_calibrated"):
+        del m["task_published_label"]["systems"]["world_model"]
+        with pytest.raises(KeyError, match="world_model"):
             variant_row("s", m)
+
+
+class TestDefaults:
+    def test_the_default_system_is_the_one_that_carries_an_interval(self):
+        from nidra.scripts.compare_runs import DEFAULT_SYSTEM
+        assert DEFAULT_SYSTEM == "world_model"
 
 
 class TestRanking:
