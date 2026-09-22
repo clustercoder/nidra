@@ -259,3 +259,80 @@ The number that governs everything downstream is the last one on the training ro
 **1,384 positive origins.** Every head in §3 is fit on that, which is why a
 263-dimensional head does worse than a 128-dimensional one, and why every confidence
 interval on the validation split is wide enough to contain zero.
+
+### 3.3 Head ablation, stage B: the forecast benchmark on CTU validation
+
+The screening metric in §3.2 scores a head on observed states. This is the
+system: stochastic rollout, 60 trajectories, pooling and threshold selected on this
+split from nine candidates, natural prevalence 0.00326, 20,338 rows, 8 episodes.
+
+`state` and `hidden` first, because the difference between them is not a change in
+one number — it is a change in the shape of the result.
+
+| | `state` (Run 8) | `hidden` |
+|---|---|---|
+| world model, pooled AP | 0.412 [0.001, 0.737] | 0.459 [0.001, 0.812] |
+| world model, calibrated | 0.408 | **0.463** |
+| persistence (head on S_t) | 0.350 | **0.489** |
+| persistence rollout (transition disabled) | 0.350 | 0.459 |
+| oracle (head on the true future) | 0.381 | 0.508 |
+| gradient-boosted trees on S_t | 0.463 | 0.463 |
+| P / R / F1 at the operating point (calibrated) | 0.66 / 0.45 / 0.53 | **0.77 / 0.48 / 0.59** |
+| false alarms / h (calibrated) | 10.22 | **6.39** |
+| ΔAP world model − persistence | +0.063 [−0.000, +0.119] | **−0.031 [−0.080, +0.007]** |
+
+Two of those lines point in opposite directions and both are real.
+
+**The oracle gap inverts, which is the result this phase was run to get.** With the
+Run 8 head the oracle scores 0.381 against the forecast's 0.412 — *below* it. A head
+that does worse when handed the true future is a head that is not reading the state;
+no improvement to the transition model could have helped it. With the history-aware
+head the oracle is 0.508 against 0.459, a gap of +0.049 in the right direction. For
+the first time in this project, better state forecasting would now translate into
+better risk forecasting.
+
+**But pooled AP no longer beats the head applied to the present.** `persistence` —
+the same history-aware head on the observed origin — scores 0.489 against the
+rollout's 0.459, and the rollout with the transition disabled scores 0.459 too. The
+cost is not what the transition predicts; it appears as soon as the encoder ingests
+*any* synthetic window. The head was fit on hidden states the encoder reached over
+real observations and is asked at inference about hidden states it reached over six
+of its own. That is textbook exposure mismatch, and it is the motivation for the
+`context_noise` sweep in §3.5.
+
+**The per-horizon table is where the improvement actually lives.** Task C asks the
+unpooled question — is the window at t+k an attack window? — at each horizon
+separately, so it is not a max over six correlated scores:
+
+| k (min ahead) | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| `state` head, AP | 0.560 | 0.519 | 0.442 | 0.363 | 0.297 | **0.209** |
+| `state` head, oracle AP | 0.491 | 0.483 | 0.488 | 0.526 | 0.501 | 0.476 |
+| `hidden` head, AP | 0.602 | 0.617 | 0.586 | 0.547 | 0.539 | **0.512** |
+| `hidden` head, oracle AP | 0.654 | 0.637 | 0.647 | 0.650 | 0.671 | 0.686 |
+| state-forecast skill vs persistence | 0.635 | 0.598 | 0.524 | 0.515 | 0.498 | 0.506 |
+
+The Run 8 head collapses across the horizon — 0.560 to 0.209, −63% — while its oracle
+stays flat near 0.49. Flat oracle, collapsing forecast: all of the loss is compounding
+state error, and the ceiling is low everywhere. The history-aware head degrades from
+0.602 to 0.512, −15%, and **beats the Run 8 head by 2.4× at k=6**. Its oracle sits
+above it at every horizon and the gap widens with k (0.05 at k=1 to 0.17 at k=6),
+which is the signature of rollout error compounding against a head that can use the
+difference.
+
+So the pooled-AP line and the per-horizon line are not in conflict. Pooled AP takes a
+max over six horizons and the present-state baseline is a single clean score, which
+flatters the baseline; the forecasting question the project exists to answer is asked
+per horizon, and there the history-aware head is decisively better and the transition
+model is doing work at every k.
+
+**Per attack group**, `hidden` against `state`: ctu_6:exfil 0.857 (from 0.768, ROC
+1.000), ctu_4:exfil 0.216 (from 0.207), ctu_6:c2 0.039 at ROC 0.999 on 6 positives
+(from 0.000 at ROC 0.478), ctu_4:c2 0.001 (unchanged), ctu_4:recon 0.001 (unchanged).
+Menti's C2 goes from below chance to essentially perfect ranking on a handful of
+windows; Rbot's C2 and recon stay at chance under both heads. The failure is narrower
+than it was but it has not gone away.
+
+**Advance warning is unchanged: 0 of 8 episodes warned before onset** under either
+head, median detection latency 3.5 min (`state`) and 4.5 min (`hidden`). Whatever the
+history-aware head fixed, it did not produce lead time.
