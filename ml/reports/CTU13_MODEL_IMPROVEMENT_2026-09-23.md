@@ -544,16 +544,29 @@ nothing in the pipeline reads it.
 | ctu_6:exfil (Menti) | 122 | 1 | 0.814 | 0.992 | 1.000 | model at the ceiling |
 | ctu_4:exfil (Rbot) | 50 | 1 | 0.091 | 0.829 | 0.704 | partial gap |
 | ctu_4:recon (Rbot) | 17 | 1 | 0.033 | **0.970** | ~0.42 | **model failure** |
-| ctu_4:c2 (Rbot) | 23 | 1 | 0.008 | **0.443** | ~0.47 | **not separable at all** |
+| ctu_4:c2 (Rbot) | 23 | 1 | 0.008 | **0.443** | ~0.47 | probe missed it — ~~not separable~~ **see §3.9** |
 
-The two Rbot failures that looked identical in the benchmark have opposite causes.
+**Correction (§3.9).** This section originally read the C2 row as a
+representation limit and concluded that no head architecture reaches it. That
+conclusion is withdrawn. NIDRA's own frozen stage head — trained on the same
+training captures, scored on the same 23 windows, cross-host and cross-capture by
+the same construction — ranks them at ROC **0.864**. The probe was the weaker
+learner, not the ceiling. The original text is kept below with the error marked,
+because a retracted conclusion that quietly disappears is worse than one that is
+visibly wrong.
 
-**Rbot C2 is not there to be found.** A probe handed the C2 label from the
-training captures ranks capture 4's C2 windows *below* chance (ROC 0.443). Rbot's
-command-and-control on this host does not resemble Rbot's command-and-control on
-the training hosts in 32 flow features at Δ=60 s. No head architecture fixes
-that; it is a representation limit, and the honest options are a finer Δ, features
-the flow record does not currently carry, or accepting it.
+> ~~**Rbot C2 is not there to be found.** A probe handed the C2 label from the
+> training captures ranks capture 4's C2 windows *below* chance (ROC 0.443).
+> Rbot's command-and-control on this host does not resemble Rbot's
+> command-and-control on the training hosts in 32 flow features at Δ=60 s. No head
+> architecture fixes that; it is a representation limit, and the honest options are
+> a finer Δ, features the flow record does not currently carry, or accepting it.~~
+
+**Rbot C2 is a model failure too.** Both Rbot stages are. The probe's verdict is
+one-sided and was read as two-sided: a probe that finds a group proves the signal
+is there, a probe that misses one proves only that it missed. `group_separability`
+now says so in its docstring, in the `separable` property and in the table it
+writes.
 
 **Rbot recon is a model failure.** The same probe reaches ROC 0.970 on the same
 capture, on 17 windows, transferring across hosts — the signal is there, it
@@ -569,3 +582,74 @@ numbers included — separates "learned the behaviour" from "learned the host". 
 within-split probe, which is allowed to see other windows from the same host,
 reaches ROC 0.913–0.996 on all four groups, including the one that does not
 transfer at all. That is the measurement of how much host identity alone buys.
+
+### 3.9 The signal the risk head misses is already inside the model — in the other frozen head (§26, §31 Q13)
+
+§3.8 left one question open. The cross-host probe reaches ROC 0.970 on Rbot recon
+where the risk head is at chance, so the signal transfers; what stops NIDRA from
+using it? One candidate explanation is cheap to test, because it is about the
+objective rather than the architecture: the probe is fit on **that stage**
+one-vs-rest, while the risk head is fit on `risk_label` with every stage pooled
+into one positive class. NIDRA already trains a second head on stage labels, and
+it is frozen under the same discipline. `nidra.scripts.stage_head_diagnostic`
+scores both frozen heads on the same observed validation states.
+
+| stage | windows | base rate | stage-head AP | lift | stage-head ROC | risk-head AP | risk-head ROC |
+|---|---|---|---|---|---|---|---|
+| recon | 17 | 0.00017 | 0.003 | 20× | **0.638** | 0.000 | **0.320** |
+| c2 | 24 | 0.00024 | 0.001 | 6× | **0.854** | 0.000 | **0.434** |
+| exfil | 172 | 0.00174 | 0.301 | 173× | 0.910 | 0.799 | 0.915 |
+
+Observed states, so rollout error is not in the picture: both heads are scored
+exactly where they were trained, and the gap is about what they were asked to
+learn.
+
+**The two heads disagree, and the stage head is right.** On c2 it ranks at 0.854
+where the risk head is at 0.434; on recon, 0.638 against 0.320. The risk head is
+*below* chance on both — not indifferent to those windows but actively ordering
+them beneath benign traffic. Exfil, the only stage with enough positives to
+dominate the pooled label, is the one stage where the two agree (0.910 / 0.915).
+That is the shape the pooled-objective hypothesis predicts.
+
+**This is what overturns §3.8's C2 conclusion.** The stage head's 0.864 on
+`ctu_4:c2` alone (0.766 on ctu_6's single window; 0.854 pooled) is measured under
+the same cross-host, cross-capture construction as the probe's 0.443. A trained
+NIDRA head reaches what the probe could not, so "not separable" was a statement
+about the probe. Both Rbot failures are model failures.
+
+**But the information cannot be harvested by fusing the two heads at inference.**
+That was the obvious next move — both heads are frozen and already trained, so a
+scalar rule adds no parameter and fits nothing on the rows it scores.
+`nidra.scripts.head_fusion_screen` tried five parameter-free rules
+(`reports/tables/ctu_head_fusion_val.md`):
+
+| rule | AP | ΔAP vs published | ROC |
+|---|---|---|---|
+| risk head alone (published) | 0.4894 | — | 0.7441 |
+| noisy-or | 0.4868 | −0.0026 | 0.7380 |
+| max | 0.4797 | −0.0097 | 0.7354 |
+| mean | 0.4662 | −0.0233 | 0.7380 |
+| geometric mean | 0.4516 | −0.0379 | 0.7327 |
+| stage 1-P(benign) alone | 0.2946 | −0.1948 | 0.7411 |
+
+Every rule loses. The per-stage view says why: on c2 a fused score lands at
+0.603–0.682, *between* the two heads rather than above either. The risk head's
+confident scores on the 172 exfil windows outrank the stage head's correct
+ordering of the 24 c2 ones, so a single pooled ranking cannot hold both orderings
+at once. Collapsing the stage head to one non-benign scalar also costs it: its own
+c2 column reaches 0.854 where `1 − P(benign)` reaches 0.828.
+
+**What this directs.** The gap is in the risk head's *objective*, and it is not
+reachable by post-hoc arithmetic on two heads' outputs — which is a negative
+result worth having, because fusion is the cheap thing one would try first. A
+risk head trained with a stage-aware term, so that a rare stage is not required
+to outrank a common one on a single pooled scale, is the experiment the evidence
+points at (§12 multi-task). It is motivated here rather than speculated at. Not
+started: §7's dynamics runs own the machine until the cross-dataset matrix is in.
+
+Weight this against §3.8's host caveat, which has not gone away: every attack
+group on these validation captures has its positives on exactly one host. The
+stage head's advantage over the risk head is measured on the same rows for both,
+so the *comparison* is sound, but neither number separates behaviour from host
+identity. Confirming any of this needs a capture with two infected hosts in the
+same stage.

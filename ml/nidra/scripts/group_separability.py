@@ -17,9 +17,15 @@ it uses information no deployed system has (the labels of the split it scores)
 and exists to bound what is achievable, never to produce a forecast. It is a
 diagnostic and is never a selection signal — nothing in the pipeline reads it.
 
-A group whose probe AP is near its base rate is invisible in this
-representation, and no head architecture will find it. A group whose probe AP
-is high and whose forecast AP is low is a model failure worth chasing.
+The verdict is ONE-SIDED, and reading it as two-sided was a real error in
+this phase. A probe that finds the group proves the signal is there and
+transfers, so a model that misses it is failing at something achievable. A
+probe that misses the group proves only that THIS probe missed it. `ctu_4:c2`
+was written up as "not separable at all" on a transfer ROC of 0.443, and
+NIDRA's own frozen stage head — trained on the same captures, scored on the
+same 23 windows, cross-host by the same construction — then ranked it at ROC
+0.864. The probe was the weaker learner, not the ceiling. Treat a `no` as
+"unproven", never as "unlearnable".
 """
 
 from __future__ import annotations
@@ -65,9 +71,10 @@ class GroupProbe:
 
     @property
     def separable(self) -> bool:
-        """Can a probe handed the labels find this group at all? NaN (nothing
-        could be scored) is not separable and not a claim either way — read
-        `n_folds`."""
+        """Did THIS probe find the group? True is evidence the signal exists
+        and transfers. False is not evidence that it does not — see the
+        module docstring; a better learner has already overturned one `no`.
+        NaN (nothing could be scored) is neither — read `n_folds`."""
         return bool(self.lift >= self.MIN_LIFT and self.probe_roc >= self.MIN_ROC)
 
 
@@ -189,7 +196,12 @@ def probes_markdown(probes: list[GroupProbe], split: str, forecast_ap: dict[str,
            "row-stratified fallback lets the probe recognise the host rather than the behaviour, which is "
            "marked. AP is not comparable to the benchmark's per-group AP — the benchmark scores a "
            "stratified subsample with capped negatives and this scores every row — but ROC is.", "",
-           "| group | positives | positive hosts | base rate | probe AP | lift | probe ROC | CV | separable |",
+           "**The last column is one-sided.** A `yes` proves the signal exists and transfers, so a model "
+           "that misses the group is failing at something achievable. A `no` proves only that this probe "
+           "missed it: NIDRA's own frozen stage head ranked `ctu_4:c2` at ROC 0.864 after this probe "
+           "returned 0.443 on the same windows under the same cross-host construction. Read `no` as "
+           "*unproven*, never as *unlearnable*.", "",
+           "| group | positives | positive hosts | base rate | probe AP | lift | probe ROC | CV | probe found it |",
            "|---|---|---|---|---|---|---|---|---|"]
     for p in sorted(probes, key=lambda q: -q.n_positive):
         def num(v, nd=3):

@@ -185,3 +185,22 @@ class TestTransferProbe:
         X_f, y_f, X_s, y_s, hosts = self._data(True)
         p = transfer_probe(X_f, np.zeros_like(y_f), X_s, y_s, "g", hosts)
         assert np.isnan(p.probe_roc) and p.n_folds == 0
+
+
+def test_markdown_states_the_verdict_is_one_sided():
+    """A failed probe is not evidence of unlearnability. `ctu_4:c2` was written
+    up as unreachable on a probe ROC of 0.443 and NIDRA's own stage head then
+    reached 0.864 on it, so the table has to say which direction it reads in."""
+    probe = GroupProbe(group="g:c2", n_positive=23, n_positive_hosts=1, base_rate=0.0002,
+                       probe_ap=0.008, probe_roc=0.443, n_rows=65690, n_folds=5, host_leaky=True)
+    md = probes_markdown([probe], split="val")
+    assert "one-sided" in md
+    assert "unproven" in md and "unlearnable" in md
+    assert "**no**" in md
+
+
+def test_separable_is_false_but_documented_as_unproven():
+    probe = GroupProbe(group="g:c2", n_positive=23, n_positive_hosts=1, base_rate=0.0002,
+                       probe_ap=0.008, probe_roc=0.443, n_rows=65690, n_folds=5, host_leaky=True)
+    assert probe.separable is False
+    assert "False is not evidence" in GroupProbe.separable.__doc__

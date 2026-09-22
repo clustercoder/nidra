@@ -1481,3 +1481,26 @@ behaviour" from "learned the host"; the host-leaky within-split probe reaches RO
 0.913–0.996 on all four groups including the one that does not transfer at all, which is
 the measurement of what host identity alone buys. The same caveat applies to Run 8's Friday
 Bot-C2 result.
+
+**D128 — D127's "Rbot C2 is not separable" is WITHDRAWN; the signal is in the stage head, and
+fusing the two frozen heads does not recover it.** (2026-09-23) D127 concluded from a
+gradient-boosted transfer probe's ROC of 0.443 that `ctu_4:c2` is not reachable in 32 flow
+features at Δ=60 and that no head architecture would find it. That is wrong.
+`nidra/scripts/stage_head_diagnostic.py` scores NIDRA's own frozen STAGE head on the same 23
+windows, trained on the same captures, cross-host and cross-capture by the same
+construction: ROC **0.864**. The probe was the weaker learner, not the ceiling. Both Rbot
+failures are model failures, and the probe's verdict is one-sided — a `yes` proves the
+signal exists and transfers, a `no` proves only that this probe missed it. The script, its
+`separable` property and the table it writes now all say so, and a test pins the wording;
+the retracted paragraph is kept struck through in the report rather than deleted.
+The diagnostic also shows the risk head is not merely blind to the stages it misses but
+ranks them BELOW chance — c2 0.434 and recon 0.320 against the stage head's 0.854 and 0.638
+— while the two heads agree on exfil (0.915 / 0.910), the one stage with enough positives to
+dominate the pooled `risk_label`. That is the shape a pooled-objective problem has.
+`nidra/scripts/head_fusion_screen.py` then tested the cheap fix, since both heads are frozen
+and a scalar rule fits nothing: all five parameter-free rules LOSE against the published
+head (noisy-or −0.0026, max −0.0097, mean −0.0233, geometric −0.0379 AP). Per stage a fused
+score lands between the two heads rather than above either, because the risk head's
+confident scores on 172 exfil windows outrank the stage head's correct ordering of 24 c2
+ones and one pooled ranking cannot hold both. Not adopted. The evidence points at a
+stage-aware risk objective (§12), which is now motivated rather than speculative.
