@@ -653,3 +653,95 @@ stage head's advantage over the risk head is measured on the same rows for both,
 so the *comparison* is sound, but neither number separates behaviour from host
 identity. Confirming any of this needs a capture with two infected hosts in the
 same stage.
+
+### 3.10 A fifth of CTU's forecast positives contain no information at all, and the history-aware head answers them with the host's name (§10, §31 Q6, Q8)
+
+§3.9 left the risk head below chance on two stages and pointed at the objective.
+Asking *what the head keys on* turned up something about the data instead.
+
+`risk_label[t]` is 1 when an attack starts within the horizon, so a positive row
+need not contain attack traffic — it is the window *before*. On CTU, **every one
+of those pre-onset windows is silent**: 71 of 71 on train, 84 of 84 on val have
+`is_active == 0`. Most are silent in the strongest sense — all 45 features within
+1e-5 of the scaler's silent state, bit-identical to the vector every other silent
+window has. `nidra.scripts.silent_positive_audit`:
+
+| split | rows | positives | pre-onset | of those, silent | at the exact floor | floor stratum | state-only AP ceiling | share of all positives |
+|---|---|---|---|---|---|---|---|---|
+| CTU train | 1,419,278 | 1,418 | 71 | 71 | 63 | 1,026,446 | 0.000061 | 4.4% |
+| CTU val | 98,876 | 288 | 84 | 84 | 58 | 47,708 | 0.001216 | **20.1%** |
+| CIC train | 2,274,548 | 179 | 45 | 24 | 20 | 2,075,362 | 0.000010 | 11.2% |
+| CIC val | 893,701 | 94 | 22 | 9 | 8 | 808,496 | 0.000010 | 8.5% |
+
+**One fifth of CTU validation's positives are input vectors identical to 47,650
+negatives.** No function of the state can order them above those negatives, so
+inside that stratum the best AP any state-only head can reach is the stratum's own
+prevalence, 0.001216. This is a ceiling, not a complaint, and it doubles as a leak
+check: a state-only head that beats it is reading something the state does not
+contain. The published state-only head emits **exactly one distinct score** across
+all 47,708 rows and lands on 0.001216 with ROC 0.5000 — the bound is tight and the
+check passes.
+
+The datasets differ in a way worth naming. CIC's pre-onset windows are silent only
+about half the time (24 of 45 on train, 9 of 22 on val); CTU's are silent always.
+CTU's advance-warning signal, such as it is, is a *silence* phenomenon — the host
+goes quiet, then acts. Anything NIDRA predicts there it predicts from history, by
+construction.
+
+**So does history deliver?** The `state+hidden` head produces 11,599 distinct
+scores on those identical inputs and reaches AP 0.0707 — **58× the state-only
+ceiling**. Taken alone that is the strongest number in the phase. It does not
+survive the next question.
+
+| head | AP | lift over ceiling | ROC | host-mean AP | host-mean ROC | within-host prev. | within-host AP | within-host lift | within-host ROC |
+|---|---|---|---|---|---|---|---|---|---|
+| state-only | 0.001216 | 1.00× | 0.5000 | 0.0012 | 0.5000 | 0.4567 | 0.4567 | 1.00× | 0.5000 |
+| state+hidden | 0.070700 | **58.15×** | 0.4242 | 0.4567 | **0.9993** | 0.4567 | 0.4460 | **0.98×** | 0.3836 |
+
+(The state-only row is a constant across all 47,708 rows, so every column is what
+a constant gives: AP at the prevalence, ROC 0.5, and a within-host "AP" that is
+just the within-host prevalence. It is the ceiling, not a competitor.)
+
+All 58 floor positives sit on one host, `147.32.84.165`, which contributes 127 of
+the stratum's 47,708 rows. Replacing every score with its **host's mean** — throwing
+away everything the head said about *which window* — reproduces the ranking at ROC
+0.9993. And restricting to that host, where identity is constant and only the
+timing question remains, the head scores AP 0.4460 against a prevalence of 0.4567:
+**lift 0.98×, worse than a constant**, ROC 0.3836.
+
+The head has learned to recognise the infected host. It has not learned when that
+host is about to act. The 58× is the same host caveat as §3.8 and §3.9, measured
+directly for once rather than inferred, and the ROC of 0.4242 was the tell — a
+ranking cannot be 58× lift and below chance at the same time unless the gain is one
+block of rows lifted wholesale.
+
+**What this does and does not retract.** §3.4's composite result stands: the
+history-aware head's AP improvement and the `persistence_rollout` margin were
+measured on the full split, most of whose positives are attack windows carrying
+real traffic, and nothing here touches them. What it retracts is any reading of
+that improvement as *advance warning from silence*. On the rows where advance
+warning is the only thing being asked, the head contributes nothing beyond knowing
+which host is infected — and a deployment knows that already or does not, in which
+case the 58× is unavailable.
+
+**Consequences for the phase.** Three, in order of how much they change what
+follows.
+
+1. **Task B's near-floor numbers in Run 8 now have a mechanism, not just a
+   prevalence excuse.** Run 8 reported onset forecasting near the prevalence floor
+   and attributed it to CIC having almost no same-host precursors. CTU has
+   precursors — 84 of them on validation — and they are *empty*. Two datasets, two
+   different reasons, the same conclusion: this corpus family cannot support a
+   strong advance-warning claim, and the honest number is the floor.
+2. **`n_positive_hosts` must be reported beside every per-group result**, and a
+   result on a single-positive-host group needs the within-host decomposition
+   before it means anything. `floor_stratum_probe` does this generically and flags
+   `is_host_identity`; it should run over the cross-dataset matrix when that lands.
+3. **The single-host confound is now the phase's binding limitation**, ahead of the
+   architecture questions. Neither CIC-IDS2017 nor CTU-13 has two infected hosts in
+   the same attack stage on the same split. No head, objective or curriculum fixes
+   that — it is a property of the corpora, and the §4/§12 experiments will all
+   inherit it.
+
+Not adopted, not tuned, nothing removed. The audit is committed and runs on both
+datasets so the next model is measured against the same ceiling.

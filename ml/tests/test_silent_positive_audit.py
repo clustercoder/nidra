@@ -83,3 +83,83 @@ def test_markdown_reports_the_ceiling_and_the_leak_check():
     assert "0.001216" in md
     assert "20.1%" in md
     assert "leak check" in md
+
+
+def _probe(scores, y, hosts, floor=None):
+    from nidra.scripts.silent_positive_audit import floor_stratum_probe
+    n = len(y)
+    return floor_stratum_probe(np.array(scores, dtype="float64"), np.array(y),
+                               np.array(hosts, dtype=object),
+                               np.ones(n, dtype=bool) if floor is None else np.array(floor))
+
+
+def test_a_state_only_head_lands_exactly_on_the_ceiling():
+    """One constant over the whole stratum: AP is the prevalence, ROC is 0.5."""
+    p = _probe(scores=[0.3] * 10, y=[1, 1, 0, 0, 0, 0, 0, 0, 0, 0], hosts=["a"] * 5 + ["b"] * 5)
+    assert p.ap == pytest.approx(p.ceiling)
+    assert p.lift_over_ceiling == pytest.approx(1.0)
+    assert p.roc == pytest.approx(0.5)
+
+
+def test_host_identity_is_named_when_the_lift_vanishes_within_the_host():
+    """All positives on one host, ranked high as a block, but unordered inside
+    it — the shape the CTU floor stratum actually has."""
+    # The infected host's whole block outranks everything else, but inside it
+    # the positives sit BELOW its negatives — the shape the real stratum has,
+    # where within-host ROC came back at 0.38.
+    scores = [0.3, 0.2, 0.9, 0.8] + [0.01] * 8
+    y = [1, 1, 0, 0] + [0] * 8
+    hosts = ["infected"] * 4 + ["other"] * 8
+    p = _probe(scores, y, hosts)
+    assert p.n_positive_hosts == 1
+    assert p.lift_over_ceiling > 2.0            # looks like a big win
+    # 0.9, not 1.0: the host's own negatives tie with its positives under the
+    # host mean, which is exactly what "the ranking is the host" looks like.
+    assert p.host_mean_roc == pytest.approx(0.9)
+    assert p.within_host_lift < 1.0             # and is worth less than a constant
+    assert p.is_host_identity is True
+
+
+def test_real_timing_signal_is_not_called_host_identity():
+    scores = [0.9, 0.85, 0.1, 0.05] + [0.02] * 8
+    y = [1, 1, 0, 0] + [0] * 8
+    hosts = ["infected"] * 4 + ["other"] * 8
+    p = _probe(scores, y, hosts)
+    assert p.within_host_lift == pytest.approx(1 / 0.5, abs=0.01)   # perfect within-host ranking
+    assert p.is_host_identity is False
+
+
+def test_probe_respects_the_floor_mask():
+    p = _probe(scores=[9.0, 0.1, 0.2, 0.3], y=[1, 1, 0, 0], hosts=["a", "a", "b", "b"],
+               floor=[False, True, True, True])
+    assert p.n_rows == 3 and p.n_positive == 1
+
+
+def test_probe_needs_both_classes():
+    with pytest.raises(ValueError, match="both classes"):
+        _probe(scores=[0.1, 0.2], y=[0, 0], hosts=["a", "b"])
+
+
+def test_probe_markdown_reports_the_verdict():
+    from nidra.scripts.silent_positive_audit import probe_markdown
+    p = _probe(scores=[0.3, 0.2, 0.9, 0.8] + [0.01] * 8, y=[1, 1, 0, 0] + [0] * 8,
+               hosts=["infected"] * 4 + ["other"] * 8)
+    md = probe_markdown({"state+hidden": p}, "val")
+    assert "host identity" in md
+    assert "within-host" in md
+
+
+def test_a_constant_head_is_called_constant_not_signal_bearing():
+    """`is_host_identity` is False for a constant head, and reporting that as
+    'carries timing signal' would read as praise for emitting one number."""
+    p = _probe(scores=[0.3] * 10, y=[1, 1, 0, 0, 0, 0, 0, 0, 0, 0], hosts=["a"] * 5 + ["b"] * 5)
+    assert p.is_constant is True
+    assert p.is_host_identity is False
+    assert "ceiling" in p.verdict and "timing signal" not in p.verdict
+
+
+def test_a_varying_head_is_not_called_constant():
+    p = _probe(scores=[0.3, 0.2, 0.9, 0.8] + [0.01] * 8, y=[1, 1, 0, 0] + [0] * 8,
+               hosts=["infected"] * 4 + ["other"] * 8)
+    assert p.is_constant is False
+    assert p.verdict == "**host identity**"

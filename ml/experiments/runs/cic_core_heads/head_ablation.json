@@ -1,0 +1,35 @@
+{
+  "label": "cic_core_heads",
+  "init_from": "cic_core_dyn",
+  "variants": {
+    "state": {
+      "components": [
+        "state"
+      ],
+      "run_dir": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/cic_core_heads__state",
+      "seeds": {
+        "0": {
+          "val_auc_pr_natural": 0.6780771051850328,
+          "val_auc_pr": 0.6780771051850328,
+          "best_epoch": 0,
+          "input_dim": 45
+        }
+      }
+    },
+    "state+hidden": {
+      "components": [
+        "state",
+        "hidden"
+      ],
+      "run_dir": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/cic_core_heads__state+hidden",
+      "seeds": {
+        "0": {
+          "val_auc_pr_natural": 0.7825444222939472,
+          "val_auc_pr": 0.7825444222939472,
+          "best_epoch": 0,
+          "input_dim": 173
+        }
+      }
+    }
+  }
+}

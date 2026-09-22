@@ -1,0 +1,271 @@
+version: 0.1.0
+schema_version: '1.0'
+random_seed: 1337
+dataset:
+  cic2017_flow_dir: '~/nidra/cicids2017/csv/extracted/TrafficLabelling '
+  packets_dir: ~/nidra/cicids2017/pcap/parquet
+  days:
+    monday:
+      file: Monday-WorkingHours.pcap_ISCX.csv
+      role: benign_baseline
+      packets: Monday-WorkingHours_packets.parquet
+      dataset: cic2017
+    tuesday:
+      file: Tuesday-WorkingHours.pcap_ISCX.csv
+      role: train
+      packets: Tuesday-WorkingHours_packets.parquet
+      dataset: cic2017
+    wednesday:
+      file: Wednesday-workingHours.pcap_ISCX.csv
+      role: train
+      packets: Wednesday-workingHours_packets.parquet
+      dataset: cic2017
+    thursday_web:
+      file: Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv
+      role: holdout
+      packets: Thursday-WorkingHours_packets.parquet
+      dataset: cic2017
+    thursday_infiltration:
+      file: Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv
+      role: holdout
+      packets: Thursday-WorkingHours_packets.parquet
+      dataset: cic2017
+    friday_morning:
+      file: Friday-WorkingHours-Morning.pcap_ISCX.csv
+      role: test
+      packets: Friday-WorkingHours_packets.parquet
+      dataset: cic2017
+    friday_portscan:
+      file: Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv
+      role: test
+      packets: Friday-WorkingHours_packets.parquet
+      dataset: cic2017
+    friday_ddos:
+      file: Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv
+      role: test
+      packets: Friday-WorkingHours_packets.parquet
+      dataset: cic2017
+    ctu_1:
+      file: 1/capture20110810.binetflow
+      format: ctu_binetflow
+      dataset: ctu13
+      role: train
+      family: neris
+      scenario: 1
+    ctu_2:
+      file: 2/capture20110811.binetflow
+      format: ctu_binetflow
+      dataset: ctu13
+      role: train
+      family: neris
+      scenario: 2
+    ctu_3:
+      file: 3/capture20110812.binetflow
+      format: ctu_binetflow
+      dataset: ctu13
+      role: train
+      family: rbot
+      scenario: 3
+    ctu_4:
+      file: 4/capture20110815.binetflow
+      format: ctu_binetflow
+      dataset: ctu13
+      role: val
+      family: rbot
+      scenario: 4
+    ctu_6:
+      file: 6/capture20110816.binetflow
+      format: ctu_binetflow
+      dataset: ctu13
+      role: val
+      family: menti
+      scenario: 6
+    ctu_8:
+      file: 8/capture20110816-3.binetflow
+      format: ctu_binetflow
+      dataset: ctu13
+      role: test
+      family: murlo
+      scenario: 8
+    ctu_9:
+      file: 9/capture20110817.binetflow
+      format: ctu_binetflow
+      dataset: ctu13
+      role: test
+      family: neris
+      scenario: 9
+    ctu_10:
+      file: 10/capture20110818.binetflow
+      format: ctu_binetflow
+      dataset: ctu13
+      role: test
+      family: rbot
+      scenario: 10
+    ctu_13:
+      file: 13/capture20110815-3.binetflow
+      format: ctu_binetflow
+      dataset: ctu13
+      role: holdout
+      family: virut
+      scenario: 13
+    ctu_12:
+      file: 12/capture20110819.binetflow
+      format: ctu_binetflow
+      dataset: ctu13
+      role: holdout
+      family: nsis_ay
+      scenario: 12
+  ctu13_dir: ~/nidra/CTU-13-Dataset
+  ctu13_internal_cidrs:
+  - 147.32.0.0/16
+windowing:
+  window_seconds: 60
+  context_length: 30
+  horizon_length: 6
+  min_windows_per_host: 36
+  clustering_degree_cap: 200
+normalization:
+  method: robust_scaler
+  clip_min: -10.0
+  clip_max: 10.0
+  fit_split: train
+labels:
+  risk_threshold_windows: 6
+splits:
+  train_days:
+  - monday
+  - tuesday
+  - wednesday
+  - ctu_1
+  - ctu_2
+  - ctu_3
+  test_days:
+  - friday_morning
+  - friday_portscan
+  - friday_ddos
+  holdout_days:
+  - thursday_web
+  - thursday_infiltration
+  val_fraction_of_train_time: 0.3
+  pre_onset_margin_minutes: 30
+  val_block_per_day: true
+  val_days:
+  - ctu_4
+  - ctu_6
+  val_carve_train_days:
+  - monday
+  - tuesday
+  - wednesday
+model:
+  n_features: 45
+  encoder:
+    hidden_size: 128
+    num_layers: 2
+    dropout: 0.1
+  transition:
+    mlp_hidden: 256
+    logvar_min: -6.0
+    logvar_max: 3.0
+    state_clamp: 10.0
+    linear_skip: false
+  risk_head:
+    hidden: 64
+    components:
+    - state
+  stage_head:
+    hidden: 64
+    n_stages: 6
+train_dynamics:
+  optimizer: adamw
+  lr: 0.0003
+  weight_decay: 0.0001
+  batch_size: 256
+  epochs: 60
+  grad_clip: 1.0
+  scheduler: cosine
+  selection_metric: val_free_running_nll
+  early_stopping_metric: val_multistep_nll
+  patience: 8
+  horizon_discount: 0.85
+  teacher_forcing:
+    start_p: 1.0
+    end_p: 0.3
+    anneal_fraction_of_epochs: 0.6
+  beta_nll: 0.5
+  mse_aux_weight: 0.0
+  nonsilent_sample_weight: 1.0
+train_heads:
+  selection_metric: val_auc_pr_natural
+  risk_sampling: imbalanced
+  pos_repeat: 20
+  neg_ratio: 10
+  hard_negative_fraction: 0.5
+  input_noise: 0.3
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  batch_size: 256
+  epochs: 30
+  grad_clip: 1.0
+  patience: 6
+onset:
+  horizons_min:
+  - 1
+  - 3
+  - 5
+  - 10
+  - 15
+  - 30
+  selection_horizon_min: 5
+  hidden: 64
+  epochs: 30
+  patience: 6
+  lr: 0.001
+  weight_decay: 0.0001
+  batch_size: 256
+  input_noise: 0.3
+  pos_repeat: 20
+  neg_ratio: 10
+  hard_negative_fraction: 0.5
+ensemble:
+  seeds:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+rollout:
+  n_samples_per_member: 200
+  stochastic: true
+  ci_low_quantile: 0.05
+  ci_high_quantile: 0.95
+  risk_pooling_method: quantile
+  risk_pooling_quantile: 0.85
+  risk_pooling_head_reduction: before_pooling
+training_data:
+  max_train_samples: 500000
+  max_val_samples: 50000
+serving:
+  torch_num_threads: 2
+  latency_target_ms: 300
+eval:
+  risk_threshold: 0.75
+  lead_time_persistence_windows: 2
+  forecast_chunk_size: 500
+  window_seconds: 60
+  episode_merge_gap_windows: 5
+  benchmark_set:
+    active_negative_cap: 15000
+    silent_negative_cap: 5000
+    pre_onset_minutes: 30
+explain:
+  shap_background_centroids: 100
+  shap_background_source: benign_train
+artifacts:
+  root: /Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/combined_heads__state/artifacts
+  weights_dir: /Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/combined_heads__state/artifacts/weights
+  scaler_dir: /Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/combined_heads__state/artifacts/scaler
+  metrics_dir: /Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/combined_heads__state/artifacts/metrics
+  processed_dir: artifacts/processed
+features:
+  regime: cross_core

@@ -1504,3 +1504,27 @@ score lands between the two heads rather than above either, because the risk hea
 confident scores on 172 exfil windows outrank the stage head's correct ordering of 24 c2
 ones and one pooled ranking cannot hold both. Not adopted. The evidence points at a
 stage-aware risk objective (§12), which is now motivated rather than speculative.
+
+**D129 — 20% of CTU validation's forecast positives are the silent state, and the
+history-aware head answers them with the host's name.** (2026-09-23)
+`nidra/scripts/silent_positive_audit.py`. `risk_label[t]` marks the window BEFORE an attack,
+and on CTU every such window is silent: 71/71 on train, 84/84 on val have `is_active == 0`,
+and 63 and 58 of them are within 1e-5 of the scaler's silent state on all 45 features —
+bit-identical to 1,026,383 and 47,650 negatives. Inside that stratum the best AP any
+function of the state can reach is the stratum's prevalence (0.001216 on val), which is a
+ceiling and also a leak check. The published state-only head emits exactly ONE distinct
+score over all 47,708 rows and lands on 0.001216 at ROC 0.5000; the bound is tight and the
+check passes. CIC has the same structure more weakly (pre-onset windows silent 24/45 train,
+9/22 val), so CTU's advance-warning signal specifically is a silence phenomenon.
+The `state+hidden` head produces 11,599 distinct scores there and reaches AP 0.0707 — 58x
+the ceiling, the largest number in the phase, and it does not survive decomposition. All 58
+floor positives sit on ONE host; replacing each score by its host's mean reproduces the
+ranking at ROC 0.9993, and within that host the head scores AP 0.4460 against a prevalence
+of 0.4567 — lift 0.98x, worse than a constant, ROC 0.3836. The head recognises the infected
+host, not the moment. ROC 0.4242 alongside 58x lift was the tell. §3.4's composite result is
+untouched (its positives are mostly real attack traffic); what is retracted is any reading
+of it as advance warning from silence. `floor_stratum_probe` reports the decomposition and
+flags `is_host_identity` generically, with a separate `is_constant` so a state-only head is
+not described as carrying timing signal. Consequence: the single-infected-host confound,
+not the architecture, is this phase's binding limitation — neither corpus has two infected
+hosts in one attack stage on one split, and §4/§12 will inherit that.

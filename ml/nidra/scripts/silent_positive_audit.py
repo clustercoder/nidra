@@ -75,6 +75,122 @@ def audit_split(scaled: np.ndarray, is_active: np.ndarray, risk_label: np.ndarra
                        n_floor_positive=int((pre & at_floor).sum()), n_floor_rows=int(at_floor.sum()))
 
 
+@dataclass(frozen=True)
+class FloorProbe:
+    """What a head's scores are actually doing inside the floor stratum.
+
+    Every row there is the same state vector, so a state-only head produces one
+    constant and lands exactly on the ceiling. A history-aware head produces a
+    different score per row, and the question is what that variation encodes.
+    Two decompositions answer it:
+
+    `host_mean_*` replaces every row's score by its host's mean, discarding
+    everything the head said about WHICH window. If that alone reproduces the
+    ranking, the head is recognising the host.
+
+    `within_*` restricts to the infected host, where host identity is constant
+    and only the timing question remains — the one advance warning actually
+    asks. A within-host lift near 1.0 means no timing signal at all.
+    """
+
+    n_rows: int
+    n_positive: int
+    ap: float
+    roc: float
+    host_mean_ap: float
+    host_mean_roc: float
+    n_positive_hosts: int
+    within_host_rows: int
+    within_host_prevalence: float
+    within_host_ap: float
+    within_host_roc: float
+
+    @property
+    def ceiling(self) -> float:
+        """A state-only head's AP here: the stratum's prevalence."""
+        return self.n_positive / self.n_rows if self.n_rows else float("nan")
+
+    @property
+    def lift_over_ceiling(self) -> float:
+        return self.ap / self.ceiling if self.ceiling else float("nan")
+
+    @property
+    def within_host_lift(self) -> float:
+        p = self.within_host_prevalence
+        return self.within_host_ap / p if p else float("nan")
+
+    @property
+    def is_constant(self) -> bool:
+        """The head emitted one value over the whole stratum, which is all a
+        state-only head CAN do here. It carries neither host identity nor
+        timing, and calling that "no host identity" would read as praise."""
+        return abs(self.lift_over_ceiling - 1.0) < 1e-6 and abs(self.roc - 0.5) < 1e-6
+
+    @property
+    def is_host_identity(self) -> bool:
+        """Did the head buy its lift by recognising the host rather than the
+        moment? True when collapsing to host means keeps the ranking AND the
+        within-host ordering carries nothing."""
+        if self.is_constant:
+            return False
+        return bool(self.host_mean_roc >= 0.9 and self.within_host_lift < 1.1)
+
+    @property
+    def verdict(self) -> str:
+        if self.is_constant:
+            return "constant — at the ceiling, as a state-only head must be"
+        if self.is_host_identity:
+            return "**host identity**"
+        return "carries timing signal"
+
+
+def floor_stratum_probe(scores, y, hosts, floor_mask) -> FloorProbe:
+    """Decompose a head's floor-stratum ranking into host identity and timing."""
+    from sklearn.metrics import average_precision_score, roc_auc_score
+
+    s = np.asarray(scores, dtype="float64")[np.asarray(floor_mask)]
+    yy = np.asarray(y).astype(int)[np.asarray(floor_mask)]
+    hh = np.asarray(hosts)[np.asarray(floor_mask)]
+    if len(yy) == 0 or yy.sum() == 0 or (yy == 0).sum() == 0:
+        raise ValueError(f"floor stratum needs both classes, got {yy.sum()} positives of {len(yy)}")
+
+    means = {h: s[hh == h].mean() for h in np.unique(hh)}
+    host_mean = np.array([means[h] for h in hh])
+    pos_hosts = np.unique(hh[yy == 1])
+    k = np.isin(hh, pos_hosts)
+    both = yy[k].sum() > 0 and (yy[k] == 0).sum() > 0
+    return FloorProbe(
+        n_rows=int(len(yy)), n_positive=int(yy.sum()),
+        ap=float(average_precision_score(yy, s)), roc=float(roc_auc_score(yy, s)),
+        host_mean_ap=float(average_precision_score(yy, host_mean)),
+        host_mean_roc=float(roc_auc_score(yy, host_mean)),
+        n_positive_hosts=int(len(pos_hosts)), within_host_rows=int(k.sum()),
+        within_host_prevalence=float(yy[k].mean()) if k.sum() else float("nan"),
+        within_host_ap=float(average_precision_score(yy[k], s[k])) if both else float("nan"),
+        within_host_roc=float(roc_auc_score(yy[k], s[k])) if both else float("nan"))
+
+
+def probe_markdown(probes: dict[str, FloorProbe], split: str) -> str:
+    out = [f"### What a head's scores encode inside the floor stratum — **{split}**", "",
+           "Every row in the stratum is the same state vector. A state-only head can only emit a "
+           "constant, so it lands exactly on the ceiling; a history-aware head varies, and these two "
+           "columns say what the variation is. **host-mean** replaces each score by its host's mean, "
+           "keeping only host identity. **within-host** restricts to the infected host, where identity "
+           "is constant and only the timing question remains — which is the question advance warning "
+           "asks.", "",
+           "| head | rows | positives | AP | lift over ceiling | ROC | host-mean AP | host-mean ROC | "
+           "within-host prevalence | within-host AP | within-host lift | within-host ROC | verdict |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    for name, p in probes.items():
+        out.append(f"| {name} | {p.n_rows} | {p.n_positive} | {p.ap:.6f} | {p.lift_over_ceiling:.2f}× | "
+                   f"{p.roc:.4f} | {p.host_mean_ap:.4f} | {p.host_mean_roc:.4f} | "
+                   f"{p.within_host_prevalence:.4f} | {p.within_host_ap:.4f} | {p.within_host_lift:.2f}× | "
+                   f"{p.within_host_roc:.4f} | {p.verdict} |")
+    out += ["", "A lift over the ceiling that disappears within the host is the head recognising *who*, "
+                "not *when*."]
+    return "\n".join(out)
+
+
 def audit_markdown(audits: list[SilentAudit]) -> str:
     out = ["### Positives that carry no information in the state", "",
            "`risk_label` marks the windows BEFORE an attack starts, and a host that is silent in such a "
@@ -102,6 +218,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
     parser.add_argument("--splits", default="train,val")
+    parser.add_argument("--probe-heads", default=None,
+                        help="comma-separated name=config pairs; score each head on the LAST split and "
+                             "decompose its floor-stratum ranking into host identity and timing")
+    parser.add_argument("--probe-out", default=None)
+    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", default=None)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -121,6 +242,21 @@ def main() -> None:
                     a.split, a.n_floor_positive, a.n_positive, 100 * a.share_of_positives, a.floor_prevalence)
         audits.append(a)
 
+    if args.probe_heads:
+        probes = {}
+        last = args.splits.split(",")[-1].strip()
+        for pair in args.probe_heads.split(","):
+            name, _, cfg_path = pair.partition("=")
+            probes[name.strip()] = _probe_head(cfg_path.strip(), last, args.seed)
+        pmd = probe_markdown(probes, last)
+        if args.probe_out:
+            from pathlib import Path
+            Path(args.probe_out).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.probe_out).write_text(pmd + "\n")
+            logger.info("wrote %s", args.probe_out)
+        print(pmd)
+        print()
+
     md = audit_markdown(audits)
     if args.out:
         from pathlib import Path
@@ -128,6 +264,36 @@ def main() -> None:
         Path(args.out).write_text(md + "\n")
         logger.info("wrote %s", args.out)
     print(md)
+
+
+def _probe_head(config_path: str, split: str, seed: int) -> FloorProbe:
+    """Score one run's frozen risk head on the split's observed states and
+    decompose what it does inside the floor stratum."""
+    import torch
+
+    from nidra.data.normalize import FeatureScaler
+    from nidra.data.schema import FEATURE_ORDER
+    from nidra.eval.benchmark import load_models
+    from nidra.train.head_context import build_head_context
+    from nidra.train.pipeline import build_all_splits, geometry_from_config
+    from nidra.utils.config import load_config, resolve_path
+
+    cfg = load_config(config_path)
+    _, L, _ = geometry_from_config(cfg)
+    scaler = FeatureScaler.load(*FeatureScaler.default_paths(resolve_path(cfg, cfg["artifacts"]["scaler_dir"])))
+    model = load_models(cfg, [seed])[0]
+    df = getattr(build_all_splits(cfg), split).sort_values(["host_id", "window_ts"]).reset_index(drop=True)
+    scaled = scaler.transform(df[FEATURE_ORDER].to_numpy(dtype="float32")).astype("float32")
+    states = torch.from_numpy(scaled)
+    ctx = build_head_context(df, scaler, model, L)
+    parts = {"state": states, "hidden": torch.from_numpy(ctx.hidden.copy()),
+             "delta": torch.from_numpy(ctx.delta.copy()), "logvar": torch.from_numpy(ctx.logvar.copy())}
+    components = getattr(model.risk_head, "components", ("state",))
+    with torch.no_grad():
+        scores = torch.sigmoid(model.risk_head(**{k: v for k, v in parts.items()
+                                                  if k in components})).numpy().ravel()
+    floor = np.all(np.isclose(scaled, scaler.zero_state_scaled().astype("float32"), atol=FLOOR_ATOL), axis=1)
+    return floor_stratum_probe(scores, df["risk_label"].to_numpy(), df["host_id"].to_numpy(), floor)
 
 
 if __name__ == "__main__":
