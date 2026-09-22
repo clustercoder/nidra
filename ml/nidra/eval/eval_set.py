@@ -93,6 +93,27 @@ class EvalSet:
         }
 
 
+def observed_span_hours(table: pd.DataFrame, window_seconds: int) -> float:
+    """Wall clock the split actually watched, in hours.
+
+    The denominator of `false_alarms_per_hour`, and therefore a number that
+    flatters the model when it is too large. `max(ts) - min(ts)` is only the
+    observation time of a split that is ONE continuous capture. CIC-IDS2017's
+    splits are single working days, so there the two agree to within 0.25%;
+    CTU-13's splits are separate captures made on different days of August
+    2011, and the nights between them are not time anything was watching —
+    the naive range overstates the CTU holdout by a factor of 5.0.
+
+    Counting DISTINCT window timestamps needs no assumption that the split is
+    contiguous, cannot double-count two captures that overlap, and is not
+    affected by how many hosts populate a window. It is the number of minutes
+    of network the model was actually shown.
+    """
+    if len(table) == 0:
+        return 0.0
+    return float(len(np.unique(table["window_ts"].to_numpy())) * window_seconds / 3600.0)
+
+
 def build_eval_set(
     table: pd.DataFrame,
     L: int,
@@ -143,8 +164,7 @@ def build_eval_set(
     onset_matrix = onset_targets(inside_sel, to_onset_sel, tuple(onset_horizons_min))
     onset_labels = {h: onset_matrix[:, j] for j, h in enumerate(onset_horizons_min)}
 
-    ts_all = df["window_ts"].to_numpy()
-    span_hours = float((ts_all.max() - ts_all.min()) / 3600.0) if len(ts_all) else 0.0
+    span_hours = observed_span_hours(df, window_seconds)
     group_sel, attack_group = _attack_groups(df, cands, select_all, arrays)
     return EvalSet(
         arrays=arrays, stratum=stratum_sel.astype(str), weight=weight, cluster=cluster.astype(str),

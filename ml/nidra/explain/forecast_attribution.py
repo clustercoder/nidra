@@ -47,8 +47,11 @@ def forecast_score_fn(models: list[WorldModel], K: int, horizon_reduction: str =
     def f(x: torch.Tensor) -> torch.Tensor:
         risks = []
         for m in models:
-            states = m.rollout(x, K=K, n_samples=1, stochastic=False).states[:, 0]      # [B, K, F]
-            r, _ = m.score_states(states)                                                # [B, K]
+            out = m.rollout(x, K=K, n_samples=1, stochastic=False)
+            # score_trajectory, not score_states: a history-aware head reads
+            # the rollout's hidden state and log-variance too, and attributing
+            # a score the head did not produce would explain the wrong model.
+            r = m.score_trajectory(out)[0][:, 0]                                         # [B, K]
             risks.append(r)
         risk_k = torch.stack(risks).mean(0)
         if horizon_reduction == "integrated":

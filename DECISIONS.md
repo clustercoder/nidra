@@ -1314,3 +1314,86 @@ select a future head architecture only on the day whose validation block the hea
 see, and any such selection must be reported with that caveat. Leave-one-episode-out was
 not run (five retrains at ~1 h each, and the two LODO runs already cover both training
 attack days).
+
+**D117 — CTU-13 enters as a flow-only dataset, and the features it cannot produce are
+declared drops rather than zeros.** (2026-09-23) The 13 Argus `.binetflow` captures
+(19,976,700 flows, 2.73 GB, CVUT, August 2011) are read through `nidra/data/ctu_load.py`
+into the same windowing, labelling and split machinery as CIC-IDS2017. The PCAPs shipped
+alongside them are **not** used: the public ones contain only the botnet's own traffic —
+the full captures were withheld for privacy — so any packet feature derived from them
+would be a perfect label, since only infected hosts would have one. The eleven packet
+aggregates are therefore unavailable rather than missing, and with them `iat_max` (Argus
+records no per-packet timing) and `d_retrans_rate`. `FEATURE_ORDER` stays 45 wide because
+it is a cross-service contract; the exclusions are a named **regime**
+(`schema.FEATURE_REGIMES`) applied through the scaler's existing `drop` kind, so an
+excluded column is forced to zero in scaled space, left out of `model_mask`, and travels
+with the artifact instead of being reconstructed at each call site. `cross_core` (32
+features) keeps the six TCP flag ratios and measures the estimator shift
+(`data/dataset_shift.py`) rather than assuming it away; `cross_strict` (24) drops all
+eight flag-derived columns. Argus `State` is parsed as flags only for TCP rows containing
+`_` — `CON`, `INT`, `URP`, `RED` and the other word states are not flag letters and must
+never be read as any. The internal-CIDR host filter (147.32.0.0/16) drops 88 of 444,699
+botnet flows, 0.02%.
+
+**D118 — CTU's validation split is held-out captures, not a temporal carve out of
+training.** (2026-09-23) The default carve put 88% of scenario 1 into validation and left
+training with 192 positives against validation's 1225 — a validation block larger in
+attack content than the training set, which cannot select anything. Captures 4 and 6 are
+held out instead (train 1,2,3; test 8,9,10; holdout 5,13,12; 7 and 11 are too short to
+window at Δ=60 and are excluded). Measured before and after: 161/1197 positives becomes
+1358/213. The cost is that validation shares families with training, exactly as on
+CIC — which is why family transfer is measured by the leave-one-family-out configs
+(`config/lofo/`), never by the validation split.
+
+**D119 — The history-aware risk head is a declared component set over the rollout, and
+the frozen-head discipline is unchanged.** (2026-09-23) `TrajectoryRiskHead` reads any
+subset of {`state`, `hidden`, `delta`, `logvar`} — the predicted state, the encoder's
+recurrent summary after ingesting it, the realized backward difference of the trajectory,
+and the transition's predicted log-variance. Training pairs still come from **observed**
+states only (`train/head_context.py` builds the identical quantities from observed
+history, and a test asserts head training never calls `rollout`), so every unit of
+forward-looking capability still originates in the transition model. Three consequences
+were decided rather than discovered later. (1) There is deliberately no `horizon`
+component: under the frozen-head discipline a head only ever sees observed states, where
+"how many ingested windows were predictions" is identically zero, so a horizon input
+would be constant in training and out of distribution at inference; horizon dependence
+enters through `logvar` and the per-horizon Platt calibration. (2) The head reads
+`RolloutOutput.realized_deltas()`, the trajectory's own backward difference, not `mus` —
+under a stochastic rollout the realized change is mu plus noise, and the training pairs
+are observed backward differences. (3) `components=[state]` builds the plain Run 8
+`RiskHead`, so the ablation's control is that architecture exactly, not a reimplementation
+of it. Variants share one stage-1 checkpoint: `train_heads` loads only the `encoder.*` and
+`transition.*` keys and asserts none are missing, which both enables the sharing and makes
+a shape mismatch loud.
+
+**D120 — `persistence_rollout` is the strict transition ablation.** (2026-09-23) The
+existing `persistence` system is the risk head on S_t, which for a history-aware head is
+not the same system minus the transition — it is a different wiring. `state_source` on
+`WorldModel.rollout` now selects where the next state comes from (`model` / `persist` /
+`truth`), so persistence and the oracle are the *same* forward simulation with only that
+one thing swapped: the encoder still advances, the head still gets its history, and the
+only thing removed is the predicted change. A test asserts `persistence_rollout`
+coincides exactly with `persistence` for a per-state head, so the new system cannot
+quietly change Run 8's comparisons.
+
+**D121 — The onset head gains a discrete-time hazard parameterisation, as a controlled
+alternative and not a replacement.** (2026-09-23) Run 8's independent per-horizon BCE
+could and did report P(onset within 1 min) above P(onset within 30 min). The hazard form
+fits bucket j only on rows still at risk in it and reads out
+P(within h_m) = 1 − Π(1 − p_j), which is monotone by construction and can use censored
+rows ("no onset within 30 minutes" is what was observed, not "no onset ever"). The
+architecture is byte-for-byte the same either way — only the loss and the readout differ —
+which is what makes the comparison an ablation rather than two models. `independent`
+remains the default until the comparison is run.
+
+**D122 — Observation time is distinct windows times Δ, not the range from first to last
+timestamp.** (2026-09-23) `false_alarms_per_hour` divides by this, so a span that is too
+large flatters the model. `max(ts) − min(ts)` is the observation time only of a split that
+is one continuous capture. CIC-IDS2017's splits are single working days and the two
+definitions agree to within 0.25% (test 8.05 → 8.07 h, holdout 4.00 → 4.02 h, so Run 8's
+false-alarm rates stand). CTU-13's splits are separate captures made on different days of
+August 2011, and the idle nights between them are not time anything was watching: the
+naive range overstates the test split by 1.66× and the **holdout by 5.02×** (91.03 h of
+range over 18.13 h of capture), which would have divided the CTU false-alarm rate by five.
+Counting distinct window timestamps assumes nothing about contiguity, cannot double-count
+overlapping captures, and does not move with the number of hosts in a window.
