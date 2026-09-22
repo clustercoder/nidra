@@ -94,7 +94,24 @@ def row_for(record: dict, system: str = "world_model_calibrated") -> dict:
         "n_episodes": per_ep.get("n_episodes"),
         "warned_pre_onset": per_ep.get("n_warned_pre_onset"),
         "attribution_vs_persistence": (m.get("attribution_published_label", {}) or {}).get("world_model - persistence"),
+        # D130: every attack group in both corpora has its positives on one
+        # host, so AP alone cannot tell "learned the family" from "learned the
+        # machine". Within-host ROC can, and it is prevalence-independent, so
+        # it is the one column that compares honestly across these regimes.
+        **_host_identity_fields(m, system),
     }
+
+
+def _host_identity_fields(m: dict, system: str) -> dict:
+    """The host/timing decomposition for this row's system, if the benchmark
+    that produced it carried one. Benchmarks predating the block simply have
+    no column rather than a fabricated one."""
+    h = (m.get("host_identity_published_label") or {}).get(system)
+    if not h:
+        return {"n_positive_hosts": None, "within_host_roc": None,
+                "within_host_prevalence": None, "host_mean_roc": None}
+    return {"n_positive_hosts": h.get("n_positive_hosts"), "within_host_roc": h.get("within_host_roc"),
+            "within_host_prevalence": h.get("within_host_prevalence"), "host_mean_roc": h.get("host_mean_roc")}
 
 
 DEFAULT_REGIMES = [
@@ -129,15 +146,16 @@ def main() -> None:
 
     lines: list[str] = []
     lines.append("| Training | Evaluated on | split | rows | prevalence | AP [95% CI] | ROC | P | R | F1 | FA/h | "
-                 "best baseline (AP) | oracle AP | state skill vs persistence / ridge | onset AP 5/15 | episodes warned |")
-    lines.append("|---|---|---|---:|---:|---|---:|---:|---:|---:|---:|---|---:|---|---|---|")
+                 "best baseline (AP) | oracle AP | state skill vs persistence / ridge | onset AP 5/15 | "
+                 "episodes warned | positive hosts | within-host ROC |")
+    lines.append("|---|---|---|---:|---:|---|---:|---:|---:|---:|---:|---|---:|---|---|---|---:|---:|")
     raw: dict[str, Any] = {}
     for train, evalset, label in regimes:
         for split in splits:
             path = runs_dir / label / "artifacts" / "metrics" / split / "benchmark.json"
             record = read_benchmark(path)
             if record is None:
-                lines.append(f"| {train} | {evalset} | {split} | — | — | not run | — | — | — | — | — | — | — | — | — | — |")
+                lines.append(f"| {train} | {evalset} | {split} | — | — | not run | — | — | — | — | — | — | — | — | — | — | — | — |")
                 continue
             r = row_for(record, args.system)
             raw[f"{label}/{split}"] = r
@@ -148,7 +166,16 @@ def main() -> None:
                 f"{_f(r['f1'])} | {_f(r['false_alarms_per_hour'], 2)} | "
                 f"{r['best_baseline'] or '—'} ({_f(r['best_baseline_ap'])}) | {_f(r['oracle_ap'])} | "
                 f"{_f(r['state_skill_vs_persistence'])} / {_f(r['state_skill_vs_ridge'])} | "
-                f"{_f(r['onset_ap_5'])} / {_f(r['onset_ap_15'])} | {warned} |")
+                f"{_f(r['onset_ap_5'])} / {_f(r['onset_ap_15'])} | {warned} | "
+                f"{r['n_positive_hosts'] if r['n_positive_hosts'] is not None else '—'}"
+                f"{'¹' if r['n_positive_hosts'] == 1 else ''} | {_f(r['within_host_roc'], 4)} |")
+
+    if any(r.get("n_positive_hosts") == 1 for r in raw.values()):
+        lines += ["", "¹ Every positive in that evaluation sits on a single host, so its AP does not "
+                      "separate the attack's behaviour from that host's identity. **Within-host ROC** is "
+                      "the column that does: on the infected host alone, does the system order the attack "
+                      "windows above that host's own benign ones? It is prevalence-independent and is the "
+                      "only column here that compares fairly across datasets."]
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
