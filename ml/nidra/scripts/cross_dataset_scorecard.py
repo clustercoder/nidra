@@ -1,0 +1,162 @@
+"""The cross-dataset scorecard: one table, every training/evaluation regime.
+
+    python -m nidra.scripts.cross_dataset_scorecard \
+        --runs experiments/runs --out reports/run9/scorecard.md
+
+Reads whatever `benchmark.json` files exist under the given run directories
+and renders the row for each. Nothing is computed here — a cell is either a
+measured number with its interval or an explicit gap. A regime that was not
+run says so; it never silently borrows another regime's number.
+
+The rows are the six the phase is designed around (training set x evaluation
+set), plus whatever else is on disk:
+
+    CIC     -> CIC      the Run 8 protocol, at the cross-dataset feature mask
+    CTU     -> CTU      within-dataset, scenario/family holdout
+    CIC     -> CTU      transfer, operating point selected on CIC validation
+    CTU     -> CIC      transfer the other way
+    CIC+CTU -> CIC      does adding CTU help on CIC?
+    CIC+CTU -> CTU      does adding CIC help on CTU?
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+from pathlib import Path
+from typing import Any
+
+logger = logging.getLogger(__name__)
+
+
+def _f(x: Any, nd: int = 3) -> str:
+    if x is None:
+        return "—"
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return str(x)
+    return "—" if v != v else f"{v:.{nd}f}"
+
+
+def _ci(entry: dict | None) -> str:
+    b = (entry or {}).get("auc_pr_bootstrap")
+    if not b:
+        return ""
+    stars = "*" if b.get("n_positive_clusters", 99) < 5 else ""
+    return f" [{b['ci_low']:.3f}, {b['ci_high']:.3f}]{stars}"
+
+
+def read_benchmark(path: Path) -> dict | None:
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except json.JSONDecodeError:
+        logger.warning("%s is not readable JSON", path)
+        return None
+
+
+def row_for(record: dict, system: str = "world_model_calibrated") -> dict:
+    m = record["metrics"]
+    pub = m["task_published_label"]
+    sysrow = pub["systems"].get(system, {})
+    at = sysrow.get("at_threshold", {})
+    best_baseline, best_ap = None, float("-inf")
+    for name, entry in pub["systems"].items():
+        if name in ("world_model", "world_model_calibrated", "oracle_true_future"):
+            continue
+        ap = entry.get("auc_pr")
+        if ap is not None and ap == ap and ap > best_ap:
+            best_baseline, best_ap = name, ap
+    onset = m.get("task_B_onset_forecast", {})
+    per_ep = m.get("per_episode", {}).get("world_model_calibrated", {})
+    return {
+        "split": record.get("split"),
+        "n_rows": pub.get("n_rows"),
+        "prevalence": pub.get("prevalence_natural"),
+        "ap": sysrow.get("auc_pr"),
+        "ap_ci": _ci(sysrow),
+        "roc": sysrow.get("roc_auc"),
+        "precision": at.get("precision"),
+        "recall": at.get("recall"),
+        "f1": at.get("f1"),
+        "false_alarms_per_hour": sysrow.get("active_benign_false_alarm_rate"),
+        "oracle_ap": pub["systems"].get("oracle_true_future", {}).get("auc_pr"),
+        "persistence_ap": pub["systems"].get("persistence", {}).get("auc_pr"),
+        "best_baseline": best_baseline,
+        "best_baseline_ap": best_ap if best_baseline else None,
+        "state_skill_vs_persistence": (m.get("state_forecast", {}).get("skill_vs_persistence", {}) or {}).get("mean"),
+        "state_skill_vs_ridge": m.get("state_forecast", {}).get("skill_vs_ridge"),
+        "onset_ap_5": onset.get("5", {}).get("systems", {}).get(system, {}).get("auc_pr"),
+        "onset_ap_15": onset.get("15", {}).get("systems", {}).get(system, {}).get("auc_pr"),
+        "n_episodes": per_ep.get("n_episodes"),
+        "warned_pre_onset": per_ep.get("n_warned_pre_onset"),
+        "attribution_vs_persistence": (m.get("attribution_published_label", {}) or {}).get("world_model - persistence"),
+    }
+
+
+DEFAULT_REGIMES = [
+    ("CIC", "CIC", "cic_core"),
+    ("CTU", "CTU", "ctu"),
+    ("CIC", "CTU", "cic2ctu"),
+    ("CTU", "CIC", "ctu2cic"),
+    ("CIC+CTU", "CIC", "comb_cic"),
+    ("CIC+CTU", "CTU", "comb_ctu"),
+]
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--runs", default="experiments/runs")
+    parser.add_argument("--map", action="append", default=[],
+                        help="TRAIN:EVAL:run_label, e.g. CIC:CTU:cic2ctu_heads__state+hidden")
+    parser.add_argument("--splits", default="test,holdout")
+    parser.add_argument("--system", default="world_model_calibrated")
+    parser.add_argument("--out", required=True)
+    args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    runs_dir = Path(args.runs)
+    splits = [s.strip() for s in args.splits.split(",") if s.strip()]
+    regimes = []
+    for spec in args.map:
+        train, evalset, label = spec.split(":", 2)
+        regimes.append((train, evalset, label))
+    if not regimes:
+        regimes = DEFAULT_REGIMES
+
+    lines: list[str] = []
+    lines.append("| Training | Evaluated on | split | rows | prevalence | AP [95% CI] | ROC | P | R | F1 | FA/h | "
+                 "best baseline (AP) | oracle AP | state skill vs persistence / ridge | onset AP 5/15 | episodes warned |")
+    lines.append("|---|---|---|---:|---:|---|---:|---:|---:|---:|---:|---|---:|---|---|---|")
+    raw: dict[str, Any] = {}
+    for train, evalset, label in regimes:
+        for split in splits:
+            path = runs_dir / label / "artifacts" / "metrics" / split / "benchmark.json"
+            record = read_benchmark(path)
+            if record is None:
+                lines.append(f"| {train} | {evalset} | {split} | — | — | not run | — | — | — | — | — | — | — | — | — | — |")
+                continue
+            r = row_for(record, args.system)
+            raw[f"{label}/{split}"] = r
+            warned = "—" if r["n_episodes"] is None else f"{r['warned_pre_onset']} / {r['n_episodes']}"
+            lines.append(
+                f"| {train} | {evalset} | {split} | {r['n_rows']:,} | {_f(r['prevalence'], 5)} | "
+                f"{_f(r['ap'])}{r['ap_ci']} | {_f(r['roc'])} | {_f(r['precision'])} | {_f(r['recall'])} | "
+                f"{_f(r['f1'])} | {_f(r['false_alarms_per_hour'], 2)} | "
+                f"{r['best_baseline'] or '—'} ({_f(r['best_baseline_ap'])}) | {_f(r['oracle_ap'])} | "
+                f"{_f(r['state_skill_vs_persistence'])} / {_f(r['state_skill_vs_ridge'])} | "
+                f"{_f(r['onset_ap_5'])} / {_f(r['onset_ap_15'])} | {warned} |")
+
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(lines) + "\n")
+    (out.parent / (out.stem + ".json")).write_text(json.dumps(raw, indent=2, default=float))
+    print("\n".join(lines))
+    logger.info("wrote %s", out)
+
+
+if __name__ == "__main__":
+    main()

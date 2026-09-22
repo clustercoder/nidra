@@ -53,6 +53,7 @@ class ScoreBundle:
     logvar_mean: np.ndarray | None = None        # [N, K, F] mean predicted logvar along the deterministic rollout
     states_ridge: np.ndarray | None = None       # [N, K, F] ridge two-lag forecast
     risk_ridge_k: np.ndarray | None = None       # [N, K] heads on the ridge forecast
+    risk_persist_k: np.ndarray | None = None     # [N, K] heads on a rollout whose transition contributes nothing
     baselines: dict[str, np.ndarray] = field(default_factory=dict)   # name -> [N]
     iso_sigma: float | None = None
     n_members: int = 0
@@ -135,6 +136,31 @@ def _rollout_risk(models: list[WorldModel], X: torch.Tensor, K: int, n_samples: 
             stage_out.append(torch.stack(stages).mean(0).mean(1).numpy())
         std_out.append(states.std(dim=1).numpy())
     return np.concatenate(risk_out), np.concatenate(stage_out), np.concatenate(std_out)
+
+
+@torch.no_grad()
+def _persist_rollout(models: list[WorldModel], X: torch.Tensor, K: int, chunk: int) -> np.ndarray:
+    """The strict transition ablation: the same forward simulation, with the
+    predicted state replaced by S_t at every step.
+
+    `persistence` (the head on the observed origin) answers "what does the
+    head say about now". This answers the narrower question the attribution
+    needs: what does the head say after K steps of a rollout in which the
+    transition model contributed nothing at all? For a per-state head the two
+    are identical by construction; for a history-aware head they are not,
+    because the encoder still advances — so this is the control that isolates
+    the predicted CHANGE from the act of rolling forward.
+    """
+    out = []
+    for lo in range(0, X.shape[0], chunk):
+        xb = X[lo:lo + chunk]
+        per_member = []
+        for m in models:
+            m.eval()
+            ro = m.rollout(xb, K=K, n_samples=1, stochastic=False, state_source="persist")
+            per_member.append(m.score_trajectory(ro)[0][:, 0])
+        out.append(torch.stack(per_member).mean(0).numpy())
+    return np.concatenate(out)
 
 
 @torch.no_grad()
@@ -232,6 +258,7 @@ def score_world_model(bundle: ScoreBundle, models: list[WorldModel], X_scaled: n
     bundle.risk_obs, bundle.stage_obs = _observed_risk(models, X, chunk)
     bundle.risk_true_k = _oracle_risk(models, X, Y, chunk)
     bundle.states_det, bundle.risk_det_k, bundle.logvar_mean = _deterministic(models, X, K, chunk)
+    bundle.risk_persist_k = _persist_rollout(models, X, K, chunk)
     bundle.risk_traj, bundle.stage_traj_mean_k, bundle.states_std = _rollout_risk(models, X, K, n_samples_per_member, chunk, seed=seed)
     bundle.n_members = len(models)
     bundle.n_samples_per_member = n_samples_per_member
@@ -306,6 +333,8 @@ def system_scores(bundle: ScoreBundle, pooling: dict, k_eval: int | None = None)
         out["persistence"] = bundle.risk_obs
     if bundle.risk_true_k is not None:
         out["oracle_true_future"] = oh(bundle.risk_true_k)
+    if bundle.risk_persist_k is not None:
+        out["persistence_rollout"] = oh(bundle.risk_persist_k)
     if bundle.risk_ridge_k is not None:
         out["ridge_two_lag"] = oh(bundle.risk_ridge_k)
     if bundle.risk_det_k is not None:

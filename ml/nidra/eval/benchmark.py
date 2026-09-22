@@ -67,6 +67,7 @@ logger = logging.getLogger(__name__)
 
 ATTRIBUTION_PAIRS = [
     ("world_model", "persistence"),
+    ("world_model", "persistence_rollout"),
     ("world_model", "noised_persistence"),
     ("world_model", "isotropic_noise_persistence"),
     ("world_model", "world_model_deterministic"),
@@ -79,11 +80,11 @@ ATTRIBUTION_PAIRS = [
     ("world_model", "gbdt_current_state"),
     ("world_model", "gru_classifier"),
 ]
-BOOTSTRAP_SYSTEMS = ("world_model", "world_model_deterministic", "persistence", "noised_persistence",
+BOOTSTRAP_SYSTEMS = ("world_model", "world_model_deterministic", "persistence", "persistence_rollout", "noised_persistence",
                      "ridge_two_lag", "lr_current_state", "lr_flattened_history", "gbdt_current_state", "gru_classifier")
 
 
-PER_GROUP_SYSTEMS = ("world_model_calibrated", "world_model", "persistence", "oracle_true_future",
+PER_GROUP_SYSTEMS = ("world_model_calibrated", "world_model", "persistence", "persistence_rollout", "oracle_true_future",
                     "gru_classifier", "lr_flattened_history")
 
 
