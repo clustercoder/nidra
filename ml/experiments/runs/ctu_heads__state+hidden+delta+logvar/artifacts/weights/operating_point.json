@@ -1,0 +1,174 @@
+{
+  "selected_on": "val",
+  "selected_at": "2026-09-22T22:04:30Z",
+  "pooling": {
+    "method": "mean",
+    "quantile": null,
+    "horizon_reduction": "max"
+  },
+  "pooling_key": "mean|q=-|max",
+  "candidates": {
+    "mean|q=-|max": {
+      "pooling": {
+        "method": "mean",
+        "quantile": null,
+        "horizon_reduction": "max"
+      },
+      "val_auc_pr": 0.4300615925369633
+    },
+    "mean|q=-|integrated": {
+      "pooling": {
+        "method": "mean",
+        "quantile": null,
+        "horizon_reduction": "integrated"
+      },
+      "val_auc_pr": 0.4274367195209039
+    },
+    "median|q=-|max": {
+      "pooling": {
+        "method": "median",
+        "quantile": null,
+        "horizon_reduction": "max"
+      },
+      "val_auc_pr": 0.42802146670778785
+    },
+    "quantile|q=0.75|max": {
+      "pooling": {
+        "method": "quantile",
+        "quantile": 0.75,
+        "horizon_reduction": "max"
+      },
+      "val_auc_pr": 0.393721250375182
+    },
+    "quantile|q=0.85|max": {
+      "pooling": {
+        "method": "quantile",
+        "quantile": 0.85,
+        "horizon_reduction": "max"
+      },
+      "val_auc_pr": 0.35183123089013135
+    },
+    "quantile|q=0.90|max": {
+      "pooling": {
+        "method": "quantile",
+        "quantile": 0.9,
+        "horizon_reduction": "max"
+      },
+      "val_auc_pr": 0.3328945902705264
+    },
+    "quantile|q=0.95|max": {
+      "pooling": {
+        "method": "quantile",
+        "quantile": 0.95,
+        "horizon_reduction": "max"
+      },
+      "val_auc_pr": 0.2762130435156562
+    },
+    "max|q=-|max": {
+      "pooling": {
+        "method": "max",
+        "quantile": null,
+        "horizon_reduction": "max"
+      },
+      "val_auc_pr": 0.05353107679362283
+    },
+    "p_above_half|q=-|max": {
+      "pooling": {
+        "method": "p_above_half",
+        "quantile": null,
+        "horizon_reduction": "max"
+      },
+      "val_auc_pr": 0.4251174086243886
+    }
+  },
+  "calibration": {
+    "method": "platt_per_horizon_weighted",
+    "params_by_k": [
+      {
+        "a": 0.36667755246162415,
+        "b": -2.8886971473693848,
+        "n": 20338,
+        "degenerate": false
+      },
+      {
+        "a": 0.40418606996536255,
+        "b": -2.9712789058685303,
+        "n": 20338,
+        "degenerate": false
+      },
+      {
+        "a": 0.4557850658893585,
+        "b": -2.7984843254089355,
+        "n": 20338,
+        "degenerate": false
+      },
+      {
+        "a": 0.5226262211799622,
+        "b": -2.574504852294922,
+        "n": 20338,
+        "degenerate": false
+      },
+      {
+        "a": 0.5787180662155151,
+        "b": -2.4248781204223633,
+        "n": 20338,
+        "degenerate": false
+      },
+      {
+        "a": 0.6219232678413391,
+        "b": -2.359360456466675,
+        "n": 20338,
+        "degenerate": false
+      }
+    ],
+    "label": "future_is_attack[k]",
+    "weighted_by": "natural_prevalence"
+  },
+  "threshold": {
+    "f1_optimal_calibrated": 0.10073614120483398,
+    "val_f1_calibrated": 0.5723068873045981,
+    "f1_optimal_raw": 0.7617007493972778,
+    "val_f1_raw": 0.5948056534034172,
+    "mandated": 0.75
+  },
+  "val_auc_pr_selected": 0.4300615925369633,
+  "val_summary": {
+    "split": "val",
+    "n_rows": 20338,
+    "n_hosts_full": 341,
+    "span_hours": 6.366666666666666,
+    "strata": {
+      "positive": {
+        "full": 283,
+        "sampled": 283
+      },
+      "pre_onset": {
+        "full": 55,
+        "sampled": 55
+      },
+      "active_negative": {
+        "full": 30491,
+        "sampled": 15000
+      },
+      "silent_negative": {
+        "full": 56112,
+        "sampled": 5000
+      }
+    },
+    "natural_prevalence_published": 0.0032550810319642055,
+    "natural_prevalence_detect": 0.002359050390494703,
+    "n_positive": 283,
+    "n_forecast_rows": 20100,
+    "n_onset_positives": {
+      "1": 8,
+      "3": 24,
+      "5": 40,
+      "10": 75,
+      "15": 90,
+      "30": 103
+    },
+    "n_clusters": 347
+  },
+  "n_members": 1,
+  "n_samples_per_member": 60
+}
