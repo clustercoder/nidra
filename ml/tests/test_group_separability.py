@@ -5,11 +5,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from nidra.scripts.group_separability import GroupProbe, host_grouped_folds, probe_group, probes_markdown
+from nidra.scripts.group_separability import (GroupProbe, host_grouped_folds, positive_hosts, probe_group,
+                                              probes_markdown)
 
 
 def _probe(**kw) -> GroupProbe:
-    base = dict(group="ctu_4:c2", n_positive=56, n_rows=60000, base_rate=0.001,
+    base = dict(group="ctu_4:c2", n_positive=56, n_positive_hosts=4, n_rows=60000, base_rate=0.001,
                 probe_ap=0.02, probe_roc=0.8, n_folds=5)
     return GroupProbe(**{**base, **kw})
 
@@ -26,6 +27,11 @@ class TestVerdict:
 
     def test_a_zero_base_rate_does_not_divide_by_zero(self):
         assert np.isnan(_probe(base_rate=0.0).lift)
+        assert _probe(base_rate=0.0).separable is False
+
+    def test_a_probe_that_could_not_be_scored_claims_nothing(self):
+        p = _probe(probe_ap=float("nan"), probe_roc=float("nan"), n_folds=0)
+        assert p.separable is False and p.n_folds == 0
 
 
 class TestFolds:
@@ -74,6 +80,44 @@ class TestProbe:
         assert p.n_positive == 5 and p.n_rows == 50 and p.base_rate == pytest.approx(0.1)
 
 
+class TestSingleHostGroups:
+    """Every attack group on the CTU validation captures has its positives on
+    ONE host. A host-grouped split cannot be formed: the only fold with a
+    positive test host has no positive to train on, and every other fold has
+    no positive to score. Scoring those rows at a default 0.0 put every
+    positive at the bottom and produced a confident ROC of 0.10 for every
+    group — a bug that looked exactly like a finding."""
+
+    def _one_host(self, informative: bool):
+        rng = np.random.default_rng(3)
+        X = rng.normal(size=(400, 5)).astype("float32")
+        hosts = np.array(["victim"] * 40 + [f"h{i % 12}" for i in range(360)])
+        y = np.zeros(400, dtype=int)
+        y[:40] = 1
+        if informative:
+            X[:40, 0] += 4.0
+        return X, y, hosts
+
+    def test_it_is_flagged_host_leaky_rather_than_scored_as_if_grouped(self):
+        X, y, hosts = self._one_host(True)
+        p = probe_group(X, y, hosts, "g")
+        assert p.n_positive_hosts == 1 and p.host_leaky is True
+
+    def test_an_informative_single_host_group_is_found_not_inverted(self):
+        X, y, hosts = self._one_host(True)
+        p = probe_group(X, y, hosts, "g")
+        assert p.probe_roc > 0.9, "the old default-zero scoring inverted this to ~0.1"
+
+    def test_an_uninformative_one_is_near_chance_not_near_zero(self):
+        X, y, hosts = self._one_host(False)
+        p = probe_group(X, y, hosts, "g")
+        assert 0.3 < p.probe_roc < 0.7
+
+    def test_positive_hosts_are_reported(self):
+        hosts = np.array(["a", "a", "b", "c"])
+        assert list(positive_hosts(hosts, np.array([1, 0, 1, 0]))) == ["a", "b"]
+
+
 class TestMarkdown:
     def test_groups_are_listed_by_size(self):
         md = probes_markdown([_probe(group="small", n_positive=6), _probe(group="big", n_positive=100)], "val")
@@ -82,6 +126,10 @@ class TestMarkdown:
     def test_an_unseparable_group_is_marked(self):
         assert "**no**" in probes_markdown([_probe(probe_ap=0.0011, base_rate=0.001)], "val")
 
-    def test_the_forecast_column_is_filled_when_supplied(self):
-        md = probes_markdown([_probe(group="g")], "val", {"g": 0.123})
-        assert "0.123" in md
+    def test_a_host_leaky_row_says_so(self):
+        md = probes_markdown([_probe(n_positive_hosts=1, host_leaky=True)], "val")
+        assert "host-leaky" in md
+
+    def test_an_unscorable_group_prints_a_dash_not_a_number(self):
+        md = probes_markdown([_probe(probe_ap=float("nan"), probe_roc=float("nan"), n_folds=0)], "val")
+        assert "| — |" in md

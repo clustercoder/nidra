@@ -43,11 +43,13 @@ PROBE_KWARGS = dict(max_iter=400, learning_rate=0.08, max_depth=3,
 class GroupProbe:
     group: str
     n_positive: int
+    n_positive_hosts: int
     n_rows: int
     base_rate: float
     probe_ap: float
     probe_roc: float
     n_folds: int
+    host_leaky: bool = False
 
     @property
     def lift(self) -> float:
@@ -56,8 +58,13 @@ class GroupProbe:
     @property
     def separable(self) -> bool:
         """A probe that cannot reach three times the base rate on labels it was
-        handed is not finding the group."""
-        return self.lift >= 3.0
+        handed is not finding the group. NaN (nothing could be scored) is not
+        separable and not a claim either way — read `n_folds`."""
+        return bool(self.lift >= 3.0)
+
+
+def positive_hosts(hosts: np.ndarray, y: np.ndarray) -> np.ndarray:
+    return np.unique(np.asarray(hosts)[np.asarray(y) == 1])
 
 
 def host_grouped_folds(hosts: np.ndarray, y: np.ndarray, n_folds: int = 5, seed: int = 0) -> list[np.ndarray]:
@@ -78,40 +85,83 @@ def host_grouped_folds(hosts: np.ndarray, y: np.ndarray, n_folds: int = 5, seed:
     return [np.where(fold_of == f)[0] for f in range(n_folds)]
 
 
+def _stratified_folds(y: np.ndarray, n_folds: int, seed: int) -> list[np.ndarray]:
+    """Row-level folds keeping the positive rate even. Used only when the
+    group's positives sit on too few hosts for a host-grouped split."""
+    rng = np.random.default_rng(seed)
+    folds: list[list[int]] = [[] for _ in range(n_folds)]
+    for cls in (1, 0):
+        idx = rng.permutation(np.where(np.asarray(y) == cls)[0])
+        for i, j in enumerate(idx):
+            folds[i % n_folds].append(int(j))
+    return [np.sort(np.array(f, dtype=int)) for f in folds]
+
+
 def probe_group(X: np.ndarray, y: np.ndarray, hosts: np.ndarray, group: str,
                 n_folds: int = 5, seed: int = 0) -> GroupProbe:
+    """Cross-validated probe AP/ROC for one group.
+
+    Host-grouped when the positives sit on at least two hosts. When they sit
+    on ONE — which is every attack group on the CTU validation captures — a
+    host-grouped split is impossible: the only fold with a positive test host
+    has no positive to train on and every other fold has no positive to
+    score. The earlier version of this function scored those rows at 0.0 by
+    default, which put every positive at the bottom of the ranking and
+    produced a confident ROC of 0.10 for every group. Rows a fold could not
+    score are now excluded, and a single-positive-host group falls back to
+    row-stratified folds, flagged `host_leaky` because the probe can then
+    recognise the host rather than the behaviour. That weaker probe still
+    bounds something worth knowing: if even it fails, the windows carry
+    nothing.
+    """
     from sklearn.ensemble import HistGradientBoostingClassifier
     from sklearn.metrics import average_precision_score, roc_auc_score
 
     y = np.asarray(y).astype(int)
     base = float(y.mean()) if len(y) else 0.0
+    n_pos_hosts = len(positive_hosts(hosts, y))
+    leaky = n_pos_hosts < 2
+    folds = (_stratified_folds(y, n_folds, seed) if leaky
+             else host_grouped_folds(hosts, y, min(n_folds, n_pos_hosts), seed))
+
+    scored = np.zeros(len(y), dtype=bool)
     scores = np.zeros(len(y), dtype="float64")
     used = 0
-    for test_idx in host_grouped_folds(hosts, y, n_folds, seed):
+    for test_idx in folds:
         train_idx = np.setdiff1d(np.arange(len(y)), test_idx)
-        if len(test_idx) == 0 or y[train_idx].sum() == 0 or len(np.unique(y[train_idx])) < 2:
+        if len(test_idx) == 0 or len(np.unique(y[train_idx])) < 2 or y[test_idx].sum() == 0:
             continue
         clf = HistGradientBoostingClassifier(random_state=seed, **PROBE_KWARGS).fit(X[train_idx], y[train_idx])
         scores[test_idx] = clf.predict_proba(X[test_idx])[:, 1]
+        scored[test_idx] = True
         used += 1
-    ap = float(average_precision_score(y, scores)) if y.sum() and used else float("nan")
-    roc = float(roc_auc_score(y, scores)) if y.sum() and used else float("nan")
-    return GroupProbe(group=group, n_positive=int(y.sum()), n_rows=int(len(y)), base_rate=base,
-                      probe_ap=ap, probe_roc=roc, n_folds=used)
+    ok = used > 0 and y[scored].sum() > 0 and (y[scored] == 0).sum() > 0
+    ap = float(average_precision_score(y[scored], scores[scored])) if ok else float("nan")
+    roc = float(roc_auc_score(y[scored], scores[scored])) if ok else float("nan")
+    return GroupProbe(group=group, n_positive=int(y.sum()), n_positive_hosts=n_pos_hosts,
+                      n_rows=int(len(y)), base_rate=base, probe_ap=ap, probe_roc=roc,
+                      n_folds=used, host_leaky=leaky)
 
 
 def probes_markdown(probes: list[GroupProbe], split: str, forecast_ap: dict[str, float] | None = None) -> str:
     out = [f"### Attack-group separability probe — **{split}**", "",
-           "A supervised probe fit directly on each group's one-vs-rest label, host-grouped 5-fold. "
-           "It reads the labels of the split it scores, so it is an upper bound in the same sense the "
-           "oracle is — a diagnostic, never a system, and never a selection signal.", "",
-           "| group | positives | base rate | probe AP | lift | probe ROC | separable | forecast AP |",
-           "|---|---|---|---|---|---|---|---|"]
+           "A supervised probe fit directly on each group's one-vs-rest label. It reads the labels of "
+           "the split it scores, so it is an upper bound in the same sense the oracle is — a diagnostic, "
+           "never a system, and never a selection signal. Folds are host-grouped where the positives sit "
+           "on two or more hosts; where they sit on one, a host-grouped split cannot be formed and the "
+           "row-stratified fallback lets the probe recognise the host rather than the behaviour, which is "
+           "marked. AP is not comparable to the benchmark's per-group AP — the benchmark scores a "
+           "stratified subsample with capped negatives and this scores every row — but ROC is.", "",
+           "| group | positives | positive hosts | base rate | probe AP | lift | probe ROC | CV | separable |",
+           "|---|---|---|---|---|---|---|---|---|"]
     for p in sorted(probes, key=lambda q: -q.n_positive):
-        fa = (forecast_ap or {}).get(p.group)
-        out.append(f"| {p.group} | {p.n_positive} | {p.base_rate:.5f} | {p.probe_ap:.3f} | {p.lift:.0f}× | "
-                   f"{p.probe_roc:.3f} | {'yes' if p.separable else '**no**'} | "
-                   f"{'—' if fa is None else f'{fa:.3f}'} |")
+        def num(v, nd=3):
+            return "—" if v != v else f"{v:.{nd}f}"
+        cv = "host-grouped" if not p.host_leaky else "**row-stratified (host-leaky)**"
+        lift = "—" if p.lift != p.lift else f"{p.lift:.0f}×"
+        out.append(f"| {p.group} | {p.n_positive} | {p.n_positive_hosts} | {p.base_rate:.5f} | "
+                   f"{num(p.probe_ap)} | {lift} | {num(p.probe_roc)} | {cv} | "
+                   f"{'yes' if p.separable else '**no**'} |")
     return "\n".join(out)
 
 
