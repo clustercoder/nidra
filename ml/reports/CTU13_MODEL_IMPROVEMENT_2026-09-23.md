@@ -745,3 +745,69 @@ follows.
 
 Not adopted, not tuned, nothing removed. The audit is committed and runs on both
 datasets so the next model is measured against the same ceiling.
+
+### 3.11 The history-aware head's advantage is real timing signal on CIC and mostly host identity on CTU (§2, §4, §16, §31 Q4, Q12)
+
+§3.10 built the host/timing decomposition for the silence floor. Nothing in it is
+specific to that stratum, so `--probe-stratum all` asks the same question of a
+whole split — which is what §3.4's headline deserves, since every attack group in
+both corpora has its positives on one host.
+
+**CTU-13 validation** (98,876 rows, 288 positives, 2 infected hosts):
+
+| head | AP | ROC | host-mean AP | host-mean ROC | within-host prev. | within-host AP | within-host lift | within-host ROC |
+|---|---|---|---|---|---|---|---|---|
+| state-only | 0.3531 | 0.7281 | 0.7579 | 0.9995 | 0.7579 | 0.8763 | 1.16× | 0.6559 |
+| state+hidden | 0.4894 | 0.7441 | 0.7579 | 0.9995 | 0.7579 | 0.8951 | 1.18× | 0.6621 |
+
+**CIC-IDS2017 validation** (893,701 rows, 94 positives), same construction, same
+32-feature `cross_core` regime, transition model held fixed within each dataset:
+
+| head | AP | ROC | host-mean AP | host-mean ROC | within-host prev. | within-host AP | within-host lift | within-host ROC |
+|---|---|---|---|---|---|---|---|---|
+| state-only | 0.6781 | 0.8507 | 0.4196 | 0.9999 | 0.4196 | 0.8552 | 2.04× | 0.8256 |
+| state+hidden | 0.7825 | 0.9797 | 0.4196 | 0.9999 | 0.4196 | 0.9224 | **2.20×** | **0.9245** |
+
+The head ablation replicates on CIC: `state` → `state+hidden` moves val AP from
+0.678 to 0.783, the same direction and a similar size as CTU's 0.353 → 0.489. Read
+only as aggregates, the two datasets agree. The decomposition says they do not.
+
+**On CTU both heads score *below* a host-level constant.** Collapsing every score
+to its host's mean — discarding everything the head said about which window — gives
+AP 0.7579, against the heads' 0.3531 and 0.4894. Flagging every window of the
+infected host would outscore the model. Within those hosts the heads reach ROC
+0.6559 and 0.6621: a little above chance, not much.
+
+**On CIC both heads beat the host-level constant, and the history-aware one beats
+it decisively.** Host identity alone gives AP 0.4196; the heads give 0.6781 and
+0.7825. Within the infected hosts the history-aware head reaches **ROC 0.9245**
+against the state-only head's 0.8256, and its lift over the within-host base rate
+is 2.20× against 2.04×. The improvement is *reproduced inside the host*, where host
+identity is constant and only timing is left. On CIC it is timing signal.
+
+Two things make this comparison fair and one makes it approximate. Fair: within-host
+ROC is prevalence-independent, and both datasets are scored with the same code, the
+same feature regime and one seed each. Approximate: the within-host *lift* is not
+comparable across the two, because CTU's infected hosts are 75.8% attack windows
+while CIC's are 42.0%, so there is far less room on CTU for a within-host ranking to
+be right. Neither figure resembles a deployment, where an infected host is mostly
+benign; both flatter the model.
+
+**What this answers.** The roadmap asked whether Run 8's risk-head limitation is a
+CIC-IDS2017 artifact. On this evidence it is not, and the direction is the reverse
+of the expected one: CIC is where the history-aware head does genuine within-host
+temporal work, and CTU is where its apparent advantage is substantially the ability
+to pick out the compromised host. A cross-dataset scorecard built on aggregate AP
+alone would have reported the opposite, because CTU's aggregate AP gap (+0.136) is
+larger than CIC's (+0.104).
+
+**What it does not answer.** Both corpora have one infected host per attack stage
+per split, so "recognising the host" and "recognising this family's behaviour on
+this host" are not separated anywhere. The within-host numbers are the part of the
+result that survives that confound, and they are what §17's scorecard should carry
+beside the aggregates. `host-mean ROC` of 0.9995 and 0.9999 says the confound is
+not marginal on either dataset: host identity is almost perfectly recoverable from
+the scores.
+
+Every number here is one seed on validation, which is where §19 says selection may
+happen and nothing else may. No test or holdout split has been read.

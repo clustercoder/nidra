@@ -1528,3 +1528,22 @@ flags `is_host_identity` generically, with a separate `is_constant` so a state-o
 not described as carrying timing signal. Consequence: the single-infected-host confound,
 not the architecture, is this phase's binding limitation — neither corpus has two infected
 hosts in one attack stage on one split, and §4/§12 will inherit that.
+
+**D130 — the history-aware head's advantage is timing signal on CIC and mostly host identity on
+CTU; aggregate AP alone would have said the opposite.** (2026-09-23) The host/timing
+decomposition from D129 generalises to any stratum (`--probe-stratum all`), and every attack
+group in both corpora has its positives on one host, so §3.4's headline needed it. Aggregates
+agree across the datasets: state -> state+hidden moves val AP 0.353 -> 0.489 on CTU and 0.678
+-> 0.783 on CIC. The decomposition does not. On CTU both heads score BELOW a host-level
+constant (host-mean AP 0.7579 against 0.3531 and 0.4894) and reach within-host ROC 0.656 and
+0.662 — flagging every window of the infected host would outscore the model. On CIC both beat
+it (host-mean 0.4196 against 0.6781 and 0.7825) and the history-aware head reaches within-host
+ROC 0.9245 against 0.8256, so its improvement is reproduced inside the host where only timing
+is left. Within-host ROC is prevalence-independent and comparable across the two; within-host
+LIFT is not, because CTU's infected hosts are 75.8% attack windows against CIC's 42.0%, and
+neither resembles a deployment. This answers the roadmap's question of whether Run 8's
+risk-head limitation is a CIC artifact: it is not, and the direction is reversed — CIC is
+where the model does genuine temporal work. §17's scorecard must carry within-host ROC beside
+the aggregates, because a scorecard of aggregate AP would have concluded the opposite (CTU's
+gap, +0.136, is the larger one). Host-mean ROC is 0.9995 and 0.9999, so the single-host
+confound is near-total on both. One seed, validation only; no test or holdout read.
