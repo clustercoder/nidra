@@ -101,3 +101,36 @@ class TestTheRiskHeadUsesTheSameMachinery:
         from nidra.models.heads import TrajectoryRiskHead
         head = TrajectoryRiskHead(("state", "hidden", "delta", "logvar"), 45, 128, 8)
         assert head.input_dim == sum(component_widths(head.components, 45, 128))
+
+
+class TestTheRunNeedsContextWhenEitherHeadDoes:
+    """`head_tables` — the labelled columns the encoder context is rebuilt
+    from — used to be built only when the RISK head declared components. An
+    onset-only run with a history-aware onset head would then reach
+    train_onset with no tables and stop after the data pass."""
+
+    def _cfg(self, risk=None, onset=None) -> dict:
+        cfg = {"model": {"risk_head": {"hidden": 64}}}
+        if risk is not None:
+            cfg["model"]["risk_head"]["components"] = risk
+        if onset is not None:
+            cfg["onset"] = {"components": onset}
+        return cfg
+
+    def test_neither_head_needs_it(self):
+        from nidra.models.build import uses_head_context
+        assert uses_head_context(self._cfg()) is False
+        assert uses_head_context(self._cfg(risk=["state"], onset=["state"])) is False
+
+    def test_the_risk_head_alone_needs_it(self):
+        from nidra.models.build import uses_head_context
+        assert uses_head_context(self._cfg(risk=["state", "hidden"])) is True
+
+    def test_the_onset_head_alone_needs_it(self):
+        from nidra.models.build import uses_head_context
+        assert uses_head_context(self._cfg(onset=["state", "hidden"])) is True
+
+    def test_an_unknown_onset_component_is_refused_at_config_time(self):
+        from nidra.models.build import uses_head_context
+        with pytest.raises(ValueError, match="the_future"):
+            uses_head_context(self._cfg(onset=["state", "the_future"]))

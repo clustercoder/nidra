@@ -10,7 +10,7 @@ CTU-13 phase are exactly that kind of change, so the constructor is here.
 
 from __future__ import annotations
 
-from nidra.models.heads import TRAJECTORY_COMPONENTS, TrajectoryRiskHead
+from nidra.models.heads import ordered_components, TRAJECTORY_COMPONENTS, TrajectoryRiskHead
 from nidra.models.world_model import WorldModel
 
 
@@ -34,6 +34,20 @@ def risk_head_components(cfg: dict) -> tuple[str, ...]:
 
 def uses_trajectory_head(cfg: dict) -> bool:
     return risk_head_components(cfg) != ("state",)
+
+
+def onset_head_components(cfg: dict) -> tuple[str, ...]:
+    return ordered_components(tuple(cfg.get("onset", {}).get("components", ("state",))))
+
+
+def uses_head_context(cfg: dict) -> bool:
+    """Does ANY head in this run read more than the state?
+
+    The observed encoder context is rebuilt from the labelled tables, and the
+    tables are kept only when something needs them. Asking the risk head
+    alone was wrong the moment the onset head could declare components too:
+    an onset-only run would finish its data pass and then stop."""
+    return uses_trajectory_head(cfg) or onset_head_components(cfg) != ("state",)
 
 
 def world_model_from_config(cfg: dict) -> WorldModel:

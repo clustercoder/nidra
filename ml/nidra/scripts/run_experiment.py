@@ -171,10 +171,10 @@ def main() -> None:
         from nidra.train.head_data import build_head_arrays
         from nidra.train.pipeline import build_all_splits
         from nidra.data.schema import FEATURE_ORDER
-        from nidra.models.build import uses_trajectory_head
+        from nidra.models.build import uses_head_context
         splits = build_all_splits(cfg)
         head_data = {"train": build_head_arrays(splits.train, scaler), "val": build_head_arrays(splits.val, scaler)}
-        if uses_trajectory_head(cfg):
+        if uses_head_context(cfg):
             # A trajectory head rebuilds the encoder context per seed, which
             # needs the labelled tables — but only their feature columns and
             # the (host, window) keys, so the rest of the split is released.
