@@ -6,5 +6,5 @@ A supervised probe fit directly on each group's one-vs-rest label. It reads the 
 |---|---|---|---|---|---|---|---|---|
 | ctu_6:exfil | 122 | 1 | 0.00123 | 0.814 | 660× | 0.992 | host-grouped | yes |
 | ctu_4:exfil | 50 | 1 | 0.00051 | 0.091 | 179× | 0.829 | host-grouped | yes |
-| ctu_4:c2 | 23 | 1 | 0.00023 | 0.008 | 34× | 0.443 | host-grouped | yes |
+| ctu_4:c2 | 23 | 1 | 0.00023 | 0.008 | 34× | 0.443 | host-grouped | **no** |
 | ctu_4:recon | 17 | 1 | 0.00017 | 0.033 | 194× | 0.970 | host-grouped | yes |
