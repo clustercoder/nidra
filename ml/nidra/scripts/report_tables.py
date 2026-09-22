@@ -132,6 +132,45 @@ def episode_table(m: dict, split: str) -> str:
     return "\n".join(lines)
 
 
+#: A group whose positives all sit on one host cannot distinguish "learned the
+#: behaviour" from "learned the host". Every group on the CTU validation
+#: captures is in this state, and so was Run 8's Friday Bot-C2 result, so the
+#: number needs the caveat attached to it rather than kept in a footnote.
+SINGLE_HOST_MARK = "¹"
+
+
+def attack_group_table(m: dict, split: str) -> str:
+    """Per-attack-group AP, with the host count beside it.
+
+    `_per_attack_group` has always recorded `n_hosts`; nothing rendered it,
+    which is how a single-host group's AP could be read as a generalisation
+    result. It is rendered here and marked.
+    """
+    groups = m.get("per_attack_group") or {}
+    if not groups:
+        return f"_{split}: no per-group breakdown in this benchmark_"
+    lines = ["| group | family | positives | episodes | hosts | world model AP | oracle AP | "
+             "persistence AP | state skill vs persistence |", "|---|---|---|---|---|---|---|---|---|"]
+    single = False
+    for name, g in sorted(groups.items(), key=lambda kv: -kv[1].get("n_positive_rows", 0)):
+        sysd = g.get("systems", {})
+        def ap(key):
+            # summarize_scores writes `auc_pr`; the tables elsewhere call it AP.
+            return _f(sysd.get(key, {}).get("auc_pr"), 3)
+        one = g.get("n_hosts") == 1
+        single = single or one
+        lines.append(f"| `{name}` | {g.get('family') or '—'} | {g.get('n_positive_rows', '—')} | "
+                     f"{g.get('n_episodes', '—')} | {g.get('n_hosts', '—')}{SINGLE_HOST_MARK if one else ''} | "
+                     f"{ap('world_model')} | {ap('oracle_true_future')} | {ap('persistence')} | "
+                     f"{_f(g.get('state_skill_vs_persistence'), 3)} |")
+    if single:
+        lines += ["", f"{SINGLE_HOST_MARK} All of this group's positives are on a single host, so its AP does "
+                      "not separate the attack's behaviour from that host's identity. Treat it as a "
+                      "within-host result until a capture with two infected hosts in the same stage says "
+                      "otherwise."]
+    return "\n".join(lines)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", required=True, help="run dir holding artifacts/metrics/<split>/benchmark.json, or the metrics dir itself")
@@ -149,7 +188,8 @@ def main() -> None:
         m = _load(path)
         sections += [f"### Systems — {split}", systems_table(m, split), "", f"### Attribution — {split}", attribution_table(m, split), "",
                      f"### Horizon — {split}", horizon_table(m, split), "", f"### Onset forecasting — {split}", onset_table(m, split), "",
-                     f"### Episodes — {split}", episode_table(m, split), ""]
+                     f"### Episodes — {split}", episode_table(m, split), "",
+                     f"### Per attack group — {split}", attack_group_table(m, split), ""]
     text = "\n".join(sections)
     if args.out:
         Path(args.out).write_text(text)

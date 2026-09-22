@@ -163,3 +163,20 @@ def test_a_varying_head_is_not_called_constant():
                hosts=["infected"] * 4 + ["other"] * 8)
     assert p.is_constant is False
     assert p.verdict == "**host identity**"
+
+
+def test_probe_markdown_says_which_stratum_it_measured():
+    from nidra.scripts.silent_positive_audit import probe_markdown
+    p = _probe(scores=[0.3, 0.2, 0.9, 0.8] + [0.01] * 8, y=[1, 1, 0, 0] + [0] * 8,
+               hosts=["infected"] * 4 + ["other"] * 8)
+    assert "floor stratum" in probe_markdown({"h": p}, "val", stratum="floor")
+    assert "whole split" in probe_markdown({"h": p}, "val", stratum="all")
+
+
+def test_an_all_rows_mask_asks_the_same_question():
+    """The decomposition is not specific to the floor; a split-wide result that
+    rests on one infected host deserves it too."""
+    p = _probe(scores=[0.9, 0.8, 0.7, 0.6] + [0.01] * 8, y=[1, 1, 0, 0] + [0] * 8,
+               hosts=["infected"] * 4 + ["other"] * 8, floor=[True] * 12)
+    assert p.n_rows == 12
+    assert p.host_mean_roc >= 0.9

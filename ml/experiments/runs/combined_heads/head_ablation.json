@@ -1,0 +1,20 @@
+{
+  "label": "combined_heads",
+  "init_from": "comb_dyn",
+  "variants": {
+    "state": {
+      "components": [
+        "state"
+      ],
+      "run_dir": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/combined_heads__state",
+      "seeds": {
+        "0": {
+          "val_auc_pr_natural": 0.38503560296740535,
+          "val_auc_pr": 0.38503560296740535,
+          "best_epoch": 16,
+          "input_dim": 45
+        }
+      }
+    }
+  }
+}

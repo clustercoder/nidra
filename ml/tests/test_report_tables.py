@@ -72,3 +72,37 @@ def test_load_accepts_a_wrapped_provenance_record(tmp_path):
     assert "task_published_label" in rt._load(path)
     path.write_text(json.dumps(_record()))
     assert "task_published_label" in rt._load(path)
+
+
+def test_attack_group_table_marks_a_single_host_group():
+    """Every CTU validation group and Run 8's Friday Bot-C2 have their
+    positives on one host; an AP rendered without that is read as a
+    generalisation result."""
+    from nidra.scripts.report_tables import attack_group_table
+    m = {"per_attack_group": {
+        "ctu_4:c2": {"n_positive_rows": 23, "n_episodes": 6, "n_hosts": 1, "family": "Rbot",
+                     "state_skill_vs_persistence": 0.12,
+                     "systems": {"world_model": {"auc_pr": 0.001}, "oracle_true_future": {"auc_pr": 0.002},
+                                 "persistence": {"auc_pr": 0.0009}}},
+        "ctu_6:exfil": {"n_positive_rows": 122, "n_episodes": 4, "n_hosts": 3, "family": "Menti",
+                        "systems": {"world_model": {"auc_pr": 0.97}}}}}
+    md = attack_group_table(m, "val")
+    assert "ctu_4:c2" in md and "ctu_6:exfil" in md
+    assert "0.001" in md and "0.970" in md          # the AP key is auc_pr, not ap
+    assert "1¹" in md                                   # marked
+    assert "3¹" not in md and "| 3 |" in md             # not marked
+    assert "single host" in md
+    # ordered by positives, so the bigger group comes first
+    assert md.index("ctu_6:exfil") < md.index("ctu_4:c2")
+
+
+def test_attack_group_table_without_single_host_groups_has_no_footnote():
+    from nidra.scripts.report_tables import attack_group_table
+    m = {"per_attack_group": {"g": {"n_positive_rows": 5, "n_hosts": 4, "systems": {}}}}
+    md = attack_group_table(m, "val")
+    assert "single host" not in md
+
+
+def test_attack_group_table_handles_a_benchmark_without_groups():
+    from nidra.scripts.report_tables import attack_group_table
+    assert "no per-group breakdown" in attack_group_table({}, "test")

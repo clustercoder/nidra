@@ -145,7 +145,15 @@ class FloorProbe:
 
 
 def floor_stratum_probe(scores, y, hosts, floor_mask) -> FloorProbe:
-    """Decompose a head's floor-stratum ranking into host identity and timing."""
+    """Decompose a head's ranking over the masked rows into host identity and
+    timing.
+
+    The floor stratum is the motivating case — there the state is provably
+    uninformative, so anything the head does is one or the other. Nothing in
+    the arithmetic is specific to it, and passing an all-true mask asks the
+    same question of a whole split, which is worth doing for any result that
+    rests on a single infected host.
+    """
     from sklearn.metrics import average_precision_score, roc_auc_score
 
     s = np.asarray(scores, dtype="float64")[np.asarray(floor_mask)]
@@ -170,14 +178,20 @@ def floor_stratum_probe(scores, y, hosts, floor_mask) -> FloorProbe:
         within_host_roc=float(roc_auc_score(yy[k], s[k])) if both else float("nan"))
 
 
-def probe_markdown(probes: dict[str, FloorProbe], split: str) -> str:
-    out = [f"### What a head's scores encode inside the floor stratum — **{split}**", "",
-           "Every row in the stratum is the same state vector. A state-only head can only emit a "
-           "constant, so it lands exactly on the ceiling; a history-aware head varies, and these two "
-           "columns say what the variation is. **host-mean** replaces each score by its host's mean, "
-           "keeping only host identity. **within-host** restricts to the infected host, where identity "
-           "is constant and only the timing question remains — which is the question advance warning "
-           "asks.", "",
+def probe_markdown(probes: dict[str, FloorProbe], split: str, stratum: str = "floor") -> str:
+    where = ("inside the floor stratum" if stratum == "floor" else "over the whole split")
+    preamble = ("Every row in the stratum is the same state vector. A state-only head can only emit a "
+                "constant, so it lands exactly on the ceiling; a history-aware head varies, and these "
+                "two columns say what the variation is."
+                if stratum == "floor" else
+                "The same decomposition applied to every row, not only the uninformative ones. Here a "
+                "state-only head has real features to work with, so its columns are informative too "
+                "and the comparison between the two heads is the point.")
+    out = [f"### What a head's scores encode {where} — **{split}**", "",
+           preamble + " **host-mean** replaces each score by its host's mean, "
+           "keeping only host identity. **within-host** restricts to the infected host(s), where "
+           "identity is constant and only the timing question remains — which is the question advance "
+           "warning asks.", "",
            "| head | rows | positives | AP | lift over ceiling | ROC | host-mean AP | host-mean ROC | "
            "within-host prevalence | within-host AP | within-host lift | within-host ROC | verdict |",
            "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
@@ -186,8 +200,7 @@ def probe_markdown(probes: dict[str, FloorProbe], split: str) -> str:
                    f"{p.roc:.4f} | {p.host_mean_ap:.4f} | {p.host_mean_roc:.4f} | "
                    f"{p.within_host_prevalence:.4f} | {p.within_host_ap:.4f} | {p.within_host_lift:.2f}× | "
                    f"{p.within_host_roc:.4f} | {p.verdict} |")
-    out += ["", "A lift over the ceiling that disappears within the host is the head recognising *who*, "
-                "not *when*."]
+    out += ["", "A lift that disappears within the host is the head recognising *who*, not *when*."]
     return "\n".join(out)
 
 
@@ -221,6 +234,9 @@ def main() -> None:
     parser.add_argument("--probe-heads", default=None,
                         help="comma-separated name=config pairs; score each head on the LAST split and "
                              "decompose its floor-stratum ranking into host identity and timing")
+    parser.add_argument("--probe-stratum", default="floor", choices=("floor", "all"),
+                        help="'floor' asks what the head does where the state is uninformative; "
+                             "'all' asks the same of the whole split")
     parser.add_argument("--probe-out", default=None)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", default=None)
@@ -247,8 +263,8 @@ def main() -> None:
         last = args.splits.split(",")[-1].strip()
         for pair in args.probe_heads.split(","):
             name, _, cfg_path = pair.partition("=")
-            probes[name.strip()] = _probe_head(cfg_path.strip(), last, args.seed)
-        pmd = probe_markdown(probes, last)
+            probes[name.strip()] = _probe_head(cfg_path.strip(), last, args.seed, args.probe_stratum)
+        pmd = probe_markdown(probes, last, stratum=args.probe_stratum)
         if args.probe_out:
             from pathlib import Path
             Path(args.probe_out).parent.mkdir(parents=True, exist_ok=True)
@@ -266,7 +282,7 @@ def main() -> None:
     print(md)
 
 
-def _probe_head(config_path: str, split: str, seed: int) -> FloorProbe:
+def _probe_head(config_path: str, split: str, seed: int, stratum: str = "floor") -> FloorProbe:
     """Score one run's frozen risk head on the split's observed states and
     decompose what it does inside the floor stratum."""
     import torch
@@ -292,8 +308,9 @@ def _probe_head(config_path: str, split: str, seed: int) -> FloorProbe:
     with torch.no_grad():
         scores = torch.sigmoid(model.risk_head(**{k: v for k, v in parts.items()
                                                   if k in components})).numpy().ravel()
-    floor = np.all(np.isclose(scaled, scaler.zero_state_scaled().astype("float32"), atol=FLOOR_ATOL), axis=1)
-    return floor_stratum_probe(scores, df["risk_label"].to_numpy(), df["host_id"].to_numpy(), floor)
+    mask = (np.ones(len(df), dtype=bool) if stratum == "all" else
+            np.all(np.isclose(scaled, scaler.zero_state_scaled().astype("float32"), atol=FLOOR_ATOL), axis=1))
+    return floor_stratum_probe(scores, df["risk_label"].to_numpy(), df["host_id"].to_numpy(), mask)
 
 
 if __name__ == "__main__":
