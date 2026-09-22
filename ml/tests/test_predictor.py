@@ -334,3 +334,46 @@ def test_forecast_batch_matches_single_forecast_geometry(trained_predictor):
     assert np.all(out["p_within_horizon"] >= out["p_attack_at_k"].max(axis=1) - 1e-6)
     with pytest.raises(ValueError):
         predictor.forecast_batch(batch[:, :-1, :])
+
+
+class TestTheServingModelIsTheSameArchitectureAsEverywhereElse:
+    """The predictor built its WorldModel by hand, so a config asking for a
+    history-aware risk head produced a per-state head at serving time and a
+    trajectory head everywhere else. That divergence cannot be caught by a
+    schema check — both are WorldModels — so it is pinned here instead."""
+
+    def _cfg(self, components=None) -> dict:
+        cfg = {"model": {
+            "n_features": 45,
+            "encoder": {"hidden_size": 16, "num_layers": 1, "dropout": 0.0},
+            "transition": {"mlp_hidden": 16, "logvar_min": -6.0, "logvar_max": 3.0, "state_clamp": 10.0},
+            "risk_head": {"hidden": 8},
+            "stage_head": {"hidden": 8, "n_stages": 6},
+        }}
+        if components is not None:
+            cfg["model"]["risk_head"]["components"] = components
+        return cfg
+
+    def _serving_model(self, cfg):
+        from nidra.serve.predictor import NidraPredictor
+        p = NidraPredictor.__new__(NidraPredictor)
+        p.cfg, p.device = cfg, "cpu"
+        return p._build_model()
+
+    def test_the_default_config_still_builds_the_per_state_head(self):
+        from nidra.models.heads import RiskHead
+        assert isinstance(self._serving_model(self._cfg()).risk_head, RiskHead)
+
+    def test_a_declared_component_set_builds_the_trajectory_head(self):
+        from nidra.models.heads import TrajectoryRiskHead
+        head = self._serving_model(self._cfg(["state", "hidden"])).risk_head
+        assert isinstance(head, TrajectoryRiskHead)
+        assert head.components == ("state", "hidden")
+
+    def test_it_agrees_with_the_shared_builder_parameter_for_parameter(self):
+        from nidra.models.build import world_model_from_config
+        for components in (None, ["state"], ["state", "hidden", "delta", "logvar"]):
+            cfg = self._cfg(components)
+            serving = {k: tuple(v.shape) for k, v in self._serving_model(cfg).state_dict().items()}
+            shared = {k: tuple(v.shape) for k, v in world_model_from_config(cfg).state_dict().items()}
+            assert serving == shared, f"serving model diverges for components={components}"

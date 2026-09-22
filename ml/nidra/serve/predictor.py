@@ -36,6 +36,7 @@ from nidra.models.risk_pooling import pool_trajectories_np
 from nidra.explain.forecast_attribution import explain_forecast
 from nidra.explain.shap_runner import explain_current_risk, explain_predicted_stage, load_background, top_signals
 from nidra.models.risk_pooling import pool_ensemble_risk
+from nidra.models.build import world_model_from_config
 from nidra.models.world_model import WorldModel
 from nidra.utils.config import load_config
 
@@ -244,21 +245,11 @@ class NidraPredictor:
         logger.info("NidraPredictor: loaded %d ensemble member(s) from %s", len(self.models), weights_dir)
 
     def _build_model(self) -> WorldModel:
-        mcfg = self.cfg["model"]
-        return WorldModel(
-            n_features=mcfg["n_features"],
-            hidden_size=mcfg["encoder"]["hidden_size"],
-            encoder_layers=mcfg["encoder"]["num_layers"],
-            encoder_dropout=mcfg["encoder"]["dropout"],
-            transition_mlp_hidden=mcfg["transition"]["mlp_hidden"],
-            logvar_min=mcfg["transition"]["logvar_min"],
-            logvar_max=mcfg["transition"]["logvar_max"],
-            risk_hidden=mcfg["risk_head"]["hidden"],
-            stage_hidden=mcfg["stage_head"]["hidden"],
-            n_stages=mcfg["stage_head"]["n_stages"],
-            state_clamp=mcfg["transition"]["state_clamp"],
-        linear_skip=bool(mcfg["transition"].get("linear_skip", False)),
-        ).to(self.device)
+        """The shared constructor, not a hand-rolled copy of it. Serving that
+        builds its own architecture is a divergence no schema check can see —
+        both sides are WorldModels — and the head a config asks for has to be
+        the head every stage builds."""
+        return world_model_from_config(self.cfg).to(self.device)
 
     def _validate_and_scale(self, states: np.ndarray) -> np.ndarray:
         """states: [L, F] raw, unscaled, oldest-first. Fails loudly on any
