@@ -3022,3 +3022,53 @@ Pre-registered before the run, since the outcome is a headline either way:
 its seed distribution does not overlap `state`'s at either** — the same bar §3.29
 cleared on validation. Anything less is a failure to replicate on the benchmark,
 and will be reported as one rather than as a tie.
+
+### 3.48 Stage B on the decomposable head: it wins on every seed, on the metric §3.47 just discredited
+
+§3.42 put `state+logvar` ahead of `state+hidden` on one seed and queued Stage B.
+Three seeds, CIC, each variant initialised from the same per-seed `cic_core_dyn`
+checkpoint so the encoder and transition are byte-identical within a seed.
+
+| head reads | dim | seed 0 | seed 1 | seed 2 | mean | sd | decomposable? |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `state+delta+logvar` | 135 | 0.7817 | 0.6890 | 0.7636 | **0.7448** | 0.0492 | **yes** |
+| **`state+logvar`** | 90 | 0.7869 | 0.6884 | 0.7542 | **0.7432** | 0.0501 | **yes** |
+| `state+hidden` | 173 | 0.7825 | 0.6711 | 0.6777 | 0.7105 | 0.0625 | no |
+
+The unpaired ranges overlap heavily, and the unpaired comparison is the wrong
+one: the three variants share a dynamics checkpoint within each seed, so the
+seed effect is common and the paired difference is what the design licenses.
+
+| head, paired against `state+hidden` | s0 | s1 | s2 | mean | wins | worst case |
+|---|---:|---:|---:|---:|:--:|---:|
+| **`state+logvar`** | +0.0043 | +0.0173 | +0.0765 | **+0.0327** | **3/3** | **+0.0043** |
+| `state+delta+logvar` | −0.0008 | +0.0178 | +0.0859 | +0.0343 | 2/3 | −0.0008 |
+
+**`state+logvar` beats `state+hidden` on every seed**, with a worst case that is
+still positive. A 90-dimensional head built entirely from the 45 named features
+beats the 173-dimensional head that reads the opaque recurrent summary, three
+times out of three. §3.42's one-seed result replicates.
+
+**And it replicates on head-training validation AP, which §3.47 has just shown is
+the wrong objective for choosing a head.** These two sections landed within hours
+of each other and they have to be read together:
+
+- §3.29: `state+hidden` beats `state` on validation AP, three seeds, distributions
+  not overlapping.
+- §3.47: `state` beats `state+hidden` on the forecast benchmark — ROC in 11 of 12
+  cells, baseline-clearing 7 of 12 against 3 of 12.
+- §3.48: `state+logvar` beats `state+hidden` on validation AP, three seeds, paired
+  3/3.
+
+The third result is the same kind of evidence as the first, and the first did not
+survive the second. **So §3.48 does not select an architecture.** It establishes
+that a decomposable head is *not worse* on the objective heads are trained
+against, which was the open question from §3.20's explainability cost — and it
+says nothing yet about the benchmark.
+
+What would settle it is `state+logvar` on the forecast benchmark against `state`
+and `state+hidden`, three seeds. That needs three head-training seeds for a
+variant that currently has them only on CIC, plus twelve benchmark cells. It is
+the obvious next run and it is **not** run here; the phase's remaining compute is
+committed to re-asking §3.29's own question on the benchmark (§3.47), which is
+the prior claim and the one currently in the final report's §2.1.
