@@ -51,7 +51,11 @@ The findings that later sections depend on, in the order they bind:
 | 6 | The history-aware head **could not be served at all** until D141, and once served, SHAP over the 45 named features attributes a risk of 1.00 to nothing larger than 0.0003. The AP gain costs the project's explainability. | §3.20 |
 | 7 | The history-aware head is also the **worse-calibrated** one, and the only within-dataset arm whose calibrated score loses to predicting the prevalence and never moving. Second cost on the same candidate. | §3.23 |
 | 7b | **Stage B, three seeds on the forecast benchmark:** the history-aware head halves false alarms and wins F1 — and its within-host ROC *falls* (0.816 → 0.697) while its margin over persistence is −0.0100 [−0.0342, +0.0034]. It wins the alert, not the forecast. A GRU classifier on identical rows beats both. | §3.29, §3.32 |
-| 8 | **The oracle is not an upper bound on the deployed system** — it is beaten in 7 of 14 cells, because the oracle gets neither trajectory pooling nor the Platt layer. Every "% of oracle" statement has to be against the deterministic arm. Two cells break even that bound and are unexplained. | §3.24, §3.26, §3.27 |
+| 8 | **The oracle is not an upper bound on the deployed system** — beaten in 11 of 28 cells even by the uncalibrated sampled arm. ~~Every "% of oracle" statement has to be against the deterministic arm.~~ *Withdrawn in §3.40: the deterministic arm is below chance in 12 of 24 cells and cannot serve as a reference.* Two cells break the bound and remain unexplained. | §3.24, §3.26, §3.27, §3.40 |
+| 9 | **The rollout manufactured state in features that carry no gradient.** The transition loss masks dropped features, so the network is untrained there; the rollout fed that output back, compounding to rms 2.03 by k=6 in slots that are exactly zero in the input and in the truth — more magnitude than the real features carry. Every CTU and cross-dataset number in this report was produced under it. Run 8 is unaffected. | §3.37 |
+| 10 | **All 28 recorded cells reproduce bit-identically**, and the re-run took confidence-interval coverage from 6 of 28 to 28 of 28. | §3.36 |
+| 11 | On CIC the **decomposable `state+logvar` head reaches 99.1%** of the history-aware head, against 14% on CTU — so finding 6's explainability cost is dataset-dependent, not intrinsic. One seed, and the arm most exposed to finding 9. | §3.38 |
+| 12 | **On an unseen attack family (Neris withheld) the world model loses to persistence** — 0.717 against 0.772 — while its within-host ROC is 0.949 across ten infected hosts. | §3.39 |
 
 ---
 
@@ -2185,3 +2189,248 @@ component of the encoder hidden state that encodes *which host this is*, and no
 reweighting of the positive class by stage touches that. The two nulls are the
 same null seen twice — the thing the head is reading is not the thing these
 interventions are moving.
+
+### 3.36 Every recorded cell reproduces exactly (§32 criterion 9, §36 items 9, 21)
+
+The twenty recorded cross-evaluation cells were scored before
+`world_model_calibrated` entered `BOOTSTRAP_SYSTEMS` (§3.31) and before the
+host-identity block, the calibration reader and D142/D143's guards landed. They
+were re-run into `repro_*` rather than over the originals, so that a drift would
+leave the published figure still matched to the artifact that produced it.
+
+28 cells re-ran. **All 28 reproduce, and not merely within tolerance — the AP is
+bit-identical to the last digit in every one**, on identical row counts and
+identical prevalence. `reproduction_check.py` judges at 0.005 AP because a
+bootstrap resamples and a rollout draws; neither turned out to matter, because
+the point estimate is a deterministic function of pinned seeds and only the
+interval resamples.
+
+The re-run also fixes what prompted it: **6 of 28 cells carried a confidence
+interval before, 28 of 28 do now.**
+
+Full table in `reports/run9/reproduction_check.md`. This is the §33 line "every
+final metric gets a reproducible artifact" discharged by measurement rather than
+by assertion.
+
+One validity check worth recording separately, because the matrix would be
+meaningless without it: for each evaluation target, every training source scores
+**exactly the same rows** — all `*2cic` test cells are n=21,173 / 946 positive /
+prevalence 0.00417, all `*2ctu` are n=25,099 / 3,688 / 0.00749. The cross-dataset
+comparison varies the training set and nothing else.
+
+### 3.37 The rollout manufactured state in features that carry no gradient (D145)
+
+This is a defect, found while chasing §3.24's oracle anomaly, and it contaminates
+every cross-dataset number in this report.
+
+`train/losses.py` masks dropped features out of the transition loss — a feature
+the scaler found constant or duplicated is excluded from the NLL and MSE
+reductions. That is deliberate and correct: there is nothing to fit. The
+consequence was not noticed. **The transition network receives no gradient at all
+on those output dimensions**, so whatever it emits there is untrained, and
+`rollout()` fed that output back in as the next state, once per step.
+
+Measured on `comb2cic_state+hidden`, 13 dropped of 45:
+
+| k | dropped slots, rms | abs max | kept slots, rms | true kept, rms |
+|---|---|---|---|---|
+| 1 | 0.581 | 2.24 | 0.643 | 0.712 |
+| 3 | 1.245 | 4.10 | 0.650 | 0.716 |
+| 6 | **2.035** | **6.21** | 0.695 | 0.709 |
+
+The input holds those slots at exactly 0.0, and so does the true future. By k=6
+the forecast carried three times more magnitude in features that do not exist for
+this dataset pair than in the features that do — against a state clamp of 10.
+
+It is present in every cell of the matrix, and in every one the phantom exceeds
+the real features:
+
+| cell | phantom rms k=6 | abs max | real rms | ratio |
+|---|---|---|---|---|
+| CIC → CIC `state+hidden`, test | 1.69 | 6.31 | 0.45 | 3.8× |
+| CTU → CTU `state+hidden`, test | 2.12 | 8.95 | 0.95 | 2.2× |
+| comb → CIC `state+hidden`, test | 2.01 | 5.78 | 0.68 | 2.9× |
+| comb → CTU `state+hidden`, holdout | 2.49 | 8.88 | 0.68 | 3.7× |
+
+**Why it reaches the answer.** The frozen risk head reads the 45-dim state. In
+training those slots were always exactly zero, so the head's weights on them were
+never constrained by data — they are whatever initialisation and weight decay
+left. At inference the rollout hands them rms-2.03 inputs. The risk score
+therefore contains a per-host projection of untrained weights onto untrained
+drift, growing with horizon. The phantom slots also feed back through the GRU, so
+they perturb the real features too: masking moves the kept-slot rms at k=6 from
+0.695 to 0.603.
+
+**What this does and does not explain.** It is the obvious candidate for two
+findings already in this log — §3.24's oracle-beating (the oracle runs
+`state_source="truth"`, whose dropped slots are exact zeros, so it alone gets no
+contribution through those weights) and the deterministic arm's below-chance ROC
+in 12 of 24 cells (the mean path drives the phantom systematically with no
+sampling to cancel it). But the magnitude does not order the anomaly: the largest
+phantom-to-real ratio, 3.8×, belongs to a cell that does *not* beat its oracle.
+**Pre-registered before the re-scores land:** if D145 is the mechanism, masking
+removes the oracle-beating in `comb2cic/test` and `comb2ctu/holdout`; if those
+cells still beat their oracle with the phantom slots at zero, the mechanism is
+refuted and negative result 10 stands unchanged.
+
+**Fix.** `WorldModel.set_feature_mask()` takes the kept-feature mask from the
+scaler and `rollout()` applies it to `nxt`, `mu` and `logvar` after the clamp. All
+three reach a head — `mu` a `state+delta` head, `logvar` a `state+logvar` head —
+and §3.38 below turns on exactly the `state+logvar` arm, so leaving that channel
+untrained would have put the defect inside the conclusion. `logvar` is pinned to
+the transition's floor rather than zeroed, because a log-variance of 0 asserts
+unit variance rather than none; sampling in a dropped slot cannot reach the state
+anyway, since the mask is applied after the noise is added. The mask is
+not a checkpoint entry; it belongs to the scaler, and `load_models` sets it from
+the scaler that D142's guard already forces to match. Passing `None` restores the
+old path exactly, so every recorded run stays reproducible — which §3.36 has just
+finished demonstrating and which must not be broken by the fix for it.
+
+Twelve tests in `tests/test_rollout_dropped_features.py`. Suite 762 → 774.
+
+**Blast radius.** 40 of 63 run scalers drop features: every CTU-13 run drops 15,
+every combined and `cic_core` run drops 13. The 23 `full`-regime runs drop nothing
+and are arithmetically unaffected, so **Run 8 is not touched by this** — and its
+artifacts are not re-run regardless (§33).
+
+### 3.38 On CIC, the decomposable head is not the loser it was on CTU (§5, §27, §31 Q13/Q14)
+
+§3.22 recorded that the explainability cost of the history-aware head might not
+be a component choice at all — on CTU, `state+logvar` carried only 14% of what
+`state+hidden` carried, so there was no decomposable head to retreat to. It also
+recorded, as a pre-commitment, that **CIC was untested**: the ablation there had
+only ever run `state` and `state+hidden`, and a negative would close the
+direction properly rather than leave it standing as an untested suggestion.
+
+Four CIC arms were queued. The result is not the negative that was expected.
+
+| head reads | val AP | input dim | decomposable into the 45 named features? |
+|---|---|---:|---|
+| `state+hidden` | 0.7825 | 173 | no |
+| **`state+logvar`** | **0.7754** | 90 | **yes** |
+| `hidden` alone | 0.7553 | 128 | no |
+| `state+delta+logvar` | 0.7330 | 135 | yes |
+| `state` | 0.6781 | 45 | yes |
+| `state+delta` | 0.6607 | 90 | yes |
+
+On CIC, `state+logvar` reaches **99.1% of the history-aware head's AP** — 0.0071
+behind, against the ±0.047 head-training seed spread §3.29 measured, so the two
+are not distinguishable at one seed. On CTU the same arm carried 14%. The
+explainability cost is therefore **dataset-dependent, not intrinsic**, which is
+the opposite of what §3.22 was heading towards.
+
+Three things keep this from being a conclusion:
+
+1. **One seed, Stage A.** §19 and §33 both forbid reporting a screening run as
+   final, and the gap is far inside the noise §3.29 measured. This selects a
+   candidate for Stage B; it does not settle anything.
+2. **It is a validation number.** No test or holdout cell has been run for these
+   arms, and §3.29/§3.32 are the standing reminder that a val ranking in this
+   phase has twice failed to survive the forecast benchmark.
+3. **D145 lands directly on it.** `state+logvar` reads 45 log-variances, 13 of
+   which were untrained in the `cic_core` regime this ran under. Part of the
+   0.7754 may be the head reading structure in slots that carry no information.
+   §3.37's fix pins those to the variance floor, so **this comparison has to be
+   re-run before it is used for anything** — and it is the single arm most
+   exposed to the defect, which is why the fix was extended to `logvar` rather
+   than stopping at the state.
+
+Recorded as an open candidate, not a finding. Q13's limit 4 and Q14's direction 4
+are updated to say the direction is *open on CIC and closed on CTU*, pending a
+re-run under §3.37 and a Stage B confirmation.
+
+### 3.39 The unseen attack family: the world model loses to persistence (§31 Q9, §36 item 15)
+
+Neris is CTU's largest family — scenarios 1, 2 and 9. Withheld from training
+entirely; heads and dynamics retrained without it; evaluated on it. This is the
+§31 Q9 evidence and nothing else in the phase substitutes for it.
+
+| head | split | n | prev | AP [95% CI] | ROC | persistence | oracle | within-host ROC |
+|---|---|---:|---:|---|---:|---:|---:|---:|
+| `state` | val | 21,786 | 0.0122 | 0.0116 [0.008, 0.015] | 0.505 | 0.0108 | 0.0125 | 0.612 |
+| `state` | test | 22,501 | 0.0079 | 0.0442 [0.015, 0.084] | 0.869 | **0.4448** | 0.4898 | 0.943 |
+| `state+hidden` | val | 21,786 | 0.0122 | 0.1156 [0.070, 0.183] | 0.660 | 0.0748 | 0.1244 | 0.553 |
+| `state+hidden` | test | 22,501 | 0.0079 | **0.7166** [0.485, 0.860] | 0.950 | **0.7715** | 0.7957 | 0.949 |
+
+**Read the validation rows first, and then discard their operating point.** The
+model is at chance on val (ROC 0.505 and 0.660). The threshold and calibration
+were nevertheless frozen there, because §33 forbids selecting them anywhere else.
+So the F1 and false-alarms-per-hour columns for this experiment describe a
+threshold chosen on a split where the model cannot rank — 6,151 and 6,293 false
+alarms per hour for `state`, 27.5 for `state+hidden`. Those numbers are not
+evidence about either head. AP is the only usable column here.
+
+On that column:
+
+- **`state+hidden` reaches AP 0.717 on a family it has never seen**, with ROC
+  0.950 and a within-host ROC of 0.949 across **ten infected hosts** — the first
+  genuinely cross-host within-host measurement in the phase, and §3.14's central
+  complaint (one infected host in train and in val, the same address) does not
+  apply to it.
+- **Persistence reaches 0.772.** The world model loses to it, on both heads. The
+  intervals are wide and overlapping, so the gap is not established either way —
+  but the honest summary of Q9 is that the model transfers to an unseen family
+  *no better than repeating the host's current state does*.
+- **`state`'s aggregate AP collapses to 0.044 while its within-host ROC is
+  0.943.** It orders windows correctly inside each host and cannot compare
+  across them — 0.869 aggregate ROC against 0.044 AP is what that looks like at
+  0.8% prevalence. This is the same per-host-calibration failure as §3.11, in its
+  clearest form yet.
+
+GRU is `nan` in these cells: `gru_classifier.pt` was not copied into the lofo
+runs, so the strongest baseline is **missing** from the one experiment where it
+would matter most. That is a gap, recorded as such, not an omission of an
+unfavourable number — §3.32 already reports the GRU beating both heads on the
+within-dataset benchmark, so the expectation is that it would win here too.
+
+### 3.40 Q2 and Q3 at a common readout (§31 Q2/Q3, §36 items 12–14)
+
+The matrix cells each use the pooling the validation split selected for them,
+which makes a cross-training-set comparison partly a comparison of readouts.
+Re-scored with `--force-pooling 'mean|q=-|max'` on all four, natural prevalence,
+episode-cluster intervals:
+
+| cell | AP [95% CI] | ROC | persistence | oracle | calibration matched to the forced readout? |
+|---|---|---:|---:|---:|---|
+| CIC → CIC | 0.0672 [0.021, 0.239] | 0.575 | 0.0414 | 0.0689 | **no** (selected `integrated`) |
+| CIC+CTU → CIC | 0.1584 [0.052, 0.283] | 0.889 | 0.0342 | 0.0519 | yes |
+| CTU → CTU | 0.3221 [0.125, 0.583] | 0.680 | 0.3215 | 0.3517 | yes |
+| CIC+CTU → CTU | 0.3734 [0.204, 0.586] | 0.795 | 0.3623 | 0.3999 | yes |
+
+n = 21,173 (946 positive, prevalence 0.00417) for both CIC rows and 25,099 (3,688,
+0.00749) for both CTU rows — identical rows within each target, so only the
+training set varies.
+
+**The baseline arm of Q2 is handicapped.** CIC → CIC is the one cell whose Platt
+layer was fitted under a different pooling key than it is scored at. Forcing the
+readout leaves its calibration mismatched while its comparison arm's is not,
+which is exactly the asymmetry that manufactures an improvement. The uncalibrated
+`world_model` column is the check: 0.0380 → 0.1470, ROC 0.438 → 0.913. The gain
+survives removing the Platt layer, so it is not a calibration artifact — but the
+calibrated figures in the table above overstate it.
+
+**Q2 — does adding CTU-13 improve CIC generalisation?** Point estimate yes, and
+substantially (ROC 0.44 → 0.91 uncalibrated). Statistically, the intervals
+overlap across most of their range on **15 positive episode clusters**. Supported
+as a direction, not as a quantity.
+
+**Q3 — does adding CIC improve CTU?** +0.051 calibrated, +0.049 uncalibrated, on
+intervals that overlap almost entirely. **And persistence is level with the model
+in both CTU rows** — 0.3215 against 0.3221, and 0.3623 against 0.3734. Whatever
+the training mixture does on CTU, it does not lift the model past repeating the
+current state. Not supported.
+
+Every number in this section was produced under D145 and needs re-running under
+§3.37's fix before it is final.
+
+#### A correction to finding 8
+
+Finding 8 in the navigation table says that every "% of oracle" statement has to
+be made against the deterministic arm. **That guidance is withdrawn.** The
+deterministic arm scores *below chance* in 12 of 24 recorded cells, ROC as low as
+0.009, while the sampled arm on the same rollout reaches 0.8–0.97 — it is not a
+cleaner version of the system, it is a differently-behaved one, and §3.37 gives
+the likely reason. The uncalibrated sampled arm `world_model` is the reference
+that is actually like-for-like with the oracle: same pooling, same sampling, no
+Platt layer. On that arm the oracle is beaten in **11 of 28** cells, of which
+only four exceed 0.03, and all four are combined-training cells.

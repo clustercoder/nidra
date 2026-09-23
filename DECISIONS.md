@@ -1836,3 +1836,88 @@ One real effect AP cannot see: the benign composite mean halves under the model 
 does not move a rank metric. NOT to be reported as a false-alarm improvement: the benchmark's
 FA/h column scores every system at the threshold selected for the calibrated one, so those
 numbers compare calibration, not transition models.
+
+## D145 — 2026-09-23 — The rollout manufactured state in features that carry no gradient
+
+`train/losses.py` masks dropped features out of the transition loss: a feature the
+scaler found constant or duplicated is excluded from the NLL and MSE reductions, so
+the transition network receives **no gradient at all** on those output dimensions.
+That part is deliberate and sensible — there is nothing to fit.
+
+`rollout()` did not carry the same contract. It fed the transition's untrained output
+back in as the next state, so whatever the network happened to emit in a dropped slot
+compounded once per step. Measured on `comb2cic_state+hidden`, 13 dropped of 45:
+
+| k | dropped slots, rms | abs max | kept slots, rms | true kept, rms |
+|---|---|---|---|---|
+| 1 | 0.581 | 2.24 | 0.643 | 0.712 |
+| 3 | 1.245 | 4.10 | 0.650 | 0.716 |
+| 6 | 2.035 | 6.21 | 0.695 | 0.709 |
+
+The input holds those slots at exactly 0.0 and so does the true future. By k=6 the
+forecast carried three times more magnitude in features that do not exist for this
+dataset pair than the real features carry, against a state clamp of 10.
+
+Why it matters beyond tidiness. The frozen risk head reads the 45-dim state. In
+training those 13 slots were always exactly zero, so the head's weights on them were
+never constrained by data — they are whatever initialisation and weight decay left.
+At inference the rollout feeds them rms-2.03 inputs. The risk score therefore contains
+a per-host projection of untrained weights onto untrained drift, growing with horizon.
+
+This is a candidate mechanism for two anomalies already recorded — candidate, not
+demonstrated; see the magnitude check below:
+
+- **§3.24's "the oracle is not an upper bound"** (13 of 28 cells beat it). The oracle
+  runs `state_source="truth"`, whose dropped slots are exact zeros, so it gets no
+  contribution through those weights at all, while the system under test gets a
+  host-specific one. The four *substantial* oracle-beats are all combined-training
+  cells, which is where the regime drops the most features.
+- **The deterministic arm scoring below chance in 12 of 24 cells** (ROC as low as
+  0.009). The mean path drives the phantom slots systematically with nothing to
+  average them out; sampling 40 draws partially cancels them.
+
+Both of those were reported as findings. Neither is safe to keep in that form.
+
+**The magnitude does not order the anomaly, though.** Phantom rms at k=6, against the
+real features' rms in the same rollout:
+
+| cell | phantom rms k=6 | abs max | real rms | ratio | oracle-beating? |
+|---|---|---|---|---|---|
+| CIC → CIC, `state+hidden` test | 1.69 | 6.31 | 0.45 | **3.8×** | no |
+| CTU → CTU, `state+hidden` test | 2.12 | 8.95 | 0.95 | 2.2× | no |
+| comb → CIC, `state+hidden` test | 2.01 | 5.78 | 0.68 | 2.9× | **yes** |
+| comb → CTU, `state+hidden` holdout | 2.49 | 8.88 | 0.68 | 3.7× | **yes** |
+
+The defect is present in **every** cell of the cross-dataset matrix — all of them use a
+regime that drops 13 or 15 features — and in every one the phantom carries more
+magnitude than the real features. But the largest ratio belongs to a *non*-anomalous
+cell. So D145 contaminates every cross-dataset number, and separately it is **not yet
+shown** to be why two of them beat their oracle. §3.24's cells stay unexplained until
+the masked re-score says otherwise.
+
+**Pre-registered, before the `mask_*` cells land.** If D145 is the mechanism behind the
+oracle anomaly, masking removes the oracle-beating in `comb2cic/test` and
+`comb2ctu/holdout`. If those cells still beat their oracle once the phantom slots are
+zero, the mechanism is refuted and negative result 10 stands as it is.
+
+**Fix.** `WorldModel.set_feature_mask()` takes the kept-feature mask from the scaler;
+`rollout()` applies it to `nxt`, `mu` and `logvar` after the clamp. All three are
+exposed to a head — `mu` to `state+delta`, `logvar` to `state+logvar` — and leaving any
+of them untrained puts the contamination straight into the head comparison of §3.22,
+where the decomposable `state+logvar` head is the most interesting arm. `logvar` is
+pinned to the transition's own floor rather than zeroed: a log-variance of 0 asserts
+UNIT variance, a loud claim at the scale a head reads, whereas the floor says "this slot
+does not vary", which is what a dropped feature means. Sampling in a dropped slot cannot
+reach the state, because the mask is applied after the noise is added. The mask is not a
+checkpoint entry — it belongs to the scaler, and
+`load_models` sets it from the scaler that the D142 guard already requires to match.
+Passing `None` restores the old path exactly, so the recorded runs stay reproducible.
+
+**Blast radius.** 40 of 63 run scalers drop features: every CTU-13 run (15 dropped) and
+every combined run (13 dropped). The 23 CIC-only `full`-regime runs drop nothing and
+are arithmetically unaffected — **Run 8 is not touched by this**, and its artifacts are
+not re-run regardless.
+
+The correction is being measured on six affected cells, written to `mask_*` rather than
+over the originals, for the same reason the reproduction re-run was: if the numbers
+move, the published figures must stay matched to the artifacts that produced them.

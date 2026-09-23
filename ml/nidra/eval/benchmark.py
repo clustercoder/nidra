@@ -36,7 +36,7 @@ import torch
 from nidra.data.dataset import build_windowed_arrays
 from nidra.data.normalize import FeatureScaler
 from nidra.models.build import risk_head_components
-from nidra.data.schema import STAGE_LABELS
+from nidra.data.schema import FEATURE_ORDER, STAGE_LABELS
 from nidra.eval.episode_metrics import per_episode_report
 from nidra.eval.eval_set import EvalSet, build_eval_set
 from nidra.eval.metrics import brier_score, reliability_diagram
@@ -298,6 +298,12 @@ def load_models(cfg: dict, seeds: list[int]) -> list[WorldModel]:
         assert_head_matches_checkpoint(risk_head_components(cfg), meta, f"model_seed_{s}.pt in {weights_dir}")
         m = _build_model(cfg)
         m.load_state_dict(torch.load(weights_dir / f"model_seed_{s}.pt", map_location="cpu"))
+        # The transition gets no gradient on dropped slots (losses.py masks
+        # them), so its output there is untrained and compounds through the
+        # rollout into the state the frozen head reads. The scaler is the only
+        # thing that knows which slots those are, so the mask is set here
+        # rather than stored in the checkpoint.
+        m.set_feature_mask([f not in set(dropped) for f in FEATURE_ORDER] if dropped else None)
         m.eval()
         models.append(m)
     return models

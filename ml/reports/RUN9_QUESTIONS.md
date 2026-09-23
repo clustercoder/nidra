@@ -51,19 +51,47 @@ phenomenon.
 
 ## Q2 — Does adding CTU-13 improve CIC-IDS2017 generalization?
 
-**Pending.** The combined dynamics model and both its head variants are
-trained; the `comb2cic` test and holdout benchmarks are in the running matrix.
-The comparison is `comb2cic` against `cic2cic` at the same feature mask and the
-same operating-point discipline.
+**Yes as a direction, not as a quantity — and provisionally, because D145
+lands on it.** At a forced common readout (`mean|q=-|max`), on identical rows
+(n=21,173, 946 positive, prevalence 0.00417):
+
+| training set | AP [95% CI] | ROC | uncalibrated AP | uncalibrated ROC |
+|---|---|---:|---:|---:|
+| CIC only | 0.0672 [0.021, 0.239] | 0.575 | 0.0380 | 0.438 |
+| CIC + CTU | 0.1584 [0.052, 0.283] | 0.889 | 0.1470 | 0.913 |
+
+The uncalibrated column matters here: the CIC-only arm is the one cell in the
+matrix whose Platt layer was fitted under a different pooling key than it is
+scored at, so the calibrated comparison is asymmetric in the improvement's
+favour. Removing the Platt layer entirely leaves the gain intact (ROC 0.44 →
+0.91), so it is not a calibration artifact — but the intervals overlap across
+most of their range on **15 positive episode clusters**, so the size of the
+effect is not established. *(§3.40.)*
 
 ## Q3 — Does training on CIC + CTU improve CTU performance?
 
-**Pending.** Same matrix, `comb2ctu` against the CTU-only arm.
+**Not supported.** Same discipline, identical rows (n=25,099, 3,688 positive,
+prevalence 0.00749):
+
+| training set | AP [95% CI] | ROC | persistence |
+|---|---|---:|---:|
+| CTU only | 0.3221 [0.125, 0.583] | 0.680 | 0.3215 |
+| CIC + CTU | 0.3734 [0.204, 0.586] | 0.795 | 0.3623 |
+
++0.051 calibrated, +0.049 uncalibrated, on intervals that overlap almost
+entirely. The more important column is the last one: **persistence is level with
+the model in both rows** — 0.3215 against 0.3221, and 0.3623 against 0.3734.
+Whatever the training mixture does on CTU, it does not lift the model past
+repeating the host's current state. *(§3.40.)*
 
 Head-training validation AP is available and is *not* an answer: the combined
 regime's 0.3850 / 0.5130 and CTU-only's 0.3531 / 0.4894 are computed on
 different validation sets with different prevalences, so they are not
 comparable. *(§3.12, D131.)*
+
+**Both answers are provisional.** Every cell above was scored under D145 — the
+rollout was writing untrained values into 13 of 45 feature slots — and must be
+re-run under §3.37's fix before either is final.
 
 ## Q4 — Does the history-aware risk head fix the Run 8 failure?
 
@@ -177,10 +205,30 @@ the head that loses on every other axis.**
 
 ## Q9 — Does the model generalize to completely unseen attack families/scenarios?
 
-**Pending, and the scope is narrower than it looked.** Three things bear on it
-and none has landed: the CTU test and holdout splits (families absent from
-training), the leave-one-family-out run without Neris (queued), and the two
-transfer arms `cic2ctu` and `ctu2cic`.
+**Answered: it transfers, and it transfers no better than persistence does.**
+
+Neris — CTU's largest family, scenarios 1, 2 and 9 — was withheld from training
+entirely and the model retrained without it. On the withheld family the
+history-aware head reaches **AP 0.717 [0.485, 0.860]**, ROC 0.950, and a
+within-host ROC of **0.949 across ten infected hosts**: the first genuinely
+cross-host within-host measurement in the phase, and a good one. **Persistence
+on the same rows reaches 0.772.** The intervals are wide and overlapping, so
+neither is established as better — but the model does not beat repeating the
+host's current state, and that is the answer to Q9 as asked.
+
+The state-only head shows the failure mode in its clearest form: within-host ROC
+0.943, aggregate AP 0.044. It ranks windows correctly inside each host and cannot
+compare across them.
+
+Two caveats that are not decoration. The operating point was frozen on a
+validation split where the model is at chance (ROC 0.505 / 0.660), so the F1 and
+false-alarm columns of that experiment describe nothing; AP is the only usable
+metric there. And the GRU baseline is **missing** from these cells — the
+classifier was not copied into the lofo runs — which is the one experiment where
+the strongest baseline would have mattered most. *(§3.39.)*
+
+Still outstanding on this question: the two transfer arms `cic2ctu` and
+`ctu2cic`, both of which must be re-run under D145's fix.
 
 What has been established is where the question *can* be asked. CTU-13 reuses
 the same infected address (`147.32.84.165`) across scenarios 1–4 and 6, and
@@ -267,6 +315,24 @@ order they bind:
    whole explanation surface is 45 named features. This is a limit on what the
    improvement can be *shipped* as, not on its accuracy. *(§3.20, D141.)*
 
+   **Revised: this limit is dataset-dependent, not intrinsic.** On CTU the
+   decomposable `state+logvar` head carried 14% of the history-aware head's
+   gain, which read as "there is nothing to retreat to". On CIC the same arm
+   reaches **99.1%** — 0.7754 against 0.7825, well inside the ±0.047 seed
+   spread. A head that keeps essentially all of the gain *and* decomposes into
+   the 45 named features may exist on CIC. One seed, validation only, and it is
+   the arm most exposed to D145 (it reads 45 log-variances, 13 of them
+   untrained), so it is an open candidate rather than a finding. *(§3.38.)*
+
+6. **The rollout was writing untrained values into the state it forecasts.**
+   Not a limit of the approach — a defect, found late, now fixed. The transition
+   loss masks dropped features, so the network gets no gradient there; the
+   rollout fed its untrained output back and it compounded to rms 2.03 by k=6,
+   in slots that are exactly zero in the input and in the truth, carrying more
+   magnitude than the real features. Every CTU and cross-dataset number in this
+   phase was produced under it and is provisional until re-scored. Run 8 is
+   unaffected — its regime drops nothing. *(§3.37, D145.)*
+
 What is *not* the limit, contrary to how §3.8 originally read it: attack-group
 separability. `ctu_4:c2` was written up as unreachable on a probe's ROC of
 0.443 and NIDRA's own stage head then reached 0.864 on the same windows under
@@ -307,6 +373,31 @@ a fourth.**
    per-feature quantities. So Q13's fourth limit looks intrinsic rather than a
    component choice: **the AP gain and the explainability loss may be the same
    thing.**
+
+   **Reopened on CIC.** §3.22 committed to testing the four missing CIC arms
+   precisely so this direction would close on evidence rather than on an
+   untested suggestion. It did not close. On CIC, `state+logvar` reaches
+   **0.7754 against `state+hidden`'s 0.7825** — 99.1%, inside the seed spread —
+   where on CTU it reached 14%. The same component that looks useless on one
+   dataset is nearly sufficient on the other, so "the AP gain and the
+   explainability loss are the same thing" is a CTU statement, not a general
+   one. What makes it worth pursuing rather than merely noting: `state+logvar`
+   is 90-dimensional and decomposes entirely into the 45 named features, so it
+   is shippable through the existing SHAP surface in a way `state+hidden` is
+   not.
+
+   Two conditions before it becomes a recommendation: Stage B across seeds
+   (one-seed screening cannot settle a 0.007 gap), and a re-run under D145 —
+   this arm reads 45 log-variances of which 13 were untrained, so it is the
+   single arm most exposed to the defect. *(§3.38, §3.37.)*
+
+5. **Re-establish the cross-dataset matrix under the D145 fix.** Not a research
+   direction so much as a debt: every CTU and cross-dataset number in this phase
+   was produced while the rollout was writing untrained values into 13–15 of the
+   45 feature slots, at a magnitude exceeding the real features. The fix is in
+   and tested; the matrix has to be re-scored before Q2, Q3, Q6, Q7, Q8 or Q9
+   are quoted as final. Roughly three hours of compute for the 28 cells.
+   *(§3.37, D145.)*
 
    It is untested on CIC, where the head ablation ran `state` and `state+hidden`
    only and where §3.11 found the gain survives the within-host test that CTU's

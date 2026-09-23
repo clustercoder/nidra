@@ -11,6 +11,7 @@ function.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import torch
@@ -95,6 +96,38 @@ class WorldModel(nn.Module):
                                      linear_skip=linear_skip)
         self.risk_head = RiskHead(n_features, risk_hidden)
         self.stage_head = StageHead(n_features, stage_hidden, n_stages)
+        #: Set from the scaler by `set_feature_mask`, never learned and never
+        #: serialised — see that method for why the rollout needs it.
+        self.feature_mask: torch.Tensor | None = None
+
+    def set_feature_mask(self, kept: Sequence[bool] | torch.Tensor | None) -> None:
+        """Declare which of the `n_features` slots the scaler actually kept.
+
+        `train/losses.py` masks dropped (constant or duplicate) features out of
+        the transition loss, so the transition network gets NO gradient on
+        those output dimensions and whatever it emits there is untrained. The
+        rollout feeds its own output back in, so that untrained drift compounds
+        with every step: measured on `comb2cic_state+hidden` (13 dropped of 45)
+        the dropped slots grow from rms 0.58 at k=1 to 2.03 at k=6, against
+        real features flat at rms 0.69 — and they land in the state the frozen
+        risk head reads, in slots where that head has never seen a non-zero
+        input either.
+
+        A dropped feature is zeroed rather than removed so that shapes always
+        match (`FEATURE_ORDER` is canonical at 45). This carries that same
+        contract through the rollout.
+
+        Passing None restores the unmasked path, which is what checkpoints
+        recorded before this existed were scored under.
+        """
+        if kept is None:
+            self.feature_mask = None
+            return
+        mask = torch.as_tensor(list(kept) if not isinstance(kept, torch.Tensor) else kept, dtype=torch.float32)
+        if mask.shape != (self.n_features,):
+            raise ValueError(f"feature mask has {tuple(mask.shape)} entries but the model has "
+                             f"{self.n_features} features")
+        self.feature_mask = mask
 
     def encode(self, x: torch.Tensor, h: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
         return self.encoder(x, h)
@@ -196,6 +229,25 @@ class WorldModel(nn.Module):
             else:
                 nxt = truth_tiled[:, k, :]
             nxt = nxt.clamp(-self.state_clamp, self.state_clamp)
+            if self.feature_mask is not None:
+                # A dropped slot is zero in the input and zero in the truth; it
+                # must be zero in the forecast too. `mu` is masked with it
+                # because a `state+delta` head reads it directly. `logvar` is
+                # deliberately left alone: zeroing a log-variance would assert
+                # unit variance, not no variance, and nothing consumes it in a
+                # dropped slot.
+                mask = self.feature_mask.to(nxt.dtype)
+                nxt = nxt * mask
+                mu = mu * mask
+                # `logvar` reaches a `state+logvar` head, so it carries the same
+                # hazard and cannot be left untrained. It is pinned to the
+                # transition's own floor rather than to zero: a log-variance of
+                # 0 asserts UNIT variance, which is a loud claim at the scale a
+                # head reads, whereas the floor says "this slot does not vary",
+                # which is what a dropped feature means. Sampling in these slots
+                # cannot reach the state — the mask above is applied after the
+                # noise is added.
+                logvar = logvar * mask + (1.0 - mask) * self.transition.logvar_min
 
             traj.append(nxt)
             mus.append(mu)
