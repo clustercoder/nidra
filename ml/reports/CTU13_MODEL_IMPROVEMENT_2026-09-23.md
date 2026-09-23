@@ -1701,3 +1701,61 @@ two cells beat their oracle.
 §3.24's two cells remain **unexplained**. Recorded as entry 10 in
 `RUN9_NEGATIVE_RESULTS.md` — the first pre-registered criterion in this phase to
 refuse one of the log's own explanations rather than one of its interventions.
+
+### 3.28 A near-miss, and the guard it bought (§22, §33)
+
+§3.27's follow-up — score predicted against true terminal states *through the
+head*, since L2 separation is not what the head reads — produced numbers that
+reproduced the benchmark's own per-horizon table on two cells and missed badly
+on a third: `comb → CTU` holdout came out at 0.149 where the benchmark recorded
+0.431, a 2.9× discrepancy on one of the two cells §3.26 is about.
+
+Chased rather than reported, because a headline number that does not reproduce
+is a §33 problem whichever side the error is on. **The error was in the probe.**
+The probe loaded `config/combined_eval_ctu.yaml` directly; the queue runs that
+config with `--set artifacts.scaler_dir=<the source run's scaler>`. Without the
+override the config resolves to the shared `ml/artifacts/scaler`, and that
+directory now holds a **different feature regime**: 0 dropped features against
+the combined model's 13 (`cross_core`, 32 kept). Every recorded cell is sound —
+audited all 20, each used a scaler from its own model's family.
+
+What makes it worth a section is *how* it failed. A dropped feature is **zeroed,
+not removed**, so the tensor shapes match, `load_state_dict` succeeds, the
+rollout runs, and the AP comes out 2.9× different with nothing raised anywhere.
+That is precisely the failure this project's conventions single out — silent
+coercion producing a plausible wrong number — and it took a cross-check against
+an independently recorded value to notice.
+
+**`nidra/eval/benchmark.py` now refuses it.** `load_models` compares the loaded
+scaler's drop set against each checkpoint's recorded `dropped_features` and
+raises a message naming the differing features and the checkpoint, rather than
+the count alone. Verified against the actual near-miss: the unoverridden config
+is now refused, and both legitimate spellings — the queue's `--set` and a run's
+own `config.yaml` — still load. Checkpoints predating the `dropped_features`
+field pass through, because refusing them would break replaying Run 8's
+artifacts, which §29 forbids.
+
+The residual lesson is about the configs, not the guard: `config/cic2ctu.yaml`,
+`config/ctu2cic.yaml` and `config/combined_eval_ctu.yaml` are **not
+self-contained**. Each is correct only when run with the scaler override, and
+the shared directory they otherwise resolve to is rewritten by whatever trained
+last. The guard converts that from a silent wrong answer into a refusal, which
+is the right first move; making the configs self-contained would be better and
+is not done here.
+
+And the k=6 decomposition that started this, on the two cells the probe *did*
+reproduce:
+
+| cell | states | AP | mean·attack | mean·benign | benign p99 |
+|---|---|---|---|---|---|
+| comb → CIC, test (**anomalous**) | true | 0.059 | 0.041 | 0.00055 | 0.0056 |
+| | predicted | **0.109** | 0.105 | 0.00255 | **0.592** |
+| CIC → CIC, test (control) | true | 0.095 | 0.068 | 0.00097 | 0.211 |
+| | predicted | **0.017** | 0.023 | 0.01422 | 0.046 |
+
+In the anomalous cell the rollout raises **everything** — the attack mean 2.6×
+and the benign 99th percentile by a factor of 105 — and AP still nearly doubles.
+So the gain is not the head separating attacks more cleanly; it is a re-ranking
+whose mechanism is still not identified. The control behaves as expected: the
+rollout degrades everything and AP falls to a fifth. §3.24's two cells remain
+open.

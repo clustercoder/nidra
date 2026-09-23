@@ -211,10 +211,45 @@ def _with_forced_pooling(op: dict, key: str) -> dict:
             "pooling_key_selected": op.get("pooling_key"), "pooling_forced": True}
 
 
+def assert_scaler_matches_checkpoint(scaler_dropped: list[str], meta: dict | None, checkpoint: str) -> None:
+    """Refuse to evaluate a model with a scaler fitted under a different feature
+    regime.
+
+    A dropped feature is ZEROED, not removed, so the shapes always match and
+    nothing raises — the model simply receives a different input space than it
+    was trained on and produces a plausible wrong number. This was a near-miss:
+    a probe resolved `config/combined_eval_ctu.yaml` without the queue's
+    `--set artifacts.scaler_dir=...` and got the shared `artifacts/scaler`,
+    which a later run had rewritten at the full-45 regime against a model
+    trained at cross_core's 32. The cell's AP came out 2.9x off.
+
+    Checkpoints written before `dropped_features` existed are passed through:
+    refusing them would break replaying Run 8's artifacts, which §29 forbids.
+    """
+    if not meta or "dropped_features" not in meta:
+        return
+    trained, loaded = set(meta["dropped_features"]), set(scaler_dropped)
+    if trained == loaded:
+        return
+    only_trained, only_loaded = sorted(trained - loaded), sorted(loaded - trained)
+    raise ValueError(
+        f"scaler/checkpoint feature-regime mismatch for {checkpoint}: the model was trained with "
+        f"{len(trained)} dropped feature(s) and this scaler drops {len(loaded)}. "
+        f"Trained-but-not-dropped-now: {only_trained or 'none'}. "
+        f"Dropped-now-but-not-in-training: {only_loaded or 'none'}. "
+        "A dropped feature is zeroed rather than removed, so this would not have raised on its own — "
+        "point artifacts.scaler_dir at the scaler this checkpoint was trained with.")
+
+
 def load_models(cfg: dict, seeds: list[int]) -> list[WorldModel]:
     weights_dir = resolve_path(cfg, cfg["artifacts"]["weights_dir"])
+    scaler_dir = resolve_path(cfg, cfg["artifacts"]["scaler_dir"])
+    dropped = FeatureScaler.load(*FeatureScaler.default_paths(scaler_dir)).dropped_features
     models = []
     for s in seeds:
+        meta_path = weights_dir / f"model_seed_{s}_metadata.json"
+        meta = json.loads(meta_path.read_text()) if meta_path.exists() else None
+        assert_scaler_matches_checkpoint(dropped, meta, f"model_seed_{s}.pt in {weights_dir}")
         m = _build_model(cfg)
         m.load_state_dict(torch.load(weights_dir / f"model_seed_{s}.pt", map_location="cpu"))
         m.eval()
