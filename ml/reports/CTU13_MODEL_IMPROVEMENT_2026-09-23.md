@@ -27,6 +27,28 @@ answered inside CIC-IDS2017:
 CTU-13 exists in this phase to answer both, and to make "generalises to unseen attack
 families" a cross-dataset claim rather than a within-dataset one.
 
+### Where to find the answers
+
+This is an append-only log, so its conclusions are spread across it and some of
+them retract earlier entries. Three companion documents collect them:
+
+- **`RUN9_QUESTIONS.md`** — the roadmap's fourteen questions, each with its
+  status (answered / partial / pending) and the section it rests on.
+- **`RUN9_NEGATIVE_RESULTS.md`** — the nine things that did not work and what
+  each one changed about the next experiment.
+- **`tables/experiment_matrix.md`** — every run on disk, generated from its own
+  provenance record.
+
+The findings that later sections depend on, in the order they bind:
+
+| | finding | where |
+|---|---|---|
+| 1 | Train and validation have **one infected host each**, the same address the model trained on. No validation number in this phase is cross-host; both test splits carry nine hosts never infected in training. | §3.14, §3.17 |
+| 2 | The history-aware head's advantage is **timing signal on CIC and largely host identity on CTU** — aggregates agree across the datasets, the decomposition does not. | §3.11 |
+| 3 | The risk head ranks two attack stages **below chance** where the frozen stage head ranks them at 0.85 and 0.64. The signal is in the model; no scalar fusion recovers it. | §3.9 |
+| 4 | A fifth of CTU's forecast positives are the **silence floor** — bit-identical to 47,650 negatives. CTU cannot support an advance-warning claim; CIC weakly can. | §3.10, §3.15 |
+| 5 | Two conclusions **withdrawn**: "Rbot C2 is not separable" (§3.8) and "cross-host by construction" (§3.17). Both are struck through rather than deleted. | §3.8, §3.17 |
+
 ---
 
 ## 1. Dataset (summary; full audit in `reports/CTU13_DATASET_ASSESSMENT_2026-09-23.md`)
@@ -358,12 +380,25 @@ P/R/F1 and FA/h columns are each at a different threshold and rank nothing.
 283 positives and 8 episodes on this split, 0.014 is noise — but because it is
 the only variant that is best or near-best on every axis that is not noise:
 
+> **Read this section with §3.11, §3.14 and §3.17.** The selection stands: it was
+> made on validation, which is the protocol, and the reasons below are the
+> reasons. What later sections change is the *interpretation* of the margin.
+> Every number in this table comes from a split whose 288 positives sit on a
+> single host — `147.32.84.165`, the same address the model trained on — and
+> §3.11 shows that on CTU most of `state+hidden`'s aggregate advantage is
+> better recognition of that host rather than of the moment. The
+> `persistence_rollout` margin is about the transition model and is not
+> affected by that; the head-to-head AP ordering is.
+
+
 * the **only** variant whose margin over `persistence_rollout` excludes zero
   (+0.033 [+0.0002, +0.055]). That is the strict ablation: the same head, the
   same encoder advance, only the predicted change removed. It is the first
   interval in this project that isolates the transition model's own
   contribution to risk and does not contain zero. It just barely excludes it,
-  on one seed, and is reported as a screening result until §3.6 confirms it;
+  on one seed, and is reported as a screening result until the §19 Stage B
+  multi-seed run confirms it (queued; the reference here originally pointed at
+  §3.6, which the numbering later gave to the onset 2×2);
 * the flattest horizon curve (0.631 → 0.574, −9%, against the Run 8 head's
   0.560 → 0.209, −63%) and **2.7× the Run 8 head at k=6**;
 * an oracle above it at every horizon, so better state forecasting would now
