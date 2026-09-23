@@ -1572,9 +1572,14 @@ spent rather than what a re-timing would say:
 | other | 1 | 0.11 | 7 | `ctu_sh_cn03` (7 min) |
 | **total** | **42** | **11.09** | | |
 
-All 42 exited zero. Several ran concurrently, so 11.09 h is **CPU occupancy, not
-elapsed time** — the phase's wall clock is shorter and the two must not be
-confused.
+~~All 42 exited zero.~~ **Withdrawn (§3.30):** the queues write
+`rc=$?` after a pipeline, so they were recording `tail`'s exit status, not the
+job's. Three runs in that count crashed and were logged `rc=0`. The wall-clock
+figures are unaffected — a crashed run still started and ended — but the
+exit-code column meant nothing and is struck rather than quietly deleted.
+
+Several ran concurrently, so 11.09 h is **CPU occupancy, not elapsed time** —
+the phase's wall clock is shorter and the two must not be confused.
 
 The shape of this table is the argument for §19's two-stage discipline. Stage 1
 is 55% of the budget in 5 runs; a head ablation is 16 minutes because it
@@ -1805,3 +1810,56 @@ Three things this does **not** say, all of which the phase has to keep straight:
    survives the within-host test. A confirmed aggregate on the corpus where the
    decomposition is worst is confirmation that the effect is real, not that it is
    the effect we want.
+
+### 3.30 Six cells of the cross-dataset matrix never ran, and the log said they had
+
+Dry-running the scorecard before the report queue reaches it turned up three
+empty cells: `CIC → CTU`, `CTU → CIC` and `CIC+CTU → CTU`, all at
+`state+hidden`, across both splits. Six cells of the phase's headline artifact,
+serving §31 Q2, Q3 and Q9 directly.
+
+**Cause.** `config/cic2ctu.yaml`, `config/ctu2cic.yaml` and
+`config/combined_eval_ctu.yaml` are generic evaluation configs and do not
+declare `model.risk_head.components`. So `world_model_from_config` built the
+45-wide per-state head and `load_state_dict` refused a 173-wide checkpoint:
+
+```
+size mismatch for risk_head.net.0.weight: copying a param with shape
+torch.Size([64, 173]) ... the shape in current model is torch.Size([64, 45]).
+```
+
+That is a loud, correct, informative failure. It was invisible anyway.
+
+**Why it was invisible.** The queue's `bench()` ends with
+
+```zsh
+$PY -m nidra.eval.benchmark ... 2>&1 | tail -16
+echo "END $label/$split rc=$? $(date +%H:%M:%S)"
+```
+
+`$?` after a pipeline is the **last** command's status — `tail`'s. Every one of
+the three crashes was recorded `END … rc=0`, three seconds after its START. A
+three-second benchmark next to fourteen-minute neighbours was there to be seen
+in the log and nobody was reading the log for that. §3.25's "all 42 exited zero"
+was measuring `tail` and has been withdrawn.
+
+**Three fixes, in increasing order of durability.**
+
+1. The six cells are re-queued with `--set model.risk_head.components=[state,hidden]`,
+   which was verified to load the checkpoint before queueing rather than after.
+2. The recovery queue uses `${pipestatus[1]}` and prints an explicit `FAILED`
+   line, so a crash is visible without reading tracebacks. The original queues
+   are left as they are: rewriting a running script is worse than the defect.
+3. `load_models` now refuses the mismatch by **name** rather than by shape
+   (D143), with a message quoting the override that fixes it. A shape error says
+   what broke; this says what to do. It also covers the case the shape error
+   cannot — two different component sets that happen to produce the same width.
+
+**What this says about the rest of the phase.** The failure needed two
+independent slips: a config that could not express the head, and a log that
+could not report a failure. Every other recorded cell was audited for the same
+pattern in §3.28 and the matrix's own generator already renders a missing cell
+as a gap rather than borrowing a neighbour's number — which is the only reason
+this surfaced as three dashes instead of three plausible numbers. `q_report`
+will render the scorecard before the recovered cells land, so a second pass
+regenerates it once they do; the published artifact is the complete one.

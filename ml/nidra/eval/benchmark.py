@@ -23,6 +23,7 @@ progression metrics, state-forecast skill, the world-model attribution
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import logging
 import time
@@ -34,6 +35,7 @@ import torch
 
 from nidra.data.dataset import build_windowed_arrays
 from nidra.data.normalize import FeatureScaler
+from nidra.models.build import risk_head_components
 from nidra.data.schema import STAGE_LABELS
 from nidra.eval.episode_metrics import per_episode_report
 from nidra.eval.eval_set import EvalSet, build_eval_set
@@ -241,6 +243,41 @@ def assert_scaler_matches_checkpoint(scaler_dropped: list[str], meta: dict | Non
         "point artifacts.scaler_dir at the scaler this checkpoint was trained with.")
 
 
+def assert_head_matches_checkpoint(components: tuple[str, ...], meta: dict | None, checkpoint: str) -> None:
+    """Refuse to build a risk head the checkpoint was not trained with.
+
+    `load_state_dict` does raise on the shape mismatch, so why guard it: three
+    `state+hidden` transfer arms died on exactly that error and the queue
+    recorded `rc=0` for all three, because `$?` after a pipeline reads `tail`.
+    Six cells went missing from the cross-dataset matrix and the only symptom
+    was gaps in the scorecard. A message that names the missing override is
+    worth more than a shape error, and it also covers the case where two
+    different component sets happen to produce the same width.
+
+    Checkpoints without the field, or with one that will not parse, pass
+    through: `load_state_dict` remains the backstop, and a guard that crashes on
+    a malformed record is worse than one that declines to judge it.
+    """
+    if not meta or "risk_head_components" not in meta:
+        return
+    raw = meta["risk_head_components"]
+    if isinstance(raw, str):
+        try:
+            raw = ast.literal_eval(raw)
+        except (ValueError, SyntaxError):
+            return
+    if not isinstance(raw, (list, tuple)):
+        return
+    trained = tuple(str(c) for c in raw)
+    if tuple(components) == trained:
+        return
+    raise ValueError(
+        f"risk-head mismatch for {checkpoint}: the checkpoint was trained with components "
+        f"{list(trained)} and this config builds {list(components)}. Transfer configs do not "
+        "declare the head variant, so pass it explicitly: "
+        f"--set model.risk_head.components=[{','.join(trained)}]")
+
+
 def load_models(cfg: dict, seeds: list[int]) -> list[WorldModel]:
     weights_dir = resolve_path(cfg, cfg["artifacts"]["weights_dir"])
     scaler_dir = resolve_path(cfg, cfg["artifacts"]["scaler_dir"])
@@ -250,6 +287,7 @@ def load_models(cfg: dict, seeds: list[int]) -> list[WorldModel]:
         meta_path = weights_dir / f"model_seed_{s}_metadata.json"
         meta = json.loads(meta_path.read_text()) if meta_path.exists() else None
         assert_scaler_matches_checkpoint(dropped, meta, f"model_seed_{s}.pt in {weights_dir}")
+        assert_head_matches_checkpoint(risk_head_components(cfg), meta, f"model_seed_{s}.pt in {weights_dir}")
         m = _build_model(cfg)
         m.load_state_dict(torch.load(weights_dir / f"model_seed_{s}.pt", map_location="cpu"))
         m.eval()
