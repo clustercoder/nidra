@@ -1780,3 +1780,30 @@ What is NOT fixed: `config/cic2ctu.yaml`, `config/ctu2cic.yaml` and
 with the scaler override, and the shared directory they otherwise resolve to is rewritten by
 whatever trained last. The guard turns that from a wrong answer into a refusal, which is the
 right first move and not the whole fix.
+
+**D143 — the benchmark refuses a risk head the checkpoint was not trained with.**
+(2026-09-23) Three `state+hidden` transfer arms produced no metrics at all. The transfer
+configs (`cic2ctu.yaml`, `ctu2cic.yaml`, `combined_eval_ctu.yaml`) are generic evaluation
+configs and do not declare `model.risk_head.components`, so `world_model_from_config` built
+the 45-wide per-state head and `load_state_dict` refused the 173-wide checkpoint. The failure
+was correct and loud; it was invisible because the queues write `rc=$?` after a pipeline,
+which reads `tail`'s status, so three crashes were logged `rc=0`. Six cells were missing from
+the cross-dataset matrix and the only symptom was three dashes in a scorecard dry run.
+
+`load_models` now compares the config's `risk_head_components(cfg)` against the checkpoint
+metadata's `risk_head_components` and raises a message quoting the exact
+`--set model.risk_head.components=[...]` that fixes it. This is strictly better than the
+shape error in two ways: it names the remedy rather than the symptom, and it catches the case
+where two different component sets happen to produce the same input width, which
+`load_state_dict` cannot. Metadata that is absent or unparseable passes through —
+`load_state_dict` stays the backstop, and a guard that crashes on a malformed record is worse
+than one that declines to judge it.
+
+Paired with D142: both are the same failure class — an evaluation configured against
+artifacts it does not match — and both were found by cross-checking a number rather than by a
+test. The tests exist now; they would not have caught either, because neither was a logic
+error in a function.
+
+The queues' `rc=$?` is fixed only in the recovery queue (`${pipestatus[1]}` plus an explicit
+`FAILED` line). The already-running queues are left alone: editing a script zsh is still
+reading is worse than the defect it would fix.
