@@ -5,9 +5,10 @@ list. Every entry names the intervention, the number that killed it, and what
 the phase did differently afterwards — because an experiment that changed
 nothing about the next one was not worth running.
 
-Nine entries. Six are interventions that did not beat their baseline; three are
+Ten entries. Six are interventions that did not beat their baseline, three are
 mistakes in the measurement apparatus that produced confident wrong numbers
-before being caught, which belong here for the same reason.
+before being caught, and one is a pre-registered explanation whose own test
+refused it.
 
 ---
 
@@ -157,6 +158,56 @@ rows.
 
 ---
 
+## Explanations that their own pre-registered test refused
+
+### 10. The attractor account of §3.26's rising-with-horizon AP
+
+**Idea.** Two of fifteen cross-evaluation cells have a deterministic forecast
+whose AP *rises* with horizon (1.29× and 2.04× from k=1 to k=6, against 0.01–0.68×
+everywhere else) and beats the true-future oracle at all six horizons. §3.26
+proposed that the recursive rollout drifts toward class-dependent attractors of
+its own dynamics, and that those attractors separate infected hosts from benign
+ones better than real states do.
+
+**Pre-registered criterion,** written into §3.26 before the measurement: the
+combined model's predicted terminal states separate the classes better than the
+true future states do, *while the CIC-only model's do not*.
+
+**The number that refused it.** Fisher-style separation (distance between class
+means over mean within-class spread) on 2,400 sampled eval rows, 400 positive:
+
+| cell | anomalous? | true `S[t+6]` | predicted `Ŝ[t+6]` | amplification |
+|---|---|---|---|---|
+| comb → CIC, test | **yes** | 1.177 | 2.435 | 2.07× |
+| comb → CTU, holdout | **yes** | 0.911 | 1.813 | 1.99× |
+| CIC → CIC, test | no | 1.257 | 2.173 | **1.73×** |
+| CTU → CTU, test | no | 0.636 | 0.627 | 0.99× |
+
+The CIC-only model amplifies separation too, at 1.73×, and it shows no anomaly.
+The criterion required it not to. The two anomalous cells do have the largest
+amplification, and the ordering is consistent — but 1.73× against 2.07× is not a
+distinction that separates an anomaly from a non-anomaly, and treating it as one
+after the fact is what pre-registration exists to prevent.
+
+The drift numbers point the other way as well. The rollout does not *collapse*;
+it **over-moves**. Predicted benign hosts travel 7.1, 7.4, 8.3 and 7.8 units from
+their origin where the real ones travel 3.3, 2.9, 5.0 and 3.5 — roughly double, in
+every cell. An attractor account predicts shrinking spread and shrinking drift.
+
+**What it taught us.** Two things. The instrument was weakly coupled to the
+question: L2 separation between class means in raw feature space is not what a
+nonlinear frozen head reads, so even a clean positive would have been indirect
+evidence. A test of "does the head score predicted states better" has to be run
+through the head. And the phenomenon is now better specified than the
+explanation: the rollout systematically inflates both class separation *and*
+benign drift, in three of four cells, which is a property of the transition
+model worth its own investigation and is not what §3.26 guessed.
+
+§3.24's two cells stay **unexplained**, and the log says so rather than keeping
+the hypothesis alive on a partial match.
+
+---
+
 ## What this list is for
 
 Three of the six interventions were killed by a measurement that cost minutes
@@ -165,3 +216,9 @@ that was going to be run anyway (3). One was killed by building the thing and
 finding it lost (1), one by building it and finding it won on the wrong axis
 (2). That ratio is the argument for measuring the assumption before building the
 intervention, and it is why §3.13 was pre-registered before it was run.
+
+Entry 10 is the first case of pre-registration refusing one of this log's own
+explanations rather than one of its interventions. The criterion was written
+down while the hypothesis still looked obvious, and the control that killed it —
+a CIC-only model showing the same effect — is one that would have been very easy
+not to run.

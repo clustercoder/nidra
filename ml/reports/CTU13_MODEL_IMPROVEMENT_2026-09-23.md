@@ -1642,3 +1642,60 @@ account is supported. If drift is comparable and the AP rise persists, it is not
 and the two cells stay unexplained. Either outcome is reportable; the direction
 this would push the project is toward §5's trajectory-aware heads and away from
 reading rising-with-k AP as forecasting skill.
+
+### 3.27 The pre-registered drift test refuses §3.26's explanation
+
+Run as specified. Fisher-style separation — distance between class means over
+mean within-class spread — on 2,400 sampled eval rows (400 positive), computed
+identically on the true future state and the deterministic rollout's terminal
+state so the comparison is of the states and not of the statistic:
+
+| cell | anomalous? | true `S[t+6]` | predicted `Ŝ[t+6]` | amplification |
+|---|---|---|---|---|
+| comb → CIC, test | **yes** | 1.177 | 2.435 | 2.07× |
+| comb → CTU, holdout | **yes** | 0.911 | 1.813 | 1.99× |
+| CIC → CIC, test | no | 1.257 | 2.173 | **1.73×** |
+| CTU → CTU, test | no | 0.636 | 0.627 | 0.99× |
+
+The criterion was: the combined model amplifies separation *while the CIC-only
+model does not*. **The CIC-only model amplifies it at 1.73× and shows no
+anomaly.** The criterion fails. The two anomalous cells do carry the largest
+amplification and the ordering is consistent, but 1.73 against 2.07 does not
+separate an anomaly from a non-anomaly, and reading it as though it did is
+precisely what writing the criterion down beforehand was meant to prevent.
+
+The drift column argues against the account from a second direction. An
+attractor would pull trajectories together: shrinking within-class spread,
+shrinking distance travelled. The rollout does the opposite — it **over-moves**,
+and most on the benign class:
+
+| cell | true benign drift | predicted benign drift | true attack | predicted attack |
+|---|---|---|---|---|
+| CIC → CIC, test | 3.30 | 7.07 | 9.37 | 14.09 |
+| comb → CIC, test | 2.87 | 7.43 | 7.44 | 10.08 |
+| comb → CTU, holdout | 5.01 | 8.35 | 8.60 | 12.41 |
+| CTU → CTU, test | 3.50 | 7.84 | 5.20 | 8.86 |
+
+Predicted benign hosts travel roughly **twice** as far from their origin as real
+ones, in every cell. That is a systematic property of the transition model and it
+is not what §3.26 guessed at.
+
+Two things this test taught, one of them about itself:
+
+**The instrument was weakly coupled to the question.** L2 separation between
+class means in raw feature space is not what the nonlinear frozen head reads, so
+even a clean positive would have been indirect. The right test runs through the
+head — compare the head's own scores on predicted against true terminal states,
+per class — and that is what a follow-up should do rather than refining this
+statistic.
+
+**The phenomenon is now better specified than any explanation for it.** The
+rollout inflates class separation *and* inflates benign drift, in three of four
+cells, and the one cell where it does neither (CTU → CTU) is also the one where
+the deterministic forecast decays fastest (k6/k1 = 0.03). That is a coherent
+description of what the transition model does. It is not yet a reason for why
+two cells beat their oracle.
+
+§3.24's two cells remain **unexplained**. Recorded as entry 10 in
+`RUN9_NEGATIVE_RESULTS.md` — the first pre-registered criterion in this phase to
+refuse one of the log's own explanations rather than one of its interventions.
