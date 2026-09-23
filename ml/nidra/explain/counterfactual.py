@@ -86,6 +86,17 @@ def counterfactual_rollout(
         nxt = nxt.clamp(-model.state_clamp, model.state_clamp)
         if feature_idx is not None:
             nxt[:, feature_idx] = clamp_value  # re-clamp after every step
+        if model.feature_mask is not None:
+            # This loop is WorldModel.rollout with one line different, so it
+            # needs the same contract: the transition has no gradient on
+            # dropped slots, and an untrained value there compounds. Applied
+            # after the intervention as well, so a what-if on a dropped feature
+            # is inert rather than a confident answer about a quantity this
+            # model has no information on. D145.
+            mask = model.feature_mask.to(nxt.dtype)
+            nxt = nxt * mask
+            mu = mu * mask
+            logvar = model.mask_logvar(logvar)
         traj.append(nxt)
         mus.append(mu)
         logvars.append(logvar)

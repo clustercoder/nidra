@@ -2286,13 +2286,34 @@ the scaler that D142's guard already forces to match. Passing `None` restores th
 old path exactly, so every recorded run stays reproducible — which §3.36 has just
 finished demonstrating and which must not be broken by the fix for it.
 
-Nineteen tests in `tests/test_rollout_dropped_features.py`; suite 762 → 781.
+Twenty-two tests in `tests/test_rollout_dropped_features.py`; suite 762 → 784.
 
-**The served path needed it too.** `NidraPredictor` loads its own ensemble rather
-than going through `benchmark.load_models`, so production would have been the one
-place the defect went unmeasured. Two of the nineteen tests run against the real
-`trained_predictor` fixture: every served model carries the scaler's mask, and a
-served rollout holds dropped slots at zero end to end.
+**Four paths hand a head a transition output, and all four needed the contract.**
+Found by grepping for every direct `transition()` call and every `WorldModel`
+construction rather than by reasoning about which ones mattered:
+
+| path | what it feeds | status |
+|---|---|---|
+| `WorldModel.rollout` | the forecast, and the state a head reads | masked |
+| `WorldModel.observed_context` | the served origin state's head inputs | `logvar` pinned |
+| `train/head_context.py` | head **training** inputs | `logvar` pinned |
+| `explain/counterfactual.py` | the served "model-internal what-if" | masked |
+| `train/losses.py` | the loss itself | already masked — this is the origin of the defect, not a victim of it |
+
+`NidraPredictor` loads its own ensemble rather than going through
+`benchmark.load_models`, so without the same call production would have been the
+one place the defect went unmeasured. The counterfactual matters for a second
+reason: it re-implements the rollout loop so it can re-clamp the intervened
+feature every step, and it is one of the six demo-critical paths — a divergence
+there appears in front of a viewer rather than in a metric. The mask is applied
+*after* the intervention, so a what-if on a dropped feature is inert rather than a
+confident answer about a quantity the model has no information on.
+
+Two builders are deliberately left unmasked: `eval/run_eval.py` and
+`scripts/fit_calibration.py`, the legacy balanced-subsample harness. They produce
+no Run 9 number, `CLAUDE.md` and `PRODUCTION_RUN_GUIDE.md` both already record
+them as not comparable, and masking them would silently change the Runs 1–7
+figures they are kept around to reproduce.
 
 **Blast radius.** 40 of 63 run scalers drop features: every CTU-13 run drops 15,
 every combined and `cic_core` run drops 13. The 23 `full`-regime runs drop nothing

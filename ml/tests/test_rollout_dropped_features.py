@@ -250,3 +250,77 @@ class TestServedPathCarriesTheMask:
         x = torch.zeros(2, trained_predictor.L, len(FEATURE_ORDER))
         out = m.rollout(x, K=trained_predictor.K, n_samples=4, stochastic=True)
         assert out.states[..., idx].abs().max().item() == 0.0
+
+
+class TestCounterfactualCarriesTheContract:
+    """`explain/counterfactual.py` re-implements the rollout loop so it can
+    re-clamp the intervened feature after every step. It therefore needs the
+    mask applied by hand — and it is the served "model-internal what-if"
+    endpoint, one of the six demo-critical paths, so a divergence here appears
+    in front of a viewer rather than in a metric.
+
+    These use the real 45-feature `FEATURE_ORDER`, because the function takes a
+    feature NAME.
+    """
+
+    @staticmethod
+    def _model45(dropped_names):
+        from nidra.data.schema import FEATURE_ORDER
+        torch.manual_seed(0)
+        m = WorldModel(n_features=45, hidden_size=16, encoder_layers=1,
+                       transition_mlp_hidden=16, risk_hidden=8, stage_hidden=8)
+        m.set_feature_mask([f not in set(dropped_names) for f in FEATURE_ORDER])
+        return m
+
+    @staticmethod
+    def _x45(dropped_names):
+        from nidra.data.schema import FEATURE_ORDER
+        import numpy as np
+        rng = np.random.default_rng(1)
+        x = rng.standard_normal((2, 4, 45)).astype("float32")
+        for i, f in enumerate(FEATURE_ORDER):
+            if f in set(dropped_names):
+                x[:, :, i] = 0.0
+        return x
+
+    def test_counterfactual_holds_dropped_slots_at_zero(self):
+        from nidra.data.schema import FEATURE_ORDER
+        from nidra.explain.counterfactual import counterfactual_rollout
+
+        dropped = {"retrans_count", "ttl_var"}
+        idx = [i for i, f in enumerate(FEATURE_ORDER) if f in dropped]
+        out = counterfactual_rollout(self._x45(dropped), self._model45(dropped),
+                                     feature_name="active_flow_count", clamp_value=0.0,
+                                     K=6, n_samples=4, stochastic=True, seed=0)
+        assert abs(out["predicted_states_mean"][..., idx]).max() == 0.0
+
+    def test_counterfactual_matches_the_rollout_when_nothing_is_clamped(self):
+        """With no intervention the two loops must agree, or the what-if is
+        being compared against a different system from the forecast."""
+        from nidra.explain.counterfactual import counterfactual_rollout
+
+        dropped = {"retrans_count", "ttl_var"}
+        m, x = self._model45(dropped), self._x45(dropped)
+        # rollout() deliberately keeps gradients (saliency needs them), so this
+        # detaches rather than wrapping the call and changing what is compared.
+        with torch.no_grad():
+            plain = m.rollout(torch.from_numpy(x), K=6, n_samples=1, stochastic=False)
+        cf = counterfactual_rollout(x, m, feature_name=None, clamp_value=0.0,
+                                    K=6, n_samples=1, stochastic=False, seed=0)
+        torch.testing.assert_close(plain.states.mean(dim=1).numpy(), cf["predicted_states_mean"])
+
+    def test_clamping_a_dropped_feature_cannot_inject_a_value(self):
+        """A what-if on a feature the scaler dropped is a question about a
+        quantity this model has no information on. It must not look like a real
+        intervention."""
+        from nidra.data.schema import FEATURE_ORDER
+        from nidra.explain.counterfactual import counterfactual_rollout
+
+        dropped = {"retrans_count", "ttl_var"}
+        j = FEATURE_ORDER.index("retrans_count")
+        out = counterfactual_rollout(self._x45(dropped), self._model45(dropped),
+                                     feature_name="retrans_count", clamp_value=3.0,
+                                     K=6, n_samples=1, stochastic=False, seed=0)
+        assert abs(out["predicted_states_mean"][..., j]).max() == 0.0, (
+            "a clamp on a dropped feature put a value into a slot the model was "
+            "never trained on")

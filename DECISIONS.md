@@ -1922,7 +1922,20 @@ The correction is being measured on six affected cells, written to `mask_*` rath
 over the originals, for the same reason the reproduction re-run was: if the numbers
 move, the published figures must stay matched to the artifacts that produced them.
 
-**Scope correction, same day.** `rollout()` was not the only exposed path.
+**Scope correction, same day.** `rollout()` was not the only exposed path. Found by
+grepping for every direct `transition()` call and every `WorldModel` construction
+rather than by reasoning about which ones mattered: `observed_context` (serving),
+`train/head_context.py` (head training), `explain/counterfactual.py` (the served
+what-if, which re-implements the rollout loop to re-clamp the intervened feature) and
+`NidraPredictor` (which loads its own ensemble). All four now carry the contract;
+`train/losses.py` already masked, being the origin of the defect rather than a victim.
+`eval/run_eval.py` and `scripts/fit_calibration.py` are deliberately left unmasked —
+the legacy balanced-subsample harness, producing no Run 9 number, kept to reproduce
+Runs 1–7.
+
+In the counterfactual the mask is applied *after* the intervention, so a what-if on a
+dropped feature is inert rather than a confident answer about a quantity the model has
+no information on.
 `observed_context` (serving) and `train/head_context.py` (head *training*) both call the
 transition directly and take its `logvar`, so a `state+logvar` head was trained against
 13 untrained log-variances out of 45. Both now go through a shared `mask_logvar`
