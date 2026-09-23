@@ -121,9 +121,18 @@ the margin is not host identity. One seed, one split.
 
 ## Q9 — Does the model generalize to completely unseen attack families/scenarios?
 
-**Pending.** Three things bear on it and none has landed: the CTU test and
-holdout splits (families absent from training), the leave-one-family-out run
-without Neris (queued), and the two transfer arms `cic2ctu` and `ctu2cic`.
+**Pending, and the scope is narrower than it looked.** Three things bear on it
+and none has landed: the CTU test and holdout splits (families absent from
+training), the leave-one-family-out run without Neris (queued), and the two
+transfer arms `cic2ctu` and `ctu2cic`.
+
+What has been established is where the question *can* be asked. CTU-13 reuses
+the same infected address (`147.32.84.165`) across scenarios 1–4 and 6, and
+CIC's train and validation share `172.16.0.1`, so **no validation number in
+this phase is cross-host** — validation tests unseen captures and unseen
+families on a machine the model has already seen infected. Both test splits
+contain nine hosts never infected during training; both holdouts contain one.
+Those are the only genuinely cross-host evaluations available. *(§3.17, D136.)*
 
 ## Q10 — Does it produce genuine advance warning?
 

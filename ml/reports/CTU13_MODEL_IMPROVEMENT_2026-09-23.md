@@ -533,11 +533,19 @@ sensitivity to its input — is the obvious next thing to try.
 Every head scores `ctu_4:c2` at AP 0.001 and ROC below chance. Before blaming the
 model, `nidra.scripts.group_separability` fits a gradient-boosted probe on the
 **training** captures' rows for that attack *stage* and scores the validation
-group. Fitting on captures 1–3 and scoring capture 4 makes it cross-host and
-cross-capture by construction, so it cannot answer with host identity — it asks
-exactly what the model is asked. It reads labels the model does not, so it is an
-upper bound in the same sense the oracle is: a diagnostic, never a system, and
-nothing in the pipeline reads it.
+group. Fitting on captures 1–3 and scoring capture 4 makes it cross-capture and
+cross-family — it asks much of what the model is asked. It reads labels the model
+does not, so it is an upper bound in the same sense the oracle is: a diagnostic,
+never a system, and nothing in the pipeline reads it.
+
+**Correction (§3.17).** This paragraph originally said "cross-host and
+cross-capture by construction, so it cannot answer with host identity". That is
+wrong. CTU-13 reuses the same infected address, `147.32.84.165`, across
+scenarios: it is the infected host in captures 1, 2 and 3 (train) *and* in 4 and
+6 (validation). The probe transfers across captures and malware families, not
+across hosts. Its one-vs-rest construction does penalise a pure
+host-recognition strategy — that host's own benign windows are negatives — but
+that is a partial control, not the structural guarantee claimed here.
 
 | group | positives | positive hosts | probe AP | probe ROC | world model ROC | verdict |
 |---|---|---|---|---|---|---|
@@ -613,9 +621,10 @@ That is the shape the pooled-objective hypothesis predicts.
 
 **This is what overturns §3.8's C2 conclusion.** The stage head's 0.864 on
 `ctu_4:c2` alone (0.766 on ctu_6's single window; 0.854 pooled) is measured under
-the same cross-host, cross-capture construction as the probe's 0.443. A trained
-NIDRA head reaches what the probe could not, so "not separable" was a statement
-about the probe. Both Rbot failures are model failures.
+the same cross-capture, cross-family construction as the probe's 0.443 — and,
+per §3.17, on the same infected address in both, so neither is cross-host. A
+trained NIDRA head reaches what the probe could not, so "not separable" was a
+statement about the probe. Both Rbot failures are model failures.
 
 **But the information cannot be harvested by fusing the two heads at inference.**
 That was the obvious next move — both heads are frozen and already trained, so a
@@ -1050,3 +1059,57 @@ generated from the corrected derivation.
 **Recorded compute so far:** 15.2 hours of wall clock across 36 runs with
 provenance records, single machine (Apple M1, 8 cores, 16 GB). Runs overlapped,
 so elapsed time is less than the sum.
+
+### 3.17 Correction: nothing in this phase is cross-host before the test split
+
+Checking which hosts carry positives, capture by capture, turned up an error
+repeated in §3.8, §3.9 and (by implication) §3.11.
+
+| split | infected (host, capture) |
+|---|---|
+| CTU train | `147.32.84.165` in ctu_1, ctu_2, ctu_3 |
+| CTU val | **`147.32.84.165`** in ctu_4, ctu_6 |
+| CTU test | `147.32.84.165` in ctu_8/9/10, plus `…191`, `…192` and 7 more — **9 hosts never infected in training** |
+| CIC train | `172.16.0.1` in tuesday, wednesday |
+| CIC val | **`172.16.0.1`** in tuesday, wednesday (temporal carve) |
+| CIC holdout | `172.16.0.1`, plus `192.168.10.8` |
+| CIC test | `172.16.0.1`, plus `192.168.10.12/14/15/17` and 5 more — **9 hosts never infected in training** |
+
+**CTU-13 reuses the same infected address across scenarios.** `147.32.84.165` is
+the bot in captures 1 through 4 and 6 — different malware families (Neris, Rbot,
+Menti), the same machine. So the transfer probe of §3.8, described there as
+"cross-host and cross-capture by construction, so it cannot answer with host
+identity", is **cross-capture and cross-family but not cross-host**. The same
+correction applies to §3.9's stage-head comparison, which uses the same
+construction.
+
+The one-vs-rest label does penalise a pure host-recognition strategy — that
+host's own benign windows are negatives in every one of those probes, so a model
+that simply recognised the machine would rank them high and lose. That is a
+partial control. It is not the structural guarantee the text claimed, and the
+difference matters because host identity is precisely the confound this phase has
+been chasing.
+
+**What changes and what does not.**
+
+- §3.8 and §3.9's *measurements* stand — the probe's 0.443, the stage head's
+  0.864, the risk head's below-chance 0.434 and 0.320. What changes is what they
+  exclude: they exclude the model having merely memorised a *capture*, not the
+  model having memorised a *machine*.
+- §3.11's CTU finding gets **stronger**. Host-mean ROC of 0.9995 on validation is
+  not a within-split curiosity: the model was trained on `147.32.84.165`'s traffic
+  in captures 1–3 and is being scored on the same address in captures 4 and 6. It
+  had the opportunity to learn that specific machine, and the decomposition says
+  it took it.
+- §3.9's central claim survives intact, because it is a comparison between two
+  heads on identical rows. Whatever host information is available is available to
+  both, so the stage head beating the risk head by 0.42 ROC on c2 is not explained
+  by it.
+- **Nothing in this phase is a cross-host result yet.** Both test splits contain
+  nine hosts never infected during training, and both holdouts contain one. Those
+  are the only genuinely cross-host evaluations available, and they are what the
+  running matrix produces. Every validation number in this report — every one —
+  is same-host.
+
+`group_separability`'s docstring now states this, and a test pins the wording so
+the claim cannot quietly reappear.

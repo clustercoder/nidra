@@ -204,3 +204,13 @@ def test_separable_is_false_but_documented_as_unproven():
                        probe_ap=0.008, probe_roc=0.443, n_rows=65690, n_folds=5, host_leaky=True)
     assert probe.separable is False
     assert "False is not evidence" in GroupProbe.separable.__doc__
+
+
+def test_docstring_does_not_claim_the_transfer_probe_is_cross_host():
+    """CTU-13 reuses 147.32.84.165 as the infected address across scenarios, so
+    fitting on train captures and scoring a val one is cross-capture, not
+    cross-host. The module said the opposite and the report repeated it."""
+    import nidra.scripts.group_separability as mod
+    doc = mod.__doc__
+    assert "NOT cross-host" in doc
+    assert "147.32.84.165" in doc

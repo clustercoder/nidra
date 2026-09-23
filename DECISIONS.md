@@ -1640,3 +1640,20 @@ The matrix also made explicit that the two datasets' "validation" are different 
 is two held-out captures of unseen families, CIC's is the last 30% of the training days' own
 time. Both are legitimate and neither leaks, but the second is the easier target and part of
 why CIC's figures sit above CTU's in D130 and D131. Recorded in §3.16.
+
+**D136 — "cross-host by construction" was wrong; CTU reuses the same infected address across
+scenarios.** (2026-09-23) `147.32.84.165` is the bot in CTU captures 1, 2 and 3 (train) AND in
+4 and 6 (validation), under three different malware families; CIC's train and validation both
+carry `172.16.0.1`. So §3.8's transfer probe and §3.9's stage-head comparison are cross-capture
+and cross-family, NOT cross-host, and the text claiming they "cannot answer with host identity"
+is corrected. The one-vs-rest label does penalise pure host recognition — that host's own
+benign windows are negatives — but that is a partial control, not the structural guarantee
+claimed. The MEASUREMENTS stand; what changes is what they exclude. D130's CTU finding gets
+stronger rather than weaker: host-mean ROC 0.9995 on validation is not a within-split
+curiosity, because the model trained on that exact address in captures 1-3 and is scored on it
+in 4 and 6, so it had the chance to memorise the machine and the decomposition says it did.
+D128's central claim survives untouched, being a comparison of two heads on identical rows
+where any host information is available to both. Consequence: NO validation number in this
+phase is cross-host. Both test splits contain nine hosts never infected in training and both
+holdouts contain one; those are the only cross-host evaluations available, and the running
+matrix produces them. `group_separability`'s docstring states this and a test pins it.

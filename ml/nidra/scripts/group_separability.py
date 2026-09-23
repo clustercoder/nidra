@@ -12,7 +12,13 @@ features at Δ=60 s.
 
 This fits a supervised probe DIRECTLY on the group's one-vs-rest label, with
 host-grouped cross-validation so no host appears in both folds, and reports
-its AP. That is an upper bound in the same sense `oracle_true_future` is one:
+its AP. Note what the `--fit-split` TRANSFER variant does and does not control
+for: CTU-13 reuses the same infected address across scenarios — `147.32.84.165`
+is the bot in captures 1, 2 and 3 (train) and in 4 and 6 (validation) — so
+fitting on the training captures and scoring a validation one is cross-capture
+and cross-family, NOT cross-host. The one-vs-rest label penalises a pure
+host-recognition strategy, since that host's own benign windows are negatives,
+but that is a partial control rather than a structural one. That is an upper bound in the same sense `oracle_true_future` is one:
 it uses information no deployed system has (the labels of the split it scores)
 and exists to bound what is achievable, never to produce a forecast. It is a
 diagnostic and is never a selection signal — nothing in the pipeline reads it.
