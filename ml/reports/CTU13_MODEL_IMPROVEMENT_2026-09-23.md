@@ -1548,3 +1548,42 @@ understood.
 What this does *not* change: the oracle gap where it is a gap. CIC → CIC with
 the `state` head reaches 68–72% of the oracle, and that remains the cleanest
 statement of how much of the head's ceiling the forecast actually delivers.
+
+### 3.25 Hardware and training-time accounting (§7, §19, §36 item 25)
+
+**Hardware:** one Apple M1, 8 cores, 16 GB, CPU only. No GPU path exists in this
+project and none was added. `torch.set_num_threads` is 2 or 3 per job and two to
+three jobs run concurrently, which is what an 8-core machine absorbs before the
+jobs start stealing from each other — measured, not assumed: a full `pytest`
+that takes 104 s against one background job takes 8 m 35 s against three.
+
+Parsed from the queue logs' own START/END markers, so these are what the machine
+spent rather than what a re-timing would say:
+
+| stage | runs | total (h) | median (min) | longest |
+|---|---:|---:|---:|---|
+| dynamics (stage 1) | 5 | 6.09 | 79 | `ctu_dyn_s2` (86 min) |
+| benchmark | 30 | 3.90 | 9 | `bench ctu_sh_cn03` (18 min) |
+| head ablation (stage 2) | 3 | 0.83 | 16 | CTU, six variants (26 min) |
+| onset head | 2 | 0.11 | 3 | `ctu_onset_hidden_indep` (3 min) |
+| GRU baseline | 1 | 0.06 | 4 | `ctu_gru` (4 min) |
+| other | 1 | 0.11 | 7 | `ctu_sh_cn03` (7 min) |
+| **total** | **42** | **11.09** | | |
+
+All 42 exited zero. Several ran concurrently, so 11.09 h is **CPU occupancy, not
+elapsed time** — the phase's wall clock is shorter and the two must not be
+confused.
+
+The shape of this table is the argument for §19's two-stage discipline. Stage 1
+is 55% of the budget in 5 runs; a head ablation is 16 minutes because it
+initialises from a frozen stage-1 checkpoint and trains only the head. That is
+why the architecture search runs on heads over shared dynamics and why the
+multi-seed confirmation is scheduled rather than run on every variant: five more
+dynamics seeds would cost more than everything else in this table combined.
+
+A note on how this was measured, because the first version of it was wrong: the
+queue markers carry labels with spaces (`END head ablation rc=0 …`), and a
+`\S+` capture matched none of those, silently dropping six runs and 1.3 hours.
+The dropped runs were the ones with the most descriptive names. Corrected before
+publication; recorded because a log parser that under-reports without erroring
+is the same failure mode as a metric that looks plausible.
