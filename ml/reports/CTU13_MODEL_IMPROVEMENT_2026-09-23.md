@@ -2942,3 +2942,83 @@ quantity nobody was looking at it to inflate. Nothing in §3.33's pre-registered
 criterion turned on the difference — the criterion was 10% and both numbers clear
 it by a factor of four — so the pre-registered conclusion is unaffected. It would
 not have been if the criterion had been set at 55%.
+
+### 3.47 On the forecast benchmark, the per-state head beats the history-aware one (§36 item 7, §31 Q4/Q6, §32)
+
+§2.1 of the final report leads with the history-aware head as "a real and
+replicated improvement over Run 8's per-state head", on three training regimes
+and three seeds. Every number behind that claim is a **head-training validation
+AP**. §3.29 and §3.32 both warned that a validation ranking in this phase has
+twice failed to survive the forecast benchmark. With the matrix re-scored under
+the D145 fix, the two heads can be compared on the benchmark directly, on
+identical rows, each at the operating point its own validation split selected.
+
+| regime | split | `state` AP | `state+hidden` AP | `state` ROC | `state+hidden` ROC |
+|---|---|---:|---:|---:|---:|
+| CIC → CIC | test | **0.1633** | 0.1173 | **0.978** | 0.760 |
+| CIC → CIC | holdout | 0.3370 | **0.3869** | **0.989** | 0.839 |
+| CTU → CTU | test | 0.1916 | **0.3186** | **0.781** | 0.691 |
+| CTU → CTU | holdout | **0.2410** | 0.2273 | **0.955** | 0.720 |
+| CIC → CTU | test | **0.0127** | 0.0105 | **0.713** | 0.580 |
+| CIC → CTU | holdout | **0.0373** | 0.0159 | **0.921** | 0.758 |
+| CTU → CIC | test | **0.1147** | 0.0040 | **0.919** | 0.222 |
+| CTU → CIC | holdout | **0.0048** | 0.0003 | **0.713** | 0.133 |
+| comb → CIC | test | 0.1759 | **0.1990** | **0.975** | 0.950 |
+| comb → CIC | holdout | 0.3229 | **0.3392** | **0.975** | 0.923 |
+| comb → CTU | test | 0.1848 | **0.3537** | 0.777 | **0.789** |
+| comb → CTU | holdout | **0.2826** | 0.2400 | **0.969** | 0.836 |
+
+| | `state` | `state+hidden` |
+|---|---:|---:|
+| cells won on AP | **7** of 12 | 5 of 12 |
+| cells won on ROC | **11** of 12 | 1 of 12 |
+| median ROC | **0.938** | 0.759 |
+| median AP | 0.1804 | **0.2132** |
+| **beats its own best baseline** | **7** of 12 | **3** of 12 |
+
+**The per-state head — Run 8's architecture, the one this phase set out to
+improve on — beats the history-aware head on the forecast benchmark.** Not
+marginally: it ranks better in 11 of 12 cells, with a median ROC of 0.938 against
+0.759, and it clears its own baselines in more than twice as many cells.
+
+The two metrics disagree in an informative way. `state+hidden` has the higher
+median AP, carried by two large wins on CTU targets (+0.127 and +0.169), and the
+lower ROC almost everywhere. That is the §3.11 signature again at matrix scale:
+the history-aware head concentrates its score on a few hosts it recognises, which
+lifts average precision where those hosts are the positives and damages the
+global ordering. §3.32 saw the same thing on one run — aggregate AP up, within-host
+ROC down.
+
+**`CTU → CIC` is where it is starkest.** `state` reaches ROC 0.919; `state+hidden`
+reaches **0.222**, far below chance. The inverted transfer reported in §3.44 is
+not a property of the model — it is a property of the *history-aware head*. The
+per-state head transfers from CTU to CIC with a usable ordering and merely poor
+precision; the history-aware head transfers backwards.
+
+**What this does to item 7.** The architecture call is not "confirm `state+hidden`
+across seeds". It is:
+
+- `state+hidden` is better on **head-training validation AP**, replicated across
+  three regimes and three seeds (§2.1, §3.29). That result stands.
+- `state` is better on **the forecast benchmark at natural prevalence**, on 12
+  corrected cells, by ROC and by baseline-clearing (this section).
+- These are not in conflict. They are a measurement of how far the validation
+  objective the head is selected on has drifted from the thing the phase is
+  trying to do.
+
+**Caveat, load-bearing:** one seed per cell. A one-seed benchmark cell cannot
+reverse a three-seed headline, and §3.29's headline was three seeds.
+
+**So it is being run.** §3.29's own weights — `ctu_confirm__state` and
+`ctu_confirm__state+hidden`, three seeds each off the same `ctu_dyn` checkpoint —
+are being scored on the forecast benchmark at test and holdout. That asks §3.29's
+question on §3.47's metric with nothing else changed: same data, same dynamics,
+same seeds, only the evaluation differs. If `state+hidden` wins there, §2.1 stands
+and this section is a one-seed artifact. If `state` wins, the phase's headline
+claim is measured on the wrong objective and §2.1 has to be rewritten.
+
+Pre-registered before the run, since the outcome is a headline either way:
+**`state+hidden` is confirmed if it wins the mean benchmark AP at both splits and
+its seed distribution does not overlap `state`'s at either** — the same bar §3.29
+cleared on validation. Anything less is a failure to replicate on the benchmark,
+and will be reported as one rather than as a tie.
