@@ -1008,3 +1008,45 @@ gap between 0.75 and 0.68.
   rather than the probe.
 - Same-host by construction, so neither number says anything about transferring to
   a host that was never infected during training.
+
+### 3.16 The two "validations" are not the same kind of thing (§3, §15, §22)
+
+Building the experiment matrix (`reports/tables/experiment_matrix.md`, generated
+from the provenance records) turned up a difference that §3.11 put side by side
+without naming.
+
+| run | validation is… |
+|---|---|
+| `ctu_*` | `val_days = [ctu_4, ctu_6]` — two **held-out captures**, different scenarios, different families (Rbot, Menti), never trained on |
+| `cic_core_*` | no `val_days`; validation is the last 30% of the **training days' own time** (`val_fraction_of_train_time: 0.3` over Monday–Wednesday) |
+| `comb_*` | both: `val_days = [ctu_4, ctu_6]` **and** a temporal carve from Monday–Wednesday |
+
+CTU validation is out-of-capture. CIC validation is in-distribution — the same
+days, later in the clock. The second is an easier target, and it is part of why
+CIC's numbers in §3.11 and §3.12 sit above CTU's. Those comparisons were always
+*within* a dataset, which is the comparison that matters there, but the
+cross-dataset reading of §3.11 must carry this: CIC's within-host ROC of 0.9245 is
+measured on a temporal tail of days the model trained on, and CTU's 0.6621 is
+measured on captures it has never seen. Some of the gap is the split design, not
+the model.
+
+Both are legitimate and neither leaks — `assert_no_temporal_overlap` and
+`assert_no_episode_leakage` run on every split construction, and the CIC carve
+respects a 30-minute pre-onset margin. What they are not is the same experiment.
+
+**A provenance defect found and fixed on the way.** `dataset.days[].role` is a
+hand-written annotation in the config and had drifted from `cfg["splits"]`, which
+is what actually assigns days: `ctu_4` and `ctu_6` are annotated `role: test` and
+are the validation captures. Every CTU record written before today therefore
+misstates the split those two captures landed in. Nothing downstream read the
+annotation — `build_all_splits` uses `cfg["splits"]` — so no result is affected,
+and the numbers in this report are validation numbers as labelled. But a
+provenance record that misstates a split assignment is worse than no record, so
+`provenance.py` now derives the role from `cfg["splits"]` and keeps the
+annotation beside it under `role_annotated_in_config` only where the two disagree.
+Records written before this change carry the old annotation; the matrix is
+generated from the corrected derivation.
+
+**Recorded compute so far:** 15.2 hours of wall clock across 36 runs with
+provenance records, single machine (Apple M1, 8 cores, 16 GB). Runs overlapped,
+so elapsed time is less than the sum.

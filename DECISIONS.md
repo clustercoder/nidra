@@ -1617,3 +1617,26 @@ floor. So there IS something to find on CIC — but `is_active` alone reaches 0.
 the genuine precursor content beyond bare activity is the gap between 0.75 and 0.68. Q14's
 Δ=15 direction is withdrawn and replaced by advance-warning work on CIC, with that modest
 ceiling stated up front rather than discovered later.
+
+**D135 — the experiment matrix, and a provenance record that misstated which split a capture
+was in.** (2026-09-23) `nidra/scripts/experiment_matrix.py` renders every run in
+`experiments/runs/` from its own provenance record: corpora, day counts per split, feature
+regime, geometry, stages, seeds, commit and wall clock. Generating it from the records rather
+than by hand satisfies §33's two rules at once — a record per experiment, and no hidden
+failures: a run that failed is in the directory and therefore in the table, and the 0-minute
+rows from the onset 2x2 that the zsh glob bug silently skipped are visible as 0m. 36 runs,
+15.2 recorded hours on one M1.
+Building it found two defects. Reading the corpus from the record's prose `name` and cutting
+at the first parenthesis reported the COMBINED runs as CIC-only; corpora are now counted from
+the days' formats. And `dataset.days[].role` is a hand-written annotation that had drifted
+from `cfg["splits"]`, which is what actually assigns days — `ctu_4` and `ctu_6` are annotated
+`role: test` and are the validation captures, so every CTU record written before today
+misstates their split. Nothing downstream reads the annotation (`build_all_splits` uses
+`cfg["splits"]`), so no result is affected and the report's validation numbers are validation
+numbers; but a provenance record that misstates a split is worse than none, and
+`provenance.py` now derives the role from `cfg["splits"]` and keeps a disagreeing annotation
+beside it as `role_annotated_in_config`.
+The matrix also made explicit that the two datasets' "validation" are different kinds: CTU's
+is two held-out captures of unseen families, CIC's is the last 30% of the training days' own
+time. Both are legitimate and neither leaks, but the second is the easier target and part of
+why CIC's figures sit above CTU's in D130 and D131. Recorded in §3.16.

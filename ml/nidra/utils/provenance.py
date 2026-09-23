@@ -66,17 +66,28 @@ def dataset_version(cfg: dict, hash_processed: bool = True) -> dict[str, Any]:
     internal_cidrs = tuple(dataset_cfg.get("ctu13_internal_cidrs", CTU_INTERNAL_CIDRS) or ())
     host_scope = host_scope_tag(internal_cidrs)
 
+    # `dataset.days[].role` is a hand-written annotation; the split a day is
+    # ACTUALLY in comes from cfg["splits"], and the two had drifted apart —
+    # ctu_4 and ctu_6 are annotated "test" and are the validation captures.
+    # A provenance record that misstates which split a day landed in is worse
+    # than no record, so the effective role is derived and the annotation is
+    # kept beside it only when it disagrees.
+    effective = _effective_roles(cfg)
+
     days: dict[str, Any] = {}
     sources: set[str] = set()
     for day_key, day_meta in dataset_cfg["days"].items():
         fmt = day_format(day_meta)
         sources.add(fmt)
         entry: dict[str, Any] = {
-            "role": day_meta.get("role"),
+            "role": effective.get(day_key, "unused"),
             "format": fmt,
             "flow_file": file_stat(flow_dirs[fmt] / day_meta["file"]),
             "packets_parquet": file_stat(packets_dir / day_meta["packets"]) if day_meta.get("packets") else None,
         }
+        annotated = day_meta.get("role")
+        if annotated is not None and annotated != entry["role"]:
+            entry["role_annotated_in_config"] = annotated
         if fmt == "ctu_binetflow":
             entry["family"] = day_meta.get("family")
             entry["scenario"] = day_meta.get("scenario")
@@ -97,6 +108,27 @@ def dataset_version(cfg: dict, hash_processed: bool = True) -> dict[str, Any]:
         "ctu13_internal_cidrs": list(internal_cidrs),
         "days": days,
     }
+
+
+def _effective_roles(cfg: dict) -> dict[str, str]:
+    """Which split each day actually lands in, read from cfg["splits"].
+
+    A day named in `val_days` is validation; one only in `train_days` is
+    training, unless it is also in `val_carve_train_days`, in which case its
+    tail is carved into validation and it is both. A day in no list is unused
+    by this run, which is worth recording as such rather than as whatever the
+    config happened to annotate.
+    """
+    splits = cfg.get("splits") or {}
+    roles: dict[str, str] = {}
+    for key, role in (("train_days", "train"), ("test_days", "test"),
+                      ("holdout_days", "holdout"), ("val_days", "val")):
+        for day in splits.get(key) or []:
+            roles[day] = role
+    for day in splits.get("val_carve_train_days") or []:
+        if roles.get(day) == "train":
+            roles[day] = "train+val_carve"
+    return roles
 
 
 def _flow_timebase_tag() -> str:
