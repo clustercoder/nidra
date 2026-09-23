@@ -1807,3 +1807,32 @@ error in a function.
 The queues' `rc=$?` is fixed only in the recovery queue (`${pipestatus[1]}` plus an explicit
 `FAILED` line). The already-running queues are left alone: editing a script zsh is still
 reading is worse than the defect it would fix.
+
+**D144 — the persistence null is diagnosed, and the diagnosis is structural.**
+(2026-09-23) §3.32 found the world model's margin over persistence at −0.0100 [−0.0342,
++0.0034] for the `state+hidden` head at three seeds. Two escapes were closed before accepting
+it. First, the ablation is valid for a trajectory head: `rollout` advances the hidden by
+feeding the state actually produced, so under `persist` the GRU sees S_t six times and under
+`model` the predicted trajectory — the transition is removed from the hidden channel too, and
+`realized_deltas()` is identically zero. Second, the pre-registered divergence test (§3.33)
+came back on its second branch: the rollout moves the hidden state 40–62%, so the ablation
+bites, and the head's answer still does not move (positives-only composite correlation
+0.9910, attack mean differing 0.28%).
+
+The mechanism, with a null: the head's first layer responds to the rollout's displacement
+with a gain of 0.0909 and to a random displacement of the same norm with 0.0845 — 1.08×. The
+head is no more sensitive to the transition model than to noise. The null matters; without it
+0.0909 reads as orthogonality, which is a different claim and false.
+
+The structural reading is the one worth keeping. The risk head trains on OBSERVED states and
+freezes (invariant 1), so its readout separates observed hidden states and has no mechanism
+to become sensitive to where a rollout displaces them. That invariant exists to make the
+forecasting claim falsifiable, and here it returned a negative. Unfreezing the head on
+predicted states would close the gap and would also remove the reason the project is
+defensible — so it is not an option, and the null is reported as the result.
+
+One real effect AP cannot see: the benign composite mean halves under the model rollout
+(0.00412 → 0.00201) while the attack mean is unchanged. A near-uniform rescaling of one class
+does not move a rank metric. NOT to be reported as a false-alarm improvement: the benchmark's
+FA/h column scores every system at the threshold selected for the calibrated one, so those
+numbers compare calibration, not transition models.
