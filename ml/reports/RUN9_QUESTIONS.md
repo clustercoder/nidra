@@ -183,6 +183,14 @@ order they bind:
    *(§3.9, D128.)* The stage-balanced objective is pre-registered and queued.
    *(§3.13, D132.)*
 3. **The label's pre-onset windows are empty on CTU.** See Q1 and Q10.
+4. **The winning head is the least explainable one.** The `state+hidden` head's
+   score is set by the encoder hidden state, not the origin state: behind a
+   byte-identical origin state, swapping in a busier history moves the served
+   risk from 0.0000128 to 1.0000000. KernelSHAP over all 45 named features then
+   attributes that 1.00 to nothing larger than 0.0003. The attribution is
+   correct — the state genuinely is not what moved the score — and the project's
+   whole explanation surface is 45 named features. This is a limit on what the
+   improvement can be *shipped* as, not on its accuracy. *(§3.20, D141.)*
 
 What is *not* the limit, contrary to how §3.8 originally read it: attack-group
 separability. `ctu_4:c2` was written up as unreachable on a probe's ROC of
@@ -209,6 +217,14 @@ a fourth.**
    signal against a model at the floor. The ceiling is modest and most of it is
    bare activity, so the honest framing of the work is closing a small measured
    gap, not unlocking advance warning. *(§3.15.)*
+
+4. **Trajectory components in place of the raw hidden state** — `delta` and
+   `logvar` rather than `hidden`. Motivated by Q13's fourth limit rather than by
+   an accuracy hypothesis: they are decomposable into the 45 named features in a
+   way a 128-dimensional hidden state is not, so a variant that keeps most of the
+   AP gain while staying explainable would be worth a lower AP under §32's
+   ranking. Untested; the head ablation has so far compared `state` against
+   `state+hidden` only.
 
 Ruled out by measurement rather than opinion: score fusion of the two frozen
 heads (§3.9), `context_noise` as a fix for the exposure mismatch (§3.6, D126),

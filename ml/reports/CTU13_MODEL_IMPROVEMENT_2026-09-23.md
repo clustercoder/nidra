@@ -48,6 +48,7 @@ The findings that later sections depend on, in the order they bind:
 | 3 | The risk head ranks two attack stages **below chance** where the frozen stage head ranks them at 0.85 and 0.64. The signal is in the model; no scalar fusion recovers it. | §3.9 |
 | 4 | A fifth of CTU's forecast positives are the **silence floor** — bit-identical to 47,650 negatives. CTU cannot support an advance-warning claim; CIC weakly can. | §3.10, §3.15 |
 | 5 | Two conclusions **withdrawn**: "Rbot C2 is not separable" (§3.8) and "cross-host by construction" (§3.17). Both are struck through rather than deleted. | §3.8, §3.17 |
+| 6 | The history-aware head **could not be served at all** until D141, and once served, SHAP over the 45 named features attributes a risk of 1.00 to nothing larger than 0.0003. The AP gain costs the project's explainability. | §3.20 |
 
 ---
 
@@ -1242,3 +1243,75 @@ in `holdout_days` and the cross-eval configs do not — but `ctu_5` contributes
 **zero rows**: at 17.7 MB it is too short for any host to reach the 36 windows
 `min_windows_per_host` requires. Both holdouts are ctu_12 + ctu_13, 267,388 rows
 and 1,134 positives, and are comparable.
+
+### 3.20 The selected head could not be served, and what fixing it revealed about explainability (§4, §27, §36 items 25/26)
+
+`NidraPredictor` is the whole ML surface the backend imports, and it could not
+run a `TrajectoryRiskHead` at all. Every one of `forecast`, `forecast_batch`,
+`counterfactual` and `explain` raised: four call sites asked `score_states` for
+a risk number, which a head reading the encoder hidden state cannot produce
+from a bare state, and two asked `explain_current_risk` for an attribution
+without the context it holds fixed. Nothing caught it because every serving
+test built the Run 8 per-state head. §4 would have selected a head that
+evaluates and does not serve. Fixed in D141; per-state numbers are unchanged
+(`score_trajectory` reduces to `score_states(states)` and `score_observed` to
+`score_states(x[:, -1, :])` for a per-state head, and the existing tests that
+pin the predictor's observed risk to `score_states` still pass).
+
+Verified against **real trained weights**, not the synthetic fixture: the
+`cic_core_heads__state+hidden` checkpoint, loaded through `NidraPredictor`
+exactly as the backend loads it, on a real Wednesday window.
+
+| probe | observed risk |
+|---|---|
+| host 172.16.0.1, 30 pre-onset windows | 0.0000128 |
+| same window, history rows reversed | 0.0000128 |
+| **same origin state**, that host's busiest 29 windows spliced in behind it | **1.0000000** |
+
+The reversal moving nothing is not a bug: that host's history is one distinct
+row repeated 29 times, so reversing it is a no-op — a useful reminder that a
+"different history" probe has to be checked for actually being different. The
+splice is the real test, and a five-order-of-magnitude swing behind a
+byte-identical origin state says the history reaches the head.
+
+It also says something less comfortable. **The origin state is contributing
+almost nothing.** On the spliced window the head scores 1.0, and KernelSHAP
+over all 45 named features attributes it to nothing: the largest absolute
+attribution is 0.0003, on `active_flow_count`. That is not a broken
+attribution — it is a correct one. The conditional attribution holds the
+hidden state fixed and perturbs the state, and the honest answer is that the
+state is not what moved the score. The drive is inside the 128-dimensional
+encoder hidden state, which the 45-feature SHAP surface cannot decompose.
+
+So the history-aware head buys AP (§3.12: 0.678 → 0.783 on CIC val, replicated
+in all three regimes) at the cost of the explainability the project ships. A
+console that says "risk 1.00, top signal `active_flow_count` (+0.0003)" is
+worse than one that says nothing. Under §32's ranking this does not disqualify
+the head — explainability is not on the list — but it is a real trade-off that
+belongs in the model card and in the §31 Q13 answer about what still limits
+NIDRA, and it is the strongest argument yet for §5's trajectory-aware variants
+over the raw hidden state: `delta` and `logvar` are decomposable in a way the
+hidden state is not.
+
+The corroboration with §3.11 runs the other way too. The floor-stratum probe
+found the `state+hidden` head's 58× lift is host identity (host-mean ROC
+0.9993, within-host lift 0.98×). A head whose score is set by the hidden state
+rather than the origin state, and whose hidden state encodes which host this
+is, is exactly the head that probe described. The two measurements were taken
+independently and agree.
+
+Six tests in `tests/test_predictor_trajectory_head.py` drive the served surface
+with a `("state", "hidden")` head. Its weights are random, so no numbers are
+asserted — except that two windows sharing a final state but differing earlier
+must score differently, which is the check that the history arrives rather than
+arriving zeroed.
+
+`eval/baselines.py` was deliberately left per-state: it serves only
+`run_eval.py`, the legacy balanced-subsample harness whose numbers are already
+not comparable to this protocol. `score_states` now raises a message naming
+`score_trajectory`, `score_observed` and `score_stage` instead of an arity
+error from inside `nn.Module.__call__`, so the legacy path fails legibly rather
+than mysteriously. **Serving latency for this head is not yet measured** — the
+machine has two training jobs on it and a timing number taken under contention
+would be worthless. It is outstanding for §36 item 25, and it matters: the
+head's input is 173 wide against the per-state head's 45.
