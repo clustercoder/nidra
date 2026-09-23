@@ -104,6 +104,11 @@ class FloorProbe:
     within_host_prevalence: float
     within_host_ap: float
     within_host_roc: float
+    #: ROC computed inside EACH positive host and averaged over them. With one
+    #: infected host it equals `within_host_roc`; with several it differs,
+    #: because pooling their rows leaves a between-host component in the
+    #: ranking and that component is host identity again, one level down.
+    per_host_roc_macro: float = float("nan")
 
     @property
     def ceiling(self) -> float:
@@ -167,6 +172,14 @@ def floor_stratum_probe(scores, y, hosts, floor_mask) -> FloorProbe:
     pos_hosts = np.unique(hh[yy == 1])
     k = np.isin(hh, pos_hosts)
     both = yy[k].sum() > 0 and (yy[k] == 0).sum() > 0
+
+    per_host = []
+    for h in pos_hosts:
+        m = hh == h
+        if yy[m].sum() and (yy[m] == 0).sum():
+            per_host.append(roc_auc_score(yy[m], s[m]))
+    macro = float(np.mean(per_host)) if per_host else float("nan")
+
     return FloorProbe(
         n_rows=int(len(yy)), n_positive=int(yy.sum()),
         ap=float(average_precision_score(yy, s)), roc=float(roc_auc_score(yy, s)),
@@ -175,7 +188,8 @@ def floor_stratum_probe(scores, y, hosts, floor_mask) -> FloorProbe:
         n_positive_hosts=int(len(pos_hosts)), within_host_rows=int(k.sum()),
         within_host_prevalence=float(yy[k].mean()) if k.sum() else float("nan"),
         within_host_ap=float(average_precision_score(yy[k], s[k])) if both else float("nan"),
-        within_host_roc=float(roc_auc_score(yy[k], s[k])) if both else float("nan"))
+        within_host_roc=float(roc_auc_score(yy[k], s[k])) if both else float("nan"),
+        per_host_roc_macro=macro)
 
 
 def probe_markdown(probes: dict[str, FloorProbe], split: str, stratum: str = "floor") -> str:
@@ -192,15 +206,20 @@ def probe_markdown(probes: dict[str, FloorProbe], split: str, stratum: str = "fl
            "keeping only host identity. **within-host** restricts to the infected host(s), where "
            "identity is constant and only the timing question remains — which is the question advance "
            "warning asks.", "",
-           "| head | rows | positives | AP | lift over ceiling | ROC | host-mean AP | host-mean ROC | "
-           "within-host prevalence | within-host AP | within-host lift | within-host ROC | verdict |",
-           "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+           "| head | rows | positives | positive hosts | AP | lift over ceiling | ROC | host-mean AP | "
+           "host-mean ROC | within-host prevalence | within-host AP | within-host lift | within-host ROC | "
+           "per-host ROC (macro) | verdict |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for name, p in probes.items():
-        out.append(f"| {name} | {p.n_rows} | {p.n_positive} | {p.ap:.6f} | {p.lift_over_ceiling:.2f}× | "
-                   f"{p.roc:.4f} | {p.host_mean_ap:.4f} | {p.host_mean_roc:.4f} | "
+        out.append(f"| {name} | {p.n_rows} | {p.n_positive} | {p.n_positive_hosts} | {p.ap:.6f} | "
+                   f"{p.lift_over_ceiling:.2f}× | {p.roc:.4f} | {p.host_mean_ap:.4f} | {p.host_mean_roc:.4f} | "
                    f"{p.within_host_prevalence:.4f} | {p.within_host_ap:.4f} | {p.within_host_lift:.2f}× | "
-                   f"{p.within_host_roc:.4f} | {p.verdict} |")
-    out += ["", "A lift that disappears within the host is the head recognising *who*, not *when*."]
+                   f"{p.within_host_roc:.4f} | {p.per_host_roc_macro:.4f} | {p.verdict} |")
+    out += ["", "A lift that disappears within the host is the head recognising *who*, not *when*. With more "
+                "than one infected host the pooled **within-host** columns still carry a between-host "
+                "component — host identity again, one level down — so **per-host ROC (macro)**, computed "
+                "inside each host and averaged, is the figure to read there. With a single infected host "
+                "the two are identical."]
     return "\n".join(out)
 
 

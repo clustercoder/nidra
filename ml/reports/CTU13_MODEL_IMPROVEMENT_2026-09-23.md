@@ -890,3 +890,54 @@ learn, and will be reported whichever way it lands.
 
 One seed, CTU-only, validation only, both head variants, same `ctu_dyn` checkpoint
 as §3.4. Screening. Queued behind the cross-dataset matrix; the machine is full.
+
+### 3.14 Correction to §3.11's scope: train and validation are single-host, test and holdout are not
+
+§3.11 drew its conclusion on validation. Counting infected hosts per split shows
+what that does and does not license:
+
+| split | rows | hosts | positives | infected hosts |
+|---|---|---|---|---|
+| CIC train | 2,274,548 | 6,413 | 179 | **1** (`172.16.0.1`) |
+| CIC val | 893,701 | 5,224 | 94 | **1** (`172.16.0.1`) |
+| CIC test | 299,392 | 2,072 | 982 | **10** |
+| CIC holdout | 450,482 | 2,557 | 151 | 2 |
+| CTU train | 1,419,278 | 500 | 1,418 | **1** (`147.32.84.165`) |
+| CTU val | 98,876 | 341 | 288 | **1** (`147.32.84.165`) |
+| CTU test | 508,517 | 460 | 3,814 | **10** |
+| CTU holdout | 267,388 | 383 | 1,134 | 3 |
+
+**Training and validation see exactly one infected host, on both datasets.** Not
+one per attack group — one per split, full stop. Every positive NIDRA has ever
+been trained on, and every positive any validation number in this report is
+computed from, comes from a single machine in each corpus.
+
+**Test and holdout do not.** Ten infected hosts on each dataset's test split, most
+of them never infected during training. So the evaluation design *does* test
+cross-host generalisation — the limitation is on what validation can reveal, not
+on what the protocol measures.
+
+This bounds §3.11 rather than overturning it. What §3.11 established stands: on a
+single-host validation split, CTU's aggregate head-ablation gain is largely the
+ability to pick out that one host while CIC's survives the within-host test. What it
+cannot establish is how either behaves across ten infected hosts, because validation
+contains no such thing. The cross-dataset matrix now running produces exactly those
+test and holdout numbers, and they are where the question is actually settled.
+
+One consequence for the method. With several infected hosts the pooled within-host
+columns regain a between-host component — host identity one level down — so the
+probe now also reports **per-host ROC (macro)**, computed inside each infected host
+and averaged. On a single-host split the two are identical, which is why it did not
+matter until now; on the test splits it will. A test fixture pins the case where
+pooling reads 0.81 and the macro average reads 0.67 on hosts that are individually
+identical in quality.
+
+A note on what the infected host *is*, since it differs between corpora and affects
+what the CIC numbers mean. `host_id` is the flow's source address, so a positive
+attaches to the host emitting the attack traffic. On CTU that is `147.32.84.165`, an
+internal infected workstation — the compromised-host framing the project is built
+around. On CIC train and validation it is `172.16.0.1`, the dedicated attack machine
+outside the victim network. Forecasting that the attack box is about to attack is a
+different and easier problem than forecasting that an internal host has been
+compromised, so CIC's validation figures should be read with that in mind. CIC's
+*test* split is the one that includes internal `192.168.10.x` hosts.

@@ -1579,3 +1579,23 @@ fitted to the result. Primary: recon and c2 rise above chance. Secondary: within
 not fall. Guardrail: exfil does not fall below 0.85. A fall in aggregate AP with all three met
 is a success and will be reported as one with the cost stated (§32). Criterion 1 failing kills
 the §12 direction, and that will be reported too.
+
+**D133 — training and validation have ONE infected host on both datasets; test and holdout
+have ten.** (2026-09-23) Counting per split: CIC train/val 179 and 94 positives on
+`172.16.0.1` alone, CTU train/val 1418 and 288 on `147.32.84.165` alone; CIC test 982
+positives on 10 hosts, CTU test 3814 on 10, holdouts 2 and 3. So every positive the model has
+ever trained on, and every positive behind any validation number in this phase, comes from a
+single machine per corpus — while the test and holdout splits do contain cross-host
+generalisation, most of those hosts never infected during training. This BOUNDS D130 rather
+than overturning it: D130's finding is about what a single-host validation split can show,
+and how either head behaves across ten infected hosts is settled on test, which the running
+cross-dataset matrix produces. Two consequences. The probe now reports `per_host_roc_macro`
+— ROC inside each infected host, averaged — because with several infected hosts the pooled
+within-host columns regain a between-host component, which is host identity one level down;
+on a single-host split the two are identical, which is why it did not matter until now.
+And `host_id` is the flow's SOURCE, so a positive attaches to the host emitting attack
+traffic: on CTU that is an internal infected workstation, but on CIC train/val it is
+`172.16.0.1`, the dedicated attack machine outside the victim network. Forecasting that the
+attack box will attack is an easier and different problem from forecasting internal
+compromise, and CIC's validation figures must be read that way; CIC test is where the
+internal 192.168.10.x hosts appear.

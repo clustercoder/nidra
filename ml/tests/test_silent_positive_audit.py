@@ -180,3 +180,47 @@ def test_an_all_rows_mask_asks_the_same_question():
                hosts=["infected"] * 4 + ["other"] * 8, floor=[True] * 12)
     assert p.n_rows == 12
     assert p.host_mean_roc >= 0.9
+
+
+def test_per_host_macro_equals_within_host_with_one_infected_host():
+    """Both corpora's validation splits have exactly one positive host, so the
+    two must agree there — otherwise the report's within-host column and its
+    macro column would disagree on the same data."""
+    p = _probe(scores=[0.9, 0.2, 0.8, 0.3] + [0.01] * 8, y=[1, 1, 0, 0] + [0] * 8,
+               hosts=["infected"] * 4 + ["other"] * 8)
+    assert p.n_positive_hosts == 1
+    assert p.per_host_roc_macro == pytest.approx(p.within_host_roc)
+
+
+def test_per_host_macro_strips_the_between_host_component():
+    """Two infected hosts with the same internal ordering quality, but one
+    scored wholly above the other AND carrying most of the positives. Pooling
+    their rows credits the model for a between-host separation that is host
+    identity again; the macro average does not.
+
+    CTU and CIC test have ten infected hosts each, so this is the case that
+    matters as soon as the evaluation moves off validation."""
+    scores = [0.9, 0.85, 0.8, 0.75] + [0.2, 0.15, 0.1, 0.05] + [0.001] * 8
+    y = [1, 1, 0, 1] + [0, 1, 0, 0] + [0] * 8
+    hosts = ["h1"] * 4 + ["h2"] * 4 + ["clean"] * 8
+    p = _probe(scores, y, hosts)
+    assert p.n_positive_hosts == 2
+    assert p.per_host_roc_macro == pytest.approx(2 / 3)     # each host, internally
+    assert p.within_host_roc == pytest.approx(0.8125)       # pooled, inflated
+    assert p.within_host_roc > p.per_host_roc_macro + 0.1
+
+
+def test_per_host_macro_is_nan_when_no_host_has_both_classes():
+    p = _probe(scores=[0.9, 0.8] + [0.01] * 8, y=[1, 1] + [0] * 8,
+               hosts=["infected"] * 2 + ["other"] * 8)
+    assert p.per_host_roc_macro != p.per_host_roc_macro
+
+
+def test_markdown_shows_the_positive_host_count_and_the_macro():
+    from nidra.scripts.silent_positive_audit import probe_markdown
+    p = _probe(scores=[0.3, 0.2, 0.9, 0.8] + [0.01] * 8, y=[1, 1, 0, 0] + [0] * 8,
+               hosts=["infected"] * 4 + ["other"] * 8)
+    md = probe_markdown({"h": p}, "val")
+    assert "positive hosts" in md
+    assert "per-host ROC (macro)" in md
+    assert "between-host component" in md
