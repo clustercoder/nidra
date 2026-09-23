@@ -1362,3 +1362,43 @@ If it does come in over target, CLAUDE.md's instruction applies unchanged — cu
 stochastic samples toward 100 before touching the ensemble size — and it applies
 equally to both heads, since the rollout is the term that scales and the head is
 not why.
+
+### 3.22 The explainability loss may not be a component choice (§5, §27, §31 Q14)
+
+§3.20 argued that a head driven by the encoder hidden state costs the project its
+explanation surface, and suggested trajectory components — `delta`, `logvar` —
+as a decomposable alternative worth a lower AP under §32's ranking. **The CTU
+half of that question was already answered on disk and the answer is negative.**
+From §4's component table, one seed, validation AP at natural prevalence:
+
+| head reads | val AP | over `state` | fraction of what `hidden` is worth |
+|---|---|---|---|
+| `hidden` alone | 0.4958 | +0.1427 | 100% |
+| `state+hidden` | 0.4894 | +0.1363 | 96% |
+| `state+logvar` | 0.3731 | +0.0200 | **14%** |
+| `state` | 0.3531 | — | 0% |
+
+The decomposable component carries a seventh of what the recurrent summary
+carries, and `logvar` on top of `hidden` makes things *worse* (0.4538). This
+was reported at §4 as "uncertainty helps, but barely"; read against §3.20 it
+says something sharper. **The AP gain and the explainability loss may be the
+same thing** — not a trade-off a different component set can route around.
+
+`hidden` alone beating `state+hidden` is the same observation §3.20's real-weight
+probe made from the other end: on a served forecast, splicing a different history
+behind a byte-identical origin state moved the risk from 0.0000128 to 1.0000000.
+Two independent measurements, months of code apart, saying the origin state is
+not what the head is using.
+
+**What is genuinely untested is CIC**, where the ablation only ever ran `state`
+and `state+hidden`, and where §3.11 found the history-aware gain survives the
+within-host test that CTU's does not. That is a real difference between the
+corpora and it is the reason not to assume CTU's verdict transfers. Four CIC arms
+— `state+logvar`, `state+delta`, `state+delta+logvar`, `hidden` alone — are
+queued behind the pre-registered stage-balanced run, off the same `cic_core_dyn`
+checkpoint so the transition model is byte-identical and only the head's inputs
+change. A negative closes the direction properly rather than leaving it standing
+as an untested suggestion.
+
+Recorded as a correction to this log's own Q14 entry, which was written before
+the CTU table was read against this question.

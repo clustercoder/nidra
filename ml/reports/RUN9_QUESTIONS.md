@@ -220,11 +220,24 @@ a fourth.**
 
 4. **Trajectory components in place of the raw hidden state** — `delta` and
    `logvar` rather than `hidden`. Motivated by Q13's fourth limit rather than by
-   an accuracy hypothesis: they are decomposable into the 45 named features in a
-   way a 128-dimensional hidden state is not, so a variant that keeps most of the
-   AP gain while staying explainable would be worth a lower AP under §32's
-   ranking. Untested; the head ablation has so far compared `state` against
-   `state+hidden` only.
+   an accuracy hypothesis: they decompose into the 45 named features in a way a
+   128-dimensional hidden state does not, so a variant keeping most of the AP
+   gain while staying explainable would be worth a lower AP under §32's ranking.
+
+   **The CTU evidence is against it and was already on disk** (§4 component
+   table): `state+logvar` reaches 0.373 against `state`'s 0.353 and `hidden`
+   alone's 0.496 — the decomposable component carries about a seventh of what the
+   hidden state carries, and adding `logvar` on top of `hidden` makes things
+   worse. Whatever the head is reading lives in the recurrent summary, not in the
+   per-feature quantities. So Q13's fourth limit looks intrinsic rather than a
+   component choice: **the AP gain and the explainability loss may be the same
+   thing.**
+
+   It is untested on CIC, where the head ablation ran `state` and `state+hidden`
+   only and where §3.11 found the gain survives the within-host test that CTU's
+   does not. That is a real difference between the two corpora and it is cheap to
+   settle, so the CIC arms are queued rather than assumed to match CTU. The
+   direction stays on this list because a negative on CIC closes it properly.
 
 Ruled out by measurement rather than opinion: score fusion of the two frozen
 heads (§3.9), `context_noise` as a fix for the exposure mismatch (§3.6, D126),
