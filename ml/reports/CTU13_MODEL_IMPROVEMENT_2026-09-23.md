@@ -2054,3 +2054,71 @@ model hidden states, ‖h_persist[k] − h_model[k]‖ / ‖h_model[k]‖, at ea
 
 Both outcomes are reportable and they point at different next experiments, which
 is the reason to write the criterion down first.
+
+### 3.34 The diagnosis: the head is no more sensitive to the rollout than to noise
+
+§3.33's pre-registered test, run as written. 1,483 CTU validation rows (300
+positive), the confirmed `state+hidden` model, deterministic rollouts under
+`state_source="model"` and `"persist"`:
+
+| k | hidden relative divergence | state relative divergence | mean risk, model | mean risk, persist |
+|---|---|---|---|---|
+| 1 | 40.5% | 100.9% | 0.09843 | 0.09902 |
+| 3 | 53.4% | 104.7% | 0.09876 | 0.09979 |
+| 6 | **62.3%** | 102.2% | 0.09896 | 0.10029 |
+
+**The second branch of the criterion.** The rollout moves the hidden state by
+40–62%, far past the ~10% that would have made the ablation uninformative. The
+ablation bites. And the head's answer does not move:
+
+- composite correlation between the two arms, all rows: **0.9839**
+- **positives only: 0.9910**
+- attack composite mean: 0.51833 against 0.51689 — **0.28%**
+
+So §3.32's null means what it says. The transition model is not contributing to
+this head's score.
+
+**Why, measured rather than argued.** Feeding the head's first layer the
+rollout's actual displacement `h_model[6] − h_persist[6]` gives a gain of
+0.0909. The same statistic on a **random** displacement of the same norm gives
+0.0845 — a ratio of **1.08×**. The head is no more responsive to the transition
+model's displacement than to noise of equal size. (The first hypothesis was
+"nearly orthogonal to the readout"; the null says it is not orthogonal either,
+just uninformative. Without the null the 0.0909 would have been read as
+orthogonality, which is a different and wrong claim.)
+
+**One real effect, invisible to AP.** Scoring both rollouts with the same head
+and no calibration, the benign composite mean falls from 0.00412 under
+persistence to 0.00201 under the model — roughly halved — while the attack mean
+is unchanged. A near-uniform rescaling of one class is monotone enough to leave
+a rank metric alone, which is exactly the AP null. It is a genuine effect of the
+transition step on the score *scale*.
+
+**What it is not.** The benchmark's table invites a false reading and it should
+be named:
+
+| system | AP | FA/h at the common threshold |
+|---|---|---|
+| `world_model_calibrated` | 0.4910 | 4.79 |
+| `persistence` | 0.4991 | 23.64 |
+| `world_model` (uncalibrated) | 0.4891 | 122.86 |
+
+Those false-alarm rates are all taken at the **one** threshold selected for the
+calibrated world model. Only that system carries the Platt layer, so the same
+number means something different on every other row's score scale — §3.18's
+error, one table over. **This is not evidence that the transition model reduces
+false alarms**; it is evidence that calibration does. A real comparison would
+calibrate each arm on its own validation split, and has not been run.
+
+**The structural reading.** The risk head trains on **observed** states and
+freezes (CLAUDE.md invariant 1). Its readout is whatever separates attack from
+benign among observed hidden states, and there is no mechanism by which it would
+become sensitive to where a rollout displaces them — the measurement says it is
+not. That invariant is the reason the forecasting claim is falsifiable, and on
+this split the falsification came back negative. Not a bug in the head; the
+design working, and reporting a null.
+
+This is the sharpest thing the phase has to say about §31 Q13. The limit is not
+the head's capacity, the objective, or the corpus. It is that **a frozen
+observed-state head and a transition model are only coupled through a channel
+the head has no reason to read** — and measurably does not.
