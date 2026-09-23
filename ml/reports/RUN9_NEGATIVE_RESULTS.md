@@ -5,9 +5,9 @@ list. Every entry names the intervention, the number that killed it, and what
 the phase did differently afterwards — because an experiment that changed
 nothing about the next one was not worth running.
 
-Eleven entries. Six are interventions that did not beat their baseline, four are
-mistakes in the measurement apparatus that produced confident wrong numbers
-before being caught, and one is a pre-registered explanation whose own test
+Twelve entries. Six are interventions that did not beat their baseline, five are
+mistakes in the measurement apparatus that produced confident wrong numbers or
+no numbers at all, and one is a pre-registered explanation whose own test
 refused it.
 
 ---
@@ -180,6 +180,32 @@ against each checkpoint's recorded `dropped_features` and refuses on mismatch
 an equivalent refit, is not recorded anywhere, and would not say what differs.
 The transfer configs are still not self-contained, which the guard converts from
 a wrong answer into a refusal but does not solve.
+
+### 12. A queue that could not report a failure, and configs that could not express a head
+
+**What happened.** Three `state+hidden` transfer arms — `CIC → CTU`,
+`CTU → CIC`, `CIC+CTU → CTU` — crashed on every split and produced no metrics.
+The transfer configs do not declare `model.risk_head.components`, so a 45-wide
+head was built against a 173-wide checkpoint.
+
+**Why nothing caught it.** `load_state_dict` raised a clear shape error. The
+queue then ran `echo "END $label/$split rc=$?"` **after a pipeline**, so `$?`
+was `tail`'s status and all three were recorded `rc=0` — three seconds after
+their START, beside fourteen-minute neighbours. Six cells were missing from the
+cross-dataset matrix and the only symptom was three dashes in a scorecard dry
+run done before the report queue reached it.
+
+**What it changed.** The cells are re-queued with the override, verified to load
+first. The recovery queue reads `${pipestatus[1]}` and prints `FAILED`.
+`load_models` refuses the mismatch by name with the fix quoted (D143). And
+§3.25's "all 42 exited zero" is withdrawn — that column was measuring `tail`.
+
+**The part worth keeping.** Two independent slips were required: a config that
+could not express the variant, and a log that could not report a failure. The
+thing that saved it was a convention rather than a test — the scorecard renders
+a missing cell as a gap instead of borrowing a neighbour's number, so the
+absence was visible the moment anyone looked. Three dashes were recoverable;
+three plausible numbers would not have been.
 
 ---
 
