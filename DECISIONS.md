@@ -2038,3 +2038,43 @@ run here.
 is a real improvement. It is — on head-training validation AP. Recording the reversal as
 a decision rather than as a footnote is what keeps the two objectives from being quoted
 interchangeably later.
+
+---
+
+## D147 — 2026-09-24 — Paired intervals are computed on the arm the project publishes
+
+`nidra/eval/benchmark.py` has two bootstrap paths. `BOOTSTRAP_SYSTEMS` gives each system
+its own marginal interval; `ATTRIBUTION_PAIRS` gives the paired difference between two
+systems, which is the statistic §33 means by "every claimed improvement gets a baseline
+comparison". §3.31 found the published arm missing from the first list and added it. It
+is also missing from the second, and that went unnoticed for the length of the phase.
+
+Every pair in `ATTRIBUTION_PAIRS` starts from `world_model`: one trajectory, no
+calibration. `world_model_calibrated` — ~200 pooled trajectories through a per-horizon
+Platt layer at a validation-frozen threshold — is what every table, the scorecard and the
+model card report. So the significance test was correct and was about a different system
+from the one being published.
+
+**Decision.** The published arm's margin is reported from a paired episode-cluster
+bootstrap against **the strongest baseline in each cell**, recomputed offline from the
+`benchmark_scores.npz` dumps the benchmark already writes
+(`nidra/scripts/margin_intervals.py`, 24 tests, 47 s for 28 cells, no re-run). Per-cell
+rather than fixed-baseline: against one fixed rival a cell could be credited for beating
+whichever baseline happened to be weak there.
+
+Two rules that come with it. The verdict is `ci_low > 0` strictly, with an endpoint
+exactly on zero counting as *spans* — and it was fixed before the data was read and
+applied as written rather than adjusted afterwards. And a cell that clears zero by less
+than 1e-3 is flagged **knife edge**: at 300 resamples the percentile endpoint is an order
+statistic, and five of the six counted cells clear by less than that, three by about
+1e-05. Flagging rather than re-specifying is the point — the count stays honest and the
+reader is told what it is made of.
+
+**Result:** 3 of 28 above zero, 3 below, 22 spanning, and exactly one cell with room to
+spare — `CIC+CTU → CIC`, `state+hidden`, test, +0.0660 [+0.0235, +0.1296]. That is the
+cell §3.44 had already singled out on point estimates, and it is now the only claim in
+the phase's matrix backed by a paired interval.
+
+**Why this is written down.** "We report confidence intervals" and "we report confidence
+intervals on what we publish" are different claims, and only the second one is worth
+anything. The gap was invisible because the number it produced looked right.

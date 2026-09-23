@@ -27,17 +27,20 @@ matrix, a history-aware risk head, and an unseen-attack-family test. It has
 |---|---|
 | `MODEL_CARD_RUN9.md` | what Run 9 has and has not established |
 | `reports/RUN9_FINAL_REPORT_2026-09-23.md` | the conclusion, separating demonstrated from unproven |
-| `reports/RUN9_QUESTIONS.md` | the fourteen questions the phase was set, and their answers so far |
-| `reports/RUN9_NEGATIVE_RESULTS.md` | 15 entries: what was tried and did not work, including three of this log's own explanations |
+| `reports/RUN9_QUESTIONS.md` | the fourteen questions the phase was set, and their answers |
+| `reports/RUN9_NEGATIVE_RESULTS.md` | 18 entries: what was tried and did not work, including four conclusions this log withdrew |
+| `reports/run9/` | the generated tables — corrected scorecard, D145 correction, reproduction check, paired margin intervals |
 | `reports/CTU13_MODEL_IMPROVEMENT_2026-09-23.md` | the full experiment log |
 
 Two things from it that bear on how to read the Run 8 numbers here. First, a
 defect (D145) was found in the rollout, and **Run 8 is not affected by it** — its
 feature regime drops no features, which is the precondition for the defect. Every
-CTU-13 and cross-dataset number in Run 9 is provisional until re-scored; no Run 8
-number is. Second, on the slices where Run 9 could ask the question most sharply,
-**the forecast does not beat a persistence baseline**. That is a finding about
-the approach, not about the Run 8 artifacts, and it is stated plainly in
+CTU-13 and cross-dataset number in Run 9 was re-scored under the fix (21 up, 7 down,
+no direction flipped); no Run 8 number needed it. Second, on the slices where Run 9
+could ask the question most sharply, **the forecast does not beat a persistence
+baseline** — across 28 cells exactly one margin over the strongest baseline in its
+cell survives a paired episode-cluster interval with room to spare. That is a finding
+about the approach, not about the Run 8 artifacts, and it is stated plainly in
 `MODEL_CARD_RUN9.md`.
 
 ## Claims discipline (read this before reading any metric below)

@@ -8,12 +8,11 @@ This is the synthesis. The append-only log it is built from is
 in `RUN9_QUESTIONS.md`; what failed is in `RUN9_NEGATIVE_RESULTS.md`; per-item
 status is in `RUN9_DELIVERABLE_STATUS.md`.
 
-> **Status: in progress.** Sections 1–4 are written from results that are on disk
-> and will not change: the architecture comparison, the coupling measurement, and
-> the evaluation-apparatus corrections. Section 5 lists what is still running and
-> names, for each, the conclusion it could overturn. Nothing here is stated more
-> firmly than its evidence supports, and anything a pending arm could change is
-> marked.
+> **Status: final for the phase, 2026-09-24.** Nothing is running. Every
+> cross-dataset number is on D145-corrected artifacts, every final metric carries
+> an interval, and the two questions that stayed open — advance warning and the
+> oracle gap — are recorded as open rather than closed with a story. Section 5 is
+> what landed after the core was drafted and what each landing changed.
 
 ---
 
@@ -34,8 +33,8 @@ make "generalises to unseen attack families" a cross-dataset claim.
 
 ## 2. What NIDRA has demonstrated
 
-Each of these is measured, reproducible from a recorded artifact, and does not
-depend on an arm still running.
+Each of these is measured, reproducible from a recorded artifact, and scored on
+D145-corrected weights. Nothing here is waiting on an arm.
 
 **2.1 The history-aware risk head is a real and replicated improvement over Run 8's
 per-state head — on the objective heads are trained against, and not on the one the
@@ -197,9 +196,12 @@ Every row of the previous version of this section has now landed. What they chan
 | Six recovered `state+hidden` transfer cells | completed the cross-dataset half of the head comparison (§3.30) |
 | `lofo_without_neris` (unseen attack family) | **Q9 answered.** AP 0.717 [0.485, 0.860] on a withheld family, within-host ROC 0.949 across ten infected hosts — and persistence reaches 0.772. The model transfers, and not better than persistence does (§3.39) |
 | Pre-registered stage-balanced risk objective | criterion 1 **failed**; the pooled objective is not the explanation, and §12 is refuted (§3.35, §3.27) |
-| CIC decomposable-head arms | **reversed the CTU verdict, then went further.** Re-trained under the D145 fix, `state+logvar` (90 dims, all from the 45 named features) reaches **0.7869 against `state+hidden`'s 0.7825** — ahead, not merely close — with every non-`logvar` control bit-identical. One seed, 94 validation positives; Stage B queued (§3.38, §3.42) |
+| CIC decomposable-head arms | **reversed the CTU verdict, then went further.** Re-trained under the D145 fix, `state+logvar` (90 dims, all from the 45 named features) reaches **0.7869 against `state+hidden`'s 0.7825** — ahead, not merely close — with every non-`logvar` control bit-identical (§3.38, §3.42). **Stage B then confirmed it at three seeds, 3/3 paired** (§3.48). It has no forecast-benchmark cell, which after §3.49 is the evaluation that matters and the one that reversed the other head's validation win |
 | Fixed-pooling cells | Q2 supported as a direction, Q3 not supported; persistence is level with the model on both CTU rows (§3.40) |
 | Re-run of the recorded cells into `repro_*` | **all 28 reproduce bit-identically**, and CI coverage went 6/28 → 28/28 (§3.36) |
+| D145 re-score of all 28 cells into `mask_*` | **21 up, 7 down**, no published direction flipped, and the oracle anomaly got *worse* — 10 of 28 cells beating their oracle became 17 of 28 (§3.44) |
+| §3.29's three-seed weights on the forecast benchmark | **the phase's headline claim did not replicate.** The pre-registered both-splits bar is not met, and the per-state head wins ROC on both splits. §36 item 7 is answered `state` (§3.49, D146) |
+| Paired intervals on the published arm | **one cell of 28 has a supported margin with room to spare** — `CIC+CTU → CIC`, `state+hidden`, test, +0.0660 [+0.0235, +0.1296]. Three more clear zero by ~1e-05 and are flagged, three are negative, 22 span it (§3.50) |
 
 ## 6. The defect found on the last day
 
@@ -212,9 +214,10 @@ in head *training*, through `head_context`'s unmasked `logvar`.
 
 Three things follow, and they pull in different directions:
 
-1. **Every CTU and cross-dataset number in this phase is provisional.** The
-   28-cell re-score under the fix is running. Run 8 is unaffected — its regime
-   drops nothing — and its artifacts are untouched.
+1. **Every CTU and cross-dataset number in this phase was provisional, and has
+   since been re-scored.** All 28 cells were re-run under the fix into `mask_*`:
+   21 up, 7 down, no published direction flipped (§3.44). Run 8 is unaffected —
+   its regime drops nothing — and its artifacts are untouched.
 2. **The correction does not go one way.** Raw AP by cell: comb → CIC test
    **+0.055** (0.147 → 0.202, ROC 0.913 → 0.967), CTU → CTU test +0.005, comb →
    CTU test **−0.015**. The first cell alone would have supported "the defect was
@@ -299,10 +302,15 @@ anything.
 
 **One cell is genuinely good and should not be lost in the summary.** `CIC+CTU → CIC`
 on test reaches AP 0.199 against a best baseline of 0.107, at ROC 0.950, natural
-prevalence 0.00417. Training on both corpora and evaluating on CIC is where this
-architecture works. It does not transfer to the other five regimes, and §32's ranking
-puts cross-dataset generalisation above a single aggregate, so this is a finding about
-that cell rather than a system to ship.
+prevalence 0.00417. It is also **the only cell in the matrix whose margin over its
+strongest baseline survives a paired episode-cluster bootstrap with room to spare** —
++0.0660 [+0.0235, +0.1296] over persistence-plus-noise, across 1,742 clusters, on the
+arm the project actually publishes (§3.50). Three further cells clear zero by about
+1e-05 and are flagged rather than claimed; three are negative; 22 span zero. Training on
+both corpora and evaluating on CIC is where this architecture works. It does not
+transfer to the other five regimes, and §32's ranking puts cross-dataset generalisation
+above a single aggregate, so this is a finding about that cell rather than a system to
+ship.
 
 **What is still unexplained, after four attempts and three pre-registered criteria:**
 the model beats its own oracle in 17 of 28 cells, and the frozen head ranks *better*

@@ -5,10 +5,14 @@ list. Every entry names the intervention, the number that killed it, and what
 the phase did differently afterwards — because an experiment that changed
 nothing about the next one was not worth running.
 
-Twelve entries. Six are interventions that did not beat their baseline, five are
-mistakes in the measurement apparatus that produced confident wrong numbers or
-no numbers at all, and one is a pre-registered explanation whose own test
-refused it.
+Eighteen entries, classified rather than counted: **four** interventions that did
+not beat their baseline (1–4), **four** conclusions this log drew and then
+withdrew (5, 6, 8, 13), **eight** mistakes in the measurement apparatus that
+produced confident wrong numbers or none at all (7, 9, 11, 12, 14, 15, 17, 18),
+and **two** pre-registered explanations whose own tests refused them (10, 16).
+
+That the apparatus category is the largest is the phase's most transferable
+finding. Six of those eight produced numbers that looked right.
 
 ---
 
@@ -429,3 +433,32 @@ explanations rather than one of its interventions. The criterion was written
 down while the hypothesis still looked obvious, and the control that killed it —
 a CIC-only model showing the same effect — is one that would have been very easy
 not to run.
+
+### 18. The statistical test was being run on an arm the project does not publish
+
+§33 requires confidence intervals, and item 21 was marked done: all 28 cells
+carry an episode-cluster bootstrap. What was not checked until the last day is
+*which system* the paired test compares. `ATTRIBUTION_PAIRS` pairs
+`world_model` — the uncalibrated, single-readout arm — against every baseline.
+The number in every table, every scorecard row and the model card is
+`world_model_calibrated`: ~200 pooled trajectories through a per-horizon Platt
+layer at a validation-frozen threshold.
+
+So for the length of the phase, "is the improvement statistically supported?"
+was answered about a system that is not the one being reported. Not a wrong
+number — a correct number about the wrong arm, which is harder to notice.
+
+This is the second instance of exactly this shape. §3.31 found the published arm
+missing from `BOOTSTRAP_SYSTEMS`, which is why interval coverage was 6 of 28; the
+fix added it there and nobody asked whether the *other* bootstrap had the same
+hole. The lesson entry 15 states about fixes — verify the fix reaches every path,
+not the one that motivated it — applies to apparatus gaps as well as to defects.
+
+**What it cost, and what it did not.** Nothing had to be re-run: the benchmark
+writes per-row scores beside every result, so the paired bootstrap recomputes in
+47 s across all 28 cells. And the corrected answer does not overturn a published
+claim — 3 cells above zero, 3 below, 22 spanning, with five of the six counted
+clearing zero by less than 0.001. It sharpens the existing conclusion rather than
+reversing it. The finding is the process one: an interval is only evidence about
+the system it was computed on, and "we report confidence intervals" is not the
+same claim as "we report confidence intervals on what we publish." *(§3.50.)*

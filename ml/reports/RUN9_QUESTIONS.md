@@ -6,12 +6,12 @@ carries a status:
 
 - **answered** — measured, with the artifact committed.
 - **partial** — measured on validation only, or on one seed, or under a caveat
-  that the running experiments will lift.
+  that a later experiment could lift.
 - **pending** — no evidence yet; what will settle it is named.
 
-Status as of 2026-09-23, with the cross-dataset matrix still running. Nothing
-here reads test or holdout except where explicitly stated; no such number
-exists yet.
+**Final for the phase, 2026-09-24.** Nothing is running. Every cross-dataset cell
+is scored on D145-corrected artifacts, and where an answer cites validation rather
+than test or holdout it says so, because on this project the two have disagreed.
 
 ---
 
@@ -51,9 +51,10 @@ phenomenon.
 
 ## Q2 — Does adding CTU-13 improve CIC-IDS2017 generalization?
 
-**Yes as a direction, not as a quantity — and provisionally, because D145
-lands on it.** At a forced common readout (`mean|q=-|max`), on identical rows
-(n=21,173, 946 positive, prevalence 0.00417):
+**Yes as a direction, not as a quantity.** At a forced common readout
+(`mean|q=-|max`), on identical rows (n=21,173, 946 positive, prevalence 0.00417).
+The table below is the pre-fix measurement; §3.44 re-scored it under D145's fix
+and the gap narrowed from +0.0942 to **+0.0817** without changing sign:
 
 | training set | AP [95% CI] | ROC | uncalibrated AP | uncalibrated ROC |
 |---|---|---:|---:|---:|
@@ -89,13 +90,17 @@ regime's 0.3850 / 0.5130 and CTU-only's 0.3531 / 0.4894 are computed on
 different validation sets with different prevalences, so they are not
 comparable. *(§3.12, D131.)*
 
-**Both answers are provisional.** Every cell above was scored under D145 — the
-rollout was writing untrained values into 13 of 45 feature slots — and must be
-re-run under §3.37's fix before either is final.
+**Both answers were re-measured under D145's fix and both survived.** Every cell
+above was first scored while the rollout was writing untrained values into 13 of 45
+feature slots. All 28 were re-run (§3.44): Q2's gap went +0.0942 → **+0.0817** and
+Q3's +0.0513 → **+0.0351**, each keeping its sign and each getting smaller. Q2 is
+still a direction rather than a quantity; Q3 is still unsupported.
 
 ## Q4 — Does the history-aware risk head fix the Run 8 failure?
 
-**Partial, and the honest answer so far is "on CIC yes, on CTU mostly no".**
+**Answered: no.** It fixes the objective heads are trained against and not the one
+the system is evaluated against. The paragraphs below are the phase's reasoning in
+the order it was measured; the last one is the answer.
 
 The aggregate says yes three times over: `state` → `state+hidden` moves
 validation AP 0.3531 → 0.4894 (CTU), 0.6781 → 0.7825 (CIC), 0.3850 → 0.5130
@@ -127,6 +132,21 @@ one infected host, so neither can speak to the ten-host test splits. And on CIC
 that one host is `172.16.0.1`, the external attack machine, not a compromised
 internal workstation. *(§3.14, D133.)*
 
+**And the forecast benchmark settles it, against the head.** §3.47 pre-registered
+the bar — win mean benchmark AP at both splits with no seed-distribution overlap at
+either, the standard the validation claim had already cleared — and §3.49 ran it on
+§3.29's own three-seed weights. `state+hidden` wins CTU test 3/3 with no overlap
+(0.3624 against 0.1937) and loses CTU holdout 1/3 with overlap (0.2175 against
+0.2273). The bar required both. On ROC the per-state head wins both splits, on
+holdout **0.912 against 0.587** — near chance, at almost the same AP. Across the
+one-seed matrix `state` leads on ROC in 11 of 12 cells and clears its own baselines
+in 7 of 12 against 3 of 12.
+
+So Run 8's failure is not fixed. The history-aware head reads what the per-state head
+could not, wins the objective it is trained on, produces a better alert — and does not
+rank hosts better on the evaluation that decides the project's claim. §36 item 7 is
+answered `state` on that basis, and D146 records why. *(§3.47, §3.49, D146.)*
+
 ## Q5 — Does uncertainty improve attack-risk forecasting?
 
 **Answered: no, not as a head input.** The `logvar` component was included in
@@ -138,8 +158,10 @@ rather than adopted. *(§3.6, D126.)*
 
 ## Q6 — Does trajectory-aware risk outperform state-only risk?
 
-**Partial — the same answer as Q4, since this is the same experiment read a
-different way.** Aggregate: yes, in all three regimes. Within-host: yes clearly
+**Answered: on the training objective yes, on the forecast benchmark no** — the same
+answer as Q4, since this is the same experiment read a different way, and it now has
+the same three-seed benchmark behind it (§3.49). Aggregate validation: yes, in all
+three regimes. Within-host: yes clearly
 on CIC, marginally on CTU. On the rows where the state is provably
 uninformative, the history-aware head reaches 58× the state-only ceiling and
 every unit of that is host recognition. *(§3.10, §3.11, §3.12.)*
@@ -155,6 +177,13 @@ has. *(§3.32.)*
 So "outperform" depends on the axis, and the two axes disagree in a way that is
 not noise: aggregate up, within-host down is the host-identity signature, and it
 now appears on the run that selects the architecture rather than on a probe.
+
+**§3.49 extends the trade to the held-out split and keeps its shape.** Benchmark ROC
+0.912 for `state` against 0.587 for `state+hidden` on holdout, at AP 0.2273 against
+0.2175 — the ordering collapses while the aggregate does not move. Two systems with
+the same average precision and a 0.33 gap in ranking quality is the sharpest form of
+this signature the phase produced, and it is why the architecture call goes to the
+per-state head.
 
 ## Q7 — Does the world model outperform a strong GRU sequence classifier?
 
@@ -277,12 +306,39 @@ ranking this configuration does not win, because it does not transfer. *(§3.44.
 
 ## Q12 — Which improvements are statistically supported rather than noise?
 
-**Partial.** Exactly one interval in this phase excludes zero: the world model's
-margin over `persistence_rollout` on CTU validation, +0.0331 [+0.000203,
-+0.0551], by episode-cluster bootstrap. *(§3.5.)* Everything else is either a
-point estimate from one seed, or an interval that includes zero. The head
-ablation's three-regime replication (§3.12) is consistency evidence, not a
-confidence interval, and the three rows are not comparable to each other.
+**Answered: one, and it is not the one this phase spent its time on.**
+
+Every cell now carries a **paired** episode-cluster interval on the margin
+between the *published* arm and the strongest baseline in that cell — not the
+uncalibrated `world_model` the benchmark's own attribution block pairs, and not
+a marginal interval on each system separately (§3.50). Across 28 cells:
+
+| | cells |
+|---|---:|
+| margin interval entirely **above** zero | 3 |
+| margin interval entirely **below** zero | 3 |
+| interval spans zero | 22 |
+
+Five of the six counted cells clear zero by less than 0.001 and three by about
+1e-05, which at 300 resamples is below the resolution of the order statistic that
+produced it. They are counted — the rule was fixed before the data was read — and
+flagged.
+
+**One cell has a supported margin with room to spare:** `CIC+CTU → CIC`,
+`state+hidden`, test. AP **0.1654** against `noised_persistence`'s 0.0994, margin
+**+0.0660 [+0.0235, +0.1296]** over 1,742 episode clusters at natural prevalence
+0.00417. It is the same cell §3.44 singled out on point estimates, and it is the
+only one in the matrix that survives a paired interval.
+
+The previous answer here — +0.0331 [+0.000203, +0.0551] over `persistence_rollout`
+(§3.5) — still stands as measured but is superseded as *the* answer: it is CTU
+**validation**, which is where the operating point is chosen, and it is the
+uncalibrated arm.
+
+Everything else in the phase is a point estimate, a one-seed cell, or an interval
+that includes zero. The head ablation's three-regime replication (§3.12) and
+§3.29's three seeds are consistency evidence, not confidence intervals, and
+§3.49 is the case where consistency on one objective did not carry to the other.
 
 ## Q13 — What is still limiting NIDRA?
 
@@ -346,8 +402,9 @@ order they bind:
    rollout fed its untrained output back and it compounded to rms 2.03 by k=6,
    in slots that are exactly zero in the input and in the truth, carrying more
    magnitude than the real features. Every CTU and cross-dataset number in this
-   phase was produced under it and is provisional until re-scored. Run 8 is
-   unaffected — its regime drops nothing. *(§3.37, D145.)*
+   phase was produced under it, and all 28 cells have since been re-scored: 21 up,
+   7 down, no published direction flipped. Run 8 is unaffected — its regime drops
+   nothing. *(§3.37, §3.44, D145.)*
 
 What is *not* the limit, contrary to how §3.8 originally read it: attack-group
 separability. `ctu_4:c2` was written up as unreachable on a probe's ROC of

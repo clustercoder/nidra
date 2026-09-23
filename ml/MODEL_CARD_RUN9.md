@@ -107,7 +107,10 @@ The one thing the correction changed materially is the oracle anomaly, which it 
 4. **Adding CTU-13 helps on CIC as a direction, not as a quantity** (ROC 0.44 → 0.91
    uncalibrated, intervals overlapping on 15 positive clusters). **Adding CIC does not
    help on CTU.**
-5. **Every recorded number reproduces bit-identically** under pinned seeds.
+5. **Every recorded number reproduces bit-identically** under pinned seeds, and every
+   cell carries both a marginal and a **paired** episode-cluster interval — the latter
+   on the arm the project publishes, which had never been paired-bootstrapped before
+   (§3.50).
 6. **On CIC a fully decomposable risk head matches the opaque one.** Under the
    D145 fix, `state+logvar` (90 dims, all derived from the 45 named features)
    beats `state+hidden` (173 dims, reading the recurrent summary) on validation AP
@@ -117,6 +120,12 @@ The one thing the correction changed materially is the oracle anomaly, which it 
    benchmark evidence at all** — the benchmark is the evaluation that reversed the
    history-aware head's validation win, so this is a validated candidate and not a
    selection.
+7. **One cell has a margin over its strongest baseline that survives that interval with
+   room to spare:** `CIC+CTU → CIC`, `state+hidden`, test — AP 0.1654 against
+   persistence-plus-noise's 0.0994, margin **+0.0660 [+0.0235, +0.1296]** across 1,742
+   episode clusters at natural prevalence 0.00417. It is the only one of 28. Three more
+   clear zero by about 1e-05 and are flagged rather than claimed, three are negative,
+   and 22 span zero.
 
 ## What Run 9 has not established
 
@@ -156,7 +165,8 @@ Run 9 added one discipline worth naming: **pre-registration**. Six criteria were
 down before the measurement that would decide them, and **five refused the hypothesis
 they were written for** — the roadmap's §12 stage-balanced objective, three successive
 explanations for the oracle gap, and this phase's own headline claim. They are in
-`reports/RUN9_NEGATIVE_RESULTS.md`, which has 17 entries.
+`reports/RUN9_NEGATIVE_RESULTS.md`, which has 18 entries — the largest category of
+which is not a failed idea but a measurement apparatus that produced a plausible number.
 
 ---
 
@@ -167,6 +177,7 @@ cd ml
 python -m nidra.scripts.reproduction_check --runs experiments/runs --out reports/run9/reproduction_check.md
 python -m nidra.scripts.mask_correction    --runs experiments/runs --out reports/run9/mask_correction.md
 python -m nidra.scripts.cross_dataset_scorecard --runs experiments/runs --out reports/run9/scorecard.md
+python -m nidra.scripts.margin_intervals   --runs experiments/runs --out reports/run9/margin_intervals.md
 ```
 
 Every experiment carries a provenance record under `experiments/runs/<label>/`. The full

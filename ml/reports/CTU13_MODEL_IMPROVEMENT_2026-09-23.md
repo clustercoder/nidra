@@ -51,11 +51,13 @@ The findings that later sections depend on, in the order they bind:
 | 6 | The history-aware head **could not be served at all** until D141, and once served, SHAP over the 45 named features attributes a risk of 1.00 to nothing larger than 0.0003. The AP gain costs the project's explainability. | §3.20 |
 | 7 | The history-aware head is also the **worse-calibrated** one, and the only within-dataset arm whose calibrated score loses to predicting the prevalence and never moving. Second cost on the same candidate. | §3.23 |
 | 7b | **Stage B, three seeds on the forecast benchmark:** the history-aware head halves false alarms and wins F1 — and its within-host ROC *falls* (0.816 → 0.697) while its margin over persistence is −0.0100 [−0.0342, +0.0034]. It wins the alert, not the forecast. A GRU classifier on identical rows beats both. | §3.29, §3.32 |
-| 8 | **The oracle is not an upper bound on the deployed system** — beaten in 11 of 28 cells even by the uncalibrated sampled arm. ~~Every "% of oracle" statement has to be against the deterministic arm.~~ *Withdrawn in §3.40: the deterministic arm is below chance in 12 of 24 cells and cannot serve as a reference.* Two cells break the bound and remain unexplained. | §3.24, §3.26, §3.27, §3.40 |
+| 8 | **The oracle is not an upper bound on the deployed system** — beaten in 11 of 28 cells before the D145 fix and **17 of 28 after it**, by the uncalibrated sampled arm. ~~Every "% of oracle" statement has to be against the deterministic arm.~~ *Withdrawn in §3.40: the deterministic arm is below chance in 12 of 24 cells and cannot serve as a reference.* Four explanations tested, three pre-registered, all refuted; the anomaly is open. | §3.24, §3.26, §3.27, §3.40, §3.44, §3.45 |
 | 9 | **The rollout manufactured state in features that carry no gradient.** The transition loss masks dropped features, so the network is untrained there; the rollout fed that output back, compounding to rms 2.03 by k=6 in slots that are exactly zero in the input and in the truth — more magnitude than the real features carry. Every CTU and cross-dataset number in this report was produced under it. Run 8 is unaffected. | §3.37 |
 | 10 | **All 28 recorded cells reproduce bit-identically**, and the re-run took confidence-interval coverage from 6 of 28 to 28 of 28. | §3.36 |
 | 11 | On CIC the **decomposable `state+logvar` head reaches 99.1%** of the history-aware head, against 14% on CTU — so finding 6's explainability cost is dataset-dependent, not intrinsic. One seed, and the arm most exposed to finding 9. | §3.38 |
 | 12 | **On an unseen attack family (Neris withheld) the world model loses to persistence** — 0.717 against 0.772 — while its within-host ROC is 0.949 across ten infected hosts. | §3.39 |
+| 13 | **The phase's headline claim did not replicate on the forecast benchmark.** §3.29's own three-seed weights fail a bar pre-registered before the run — one split won, one lost — and the per-state head wins ROC on both, on holdout 0.912 against 0.587. §36 item 7 is answered `state`, the Run 8 architecture. | §3.47, §3.49, D146 |
+| 14 | **One cell of 28 has a margin over its strongest baseline that survives a paired interval with room to spare** — `CIC+CTU → CIC`, `state+hidden`, test, +0.0660 [+0.0235, +0.1296]. Three more clear zero by ~1e-05 and are flagged; three are negative; 22 span it. The published arm had never been paired-bootstrapped at all. | §3.50 |
 
 ---
 
@@ -3170,3 +3172,78 @@ the Run 8 architecture this phase set out to improve on.** That is the answer th
 measurements support today, and the honest form of it is that the phase's
 headline improvement is an improvement on the objective the head is trained
 against and not on the objective the system is evaluated against.
+
+### 3.50 A paired interval on the arm the project actually publishes (§33, §36 item 21, Q12)
+
+Item 21 was marked done when the 28-cell re-run took interval coverage from 6/28
+to 28/28. Those are **marginal** intervals — each system's own AP, bootstrapped
+over episode clusters. The question §32 item 10 and Q12 ask is different: is the
+*margin* over the baselines supported, or is it noise? `benchmark.py` answers
+that in `attribution_detection`, and every pair in it starts from
+`world_model` — the uncalibrated single-readout arm.
+
+**The arm the project publishes has never had a paired interval.**
+`world_model_calibrated` pools ~200 trajectories through a per-horizon Platt
+layer at a validation-frozen threshold; it is the number in every table and in
+the scorecard, and `ATTRIBUTION_PAIRS` does not contain it. So "is the
+improvement statistically supported?" was being answered about a different
+system from the one being reported. That is the same class of gap as §3.31,
+where the published arm was missing from `BOOTSTRAP_SYSTEMS`, and it was found
+the same way: by asking which arm a number is about rather than assuming.
+
+It does not need a re-run. The benchmark writes `benchmark_scores.npz` beside
+every `benchmark.json` with the per-row scores, weights, clusters and labels, so
+the paired bootstrap recomputes offline in 47 s across all 28 cells
+(`nidra/scripts/margin_intervals.py`, 24 tests). The baseline is chosen **per
+cell as the strongest one in that cell** — against a fixed baseline a cell could
+win by beating whichever rival happened to be weak there.
+
+**Result: 3 of 28 intervals exclude zero above, 3 below, 22 span it.**
+
+And the counted six do not mean what the count suggests. Five of them clear zero
+by less than 0.001, three of those by about 1e-05 — at 300 resamples the
+percentile endpoint is an order statistic of the resampled differences, and a
+gap that small is below the resolution that produced it. The verdict rule was
+`ci_low > 0`, fixed before the data was read, and it is applied as written rather
+than rewritten now; the knife-edge cells are flagged instead.
+
+| cell | split | published AP | strongest baseline | its AP | margin | 95% CI | |
+|---|---|---:|---|---:|---:|---|---|
+| cic2ctu_state | holdout | 0.0370 | noised_persistence | 0.0340 | +0.0030 | [+1.4e-05, +0.0152] | knife edge |
+| comb2cic_state | test | 0.1514 | noised_persistence | 0.1205 | +0.0309 | [+0.0001, +0.0812] | knife edge |
+| **comb2cic_state+hidden** | **test** | **0.1654** | noised_persistence | 0.0994 | **+0.0660** | **[+0.0235, +0.1296]** | |
+| cic2ctu_state+hidden | test | 0.0087 | noised_persistence | 0.0117 | −0.0030 | [−0.0053, −0.0005] | knife edge |
+| cic2ctu_state+hidden | holdout | 0.0157 | noised_persistence | 0.0172 | −0.0015 | [−0.0059, −1.6e-05] | knife edge |
+| ctu2cic_state+hidden | test | 0.0029 | gbdt_current_state | 0.0146 | −0.0117 | [−0.0376, −0.0003] | knife edge |
+
+**So one cell in twenty-eight has a supported margin with room to spare, and it
+is the cell §3.44 already singled out:** `CIC+CTU → CIC`, `state+hidden`, test.
+AP 0.1654 against `noised_persistence`'s 0.0994, margin +0.0660 [+0.0235,
++0.1296], 1,742 episode clusters, natural prevalence 0.00417. That result was
+previously stated as a point estimate against a point estimate. It now has a
+paired interval that excludes zero by 0.0235, and it is the only one in the
+matrix that does.
+
+**This is the sharpest statement of the phase's conclusion available, and it
+cuts both ways.** Against the model: on 22 of 28 cells the margin over the best
+baseline is indistinguishable from zero, and on three it is negative. For the
+model: the one cell that survives a paired interval is a real result, not an
+artifact of pooling or of a favourable readout — combined training evaluated on
+CIC beats persistence-plus-noise by a margin the episode bootstrap can see.
+
+**What it does to Q12.** Q12 previously reported exactly one supported interval,
+from §3.5, measured on CTU *validation* with the uncalibrated arm. That number
+stands but is superseded as the answer: it was validation, and validation is
+where the operating point is chosen. The answer is now this table, on the
+published arm, with test and holdout separated out.
+
+**What it does not do to item 7.** Three of the six counted cells are
+`state+hidden` arms and two of those three are *losses*. The one clear win is a
+`state+hidden` cell, on AP, which is the axis §3.47 and §3.49 already found it
+leads on and §32 ranks below generalisation and ranking quality. One cell of
+twelve does not move a call made on 11-of-12 ROC and 7-of-12 baseline-clearing,
+and it is recorded here rather than argued away.
+
+```bash
+python -m nidra.scripts.margin_intervals --runs experiments/runs --out reports/run9/margin_intervals.md
+```
