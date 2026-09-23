@@ -54,4 +54,4 @@ warning on CTU (16), the head fusion attempt (23), the Δ=15 direction (23), the
 decomposable-component direction on CTU (23, §3.22), `context_noise` (23), and
 uncertainty as a head input (23).
 
-**Test count:** **735 passing** (`pytest tests/ -q`, full suite), up from Run 8's 704. Refreshed from an actual run rather than quoted from memory.
+**Test count:** **743 passing** (`pytest tests/ -q`, full suite), up from Run 8's 704. Refreshed from an actual run rather than quoted from memory.
