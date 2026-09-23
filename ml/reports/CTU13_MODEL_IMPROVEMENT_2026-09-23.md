@@ -2901,3 +2901,44 @@ No fifth hypothesis is offered here. §3.27 and this section are two cases of an
 explanation for §3.24 being written down and then refused by its own criterion,
 and a third guess without a new measurement behind it would be the thing those
 two sections exist to discourage.
+
+### 3.46 §3.34's diagnosis re-measured under the D145 fix (D144 revised)
+
+§3.34 is the phase's central mechanical result and it was measured on a rollout
+that was manufacturing state in 15 of 45 feature slots. The phantom compounds
+with horizon and feeds back through the GRU, so it could have been inflating the
+very quantity the section turns on — how far the rollout moves the hidden state.
+Re-measured on identical rows (`ctu_heads__state+hidden`, val, n=1,483).
+
+| quantity | before the fix | after | verdict |
+|---|---|---|---|
+| hidden relative divergence, k=1 → k=6 | 40% → 62% | **39% → 54%** | the phantom was inflating the far end |
+| head's answer, positives (composite mean) | 0.28% | **0.36%** | unchanged in kind |
+| composite correlation, positives only | 0.9910 | **0.9817** | unchanged in kind |
+| head-layer gain on the rollout's displacement | 0.0909 | **0.0962** | |
+| the same on a random displacement of equal norm | 0.0845 | **0.0835** | |
+| **ratio** | **1.08×** | **1.15×** | still the null |
+
+**The conclusion is unchanged and two of its numbers are not.** The rollout moves
+the hidden state by about half, the head's answer moves by a third of a percent,
+and the head's first layer is no more sensitive to that displacement than to
+noise of the same size — 1.15× rather than 1.08×, which is a larger margin over
+the null but nowhere near a coupling. The structural reason given in §3.34 stands:
+a head that trains on observed states and freezes has no mechanism to become
+sensitive to where a rollout displaces them.
+
+**One observation in D144 does not survive and is withdrawn.** D144 recorded that
+"the benign composite mean halves under the model rollout (0.00412 → 0.00201)
+while the attack mean is unchanged", offered as a real effect that AP cannot see.
+Under the fix the benign means are **0.00672 against 0.00796** — a 19% difference,
+in the opposite direction, and not a halving. That observation was an artifact of
+the phantom features and should not have been recorded as an effect of the
+transition model. It was already flagged as "NOT to be reported as a false-alarm
+improvement"; it is now withdrawn entirely.
+
+The upper end of the divergence moving 62% → 54% is worth keeping in view for a
+different reason: it is the clearest single illustration that D145 inflated a
+quantity nobody was looking at it to inflate. Nothing in §3.33's pre-registered
+criterion turned on the difference — the criterion was 10% and both numbers clear
+it by a factor of four — so the pre-registered conclusion is unaffected. It would
+not have been if the criterion had been set at 55%.

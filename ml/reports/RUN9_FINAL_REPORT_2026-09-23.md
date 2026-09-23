@@ -61,12 +61,14 @@ and higher precision (0.818 vs 0.663).
 
 **2.3 The transition model and the frozen risk head are barely coupled, and this is
 measured rather than inferred.** This is the phase's most important result (§3.33,
-§3.34, D144). Over a six-step rollout the encoder hidden state moves **40–62%**
-relative — so the persistence ablation genuinely bites — and the head's answer moves
-**0.28%** on the positives (composite correlation 0.9910). The head's first layer
-responds to the rollout's actual displacement with a gain of 0.0909, and to a
-**random** displacement of the same norm with 0.0845: a ratio of **1.08×**. The head
-is no more sensitive to the transition model than to noise of equal size.
+§3.34, §3.46, D144). Numbers below are re-measured under the D145 fix, because the
+original was taken on a rollout manufacturing state in 15 of 45 slots. Over a
+six-step rollout the encoder hidden state moves **39–54%** relative — so the
+persistence ablation genuinely bites — and the head's answer moves **0.36%** on the
+positives (composite correlation 0.9817). The head's first layer responds to the
+rollout's actual displacement with a gain of 0.0962, and to a **random**
+displacement of the same norm with 0.0835: a ratio of **1.15×**. The head is no
+more sensitive to the transition model than to noise of equal size.
 
 The reason is structural. The risk head trains on *observed* states and freezes, so
 its readout separates observed hidden states and has no mechanism to become
@@ -99,7 +101,9 @@ phase could have reported something false.
 | The oracle was compared against a differently-read system | "% of oracle" exceeded 1 in 7 of 14 cells | §3.24 |
 | A scaler from a different feature regime loads silently | dropped features are zeroed, not removed; AP came out 2.9× off | §3.28, D142 |
 | Transfer configs cannot express the head variant | six matrix cells never ran | §3.30, D143 |
-| Queues wrote `rc=$?` after a pipeline | three crashes logged `rc=0`; "all 42 exited zero" withdrawn | §3.30 |
+| Queues wrote `rc=$?` after a pipeline | three crashes logged `rc=0`; "all 42 exited zero" withdrawn — **and it recurred** in a script written after this was documented | §3.30, NR 17 |
+| The rollout manufactured state in features carrying no gradient | phantom rms 2.03 by k=6 against real features at 0.69, reaching the frozen head and head *training*; every CTU and cross-dataset number was produced under it | §3.37, D145 |
+| A fix wired per call site instead of at the constructor | the re-run returned a bit-identical number and read as "unaffected by D145" | §3.37, NR 15 |
 
 **2.7 Serving.** The history-aware head costs nothing measurable to serve: 68.2 ms
 against 70.4 ms median, ratio 1.033×, and a decomposition put the two at 71.5 and
