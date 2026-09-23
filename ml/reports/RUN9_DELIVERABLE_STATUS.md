@@ -40,7 +40,7 @@ source file is uncommitted.
 | 23 | ablations | ✅ | log §4, §3.12, §3.22, §3.32 — including the persistence ablation landing **negative** for the candidate head |
 | 24 | failed experiments and what they taught us | ✅ living | `RUN9_NEGATIVE_RESULTS.md` (14 entries), incl. 13 (a conclusion that was right on CTU and wrong in general) and 14 (D145) |
 | 25 | hardware / training time | ✅ | log §3.25 — 42 runs, 11.09 h CPU occupancy, all rc=0 |
-| 26 | serving latency | ⚠️ measured 1-member, contended | log §3.21 — the 5-member number is an estimate and must be re-measured |
+| 26 | serving latency | ⚠️ measured 1-member, contended | log §3.21 — the 5-member number is an estimate and must be re-measured on an idle machine. D145's mask adds nothing measurable: masked is slower in 19 of 40 paired calls, ratio of minima 0.982 |
 | 27 | test count | ✅ refreshed below | see footer |
 | 28 | updated model card | ⏳ | §30 defers it until the architecture is selected (item 7) |
 | 29 | updated README / results docs | ⏳ | same gate |

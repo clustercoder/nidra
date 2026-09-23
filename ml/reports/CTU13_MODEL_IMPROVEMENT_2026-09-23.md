@@ -1370,6 +1370,29 @@ stochastic samples toward 100 before touching the ensemble size — and it appli
 equally to both heads, since the rollout is the term that scales and the head is
 not why.
 
+#### D145's mask costs nothing measurable (added after §3.37)
+
+The fix adds an elementwise multiply on `nxt`, `mu` and `logvar` at every
+rollout step. Paired A,B,A,B under the same contention as above, one member,
+`n_samples=200`, 13 dropped slots of 45:
+
+| arm | median | p95 | min |
+|---|---|---|---|
+| masked | 65.22 ms | 69.46 ms | 56.26 ms |
+| unmasked | 64.82 ms | 70.11 ms | 57.29 ms |
+
+Ratio of medians 1.006; ratio of **minima** 0.982, i.e. the masked arm is
+nominally faster on the least-contended sample. Paired difference median
+−0.08 ms, 5th–95th −6.4 to +6.9 ms. Sign test: **masked is slower in 19 of 40
+pairs**, which is a coin flip.
+
+Worth recording how this looked at fifteen pairs, because it is the same trap as
+everywhere else in this log: the ratio of medians was **1.063** and would have
+been reported as a 6% cost. What said otherwise before the longer run was that
+the p95 ordering *reversed* between the arms and the minima agreed to 0.13 ms —
+a real 6% cost does not do either. Fifteen paired samples is not enough to
+resolve a difference smaller than this machine's load noise.
+
 ### 3.22 The explainability loss may not be a component choice (§5, §27, §31 Q14)
 
 §3.20 argued that a head driven by the encoder hidden state costs the project its
