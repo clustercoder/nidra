@@ -1587,3 +1587,58 @@ queue markers carry labels with spaces (`END head ablation rc=0 …`), and a
 The dropped runs were the ones with the most descriptive names. Corrected before
 publication; recorded because a log parser that under-reports without erroring
 is the same failure mode as a metric that looks plausible.
+
+### 3.26 One of §3.24's two candidates is eliminated, and the survivor is a warning sign
+
+§3.24 left two cells breaking even the readout-matched oracle bound, and named
+two candidate mechanisms without testing either. One is now eliminated with no
+new compute.
+
+**It is not the horizon reduction.** The composite takes `max` over k, so a
+smoother predicted trajectory could win on the max while losing at every
+individual horizon. It does not: in both anomalous cells the deterministic
+system beats the oracle at **6 of 6 individual horizons**.
+
+| arm | split | det k=1 | det k=6 | k6/k1 | oracle k=1 | oracle k=6 | det > oracle |
+|---|---|---|---|---|---|---|---|
+| CIC → CIC, `state` | test | 0.096 | 0.017 | 0.18 | 0.100 | 0.098 | 0/6 |
+| CTU → CTU, `state` | test | 0.202 | 0.006 | 0.03 | 0.197 | 0.200 | 1/6 |
+| **comb → CIC, `state`** | **test** | 0.081 | **0.105** | **1.29** | 0.053 | 0.051 | **6/6** |
+| **comb → CTU, `state`** | **holdout** | 0.212 | **0.431** | **2.04** | 0.202 | 0.217 | **6/6** |
+| *(the other 11 cells)* | | | | 0.01 – 0.68 | | | 0–4/6 |
+
+Two things in that table are worth separating.
+
+**The oracle is flat in k, everywhere.** 0.100 → 0.098, 0.197 → 0.200, 0.202 →
+0.217. That is a good sign about the oracle's construction: the frozen head's
+ceiling does not depend on how far ahead the state is, so a forecast approaching
+it should decay toward it, never through it.
+
+**The forecast's AP RISES with horizon in exactly those two cells** — 1.29× and
+2.04× from k=1 to k=6 — against 0.01–0.68× in the other thirteen. Every normal
+cell decays as forecast error accumulates. These two improve.
+
+A forecast that gets more accurate the further ahead it looks is not forecasting.
+The rollout is recursive, `S[t+k] = S[t+k-1] + mu`, so over six steps it drifts
+toward whatever the transition dynamics attract to; if that attractor separates
+infected hosts from benign ones better than the real states do, AP rises with k
+and passes the oracle. That is the surviving candidate and it is consistent with
+§3.11 and §3.20: a model whose advantage is recognising *which host this is*
+would look exactly like this, because host identity does not decay with horizon
+while a genuine precursor does.
+
+**This is not established.** It is two cells of fifteen, one seed each, and the
+same configuration behaves normally on its other split (`comb → CIC` holdout,
+k6/k1 = 0.08). It could be seed noise. What *is* established is that the
+reduction is not the explanation and that the predicted states are more
+separable than the true ones at every horizon in those cells.
+
+Pre-registering the test, so the criterion is not chosen after seeing the
+result: measure the **rollout's terminal drift** — the mean distance between
+`S_hat[t+6]` and `S_t`, per class — on the combined model and on a CIC-only
+model. If the combined model's predicted states collapse toward two
+class-dependent attractors while the CIC-only model's do not, the attractor
+account is supported. If drift is comparable and the AP rise persists, it is not,
+and the two cells stay unexplained. Either outcome is reportable; the direction
+this would push the project is toward §5's trajectory-aware heads and away from
+reading rising-with-k AP as forecasting skill.
