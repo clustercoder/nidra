@@ -81,6 +81,19 @@ head reaches within-host ROC 0.9245 against 0.8256 — the gain is reproduced
 inside the host, where identity is constant and only timing is left.
 *(§3.11, D130.)*
 
+**Stage B, three seeds on the forecast benchmark, does not settle it either way
+and adds a third reading.** The head-training gain replicates cleanly (+0.172,
+no overlap, 5.6× more stable — §3.29) and the operating point improves
+decisively (§3.32). But on that same run the within-host ROC *falls*, 0.816 →
+0.697, and the world model's margin over persistence goes to **−0.0100
+[−0.0342, +0.0034]** — so whatever the history-aware head fixed, it did not fix
+it by forecasting. The transition step contributes nothing measurable for it.
+
+Run 8's failure was a per-state head that could not read what a GRU could. The
+history-aware head reads it. What it does with it, on CTU, is recognise the host
+better rather than the moment — and a GRU classifier on the identical rows still
+scores higher than either (Q7).
+
 Two limits on that. Both figures are validation, where each corpus has exactly
 one infected host, so neither can speak to the ten-host test splits. And on CIC
 that one host is `172.16.0.1`, the external attack machine, not a compromised
@@ -102,6 +115,18 @@ different way.** Aggregate: yes, in all three regimes. Within-host: yes clearly
 on CIC, marginally on CTU. On the rows where the state is provably
 uninformative, the history-aware head reaches 58× the state-only ceiling and
 every unit of that is host recognition. *(§3.10, §3.11, §3.12.)*
+
+**Stage B sharpens this into a specific trade, measured on one split.** On the
+forecast benchmark at three seeds, CTU validation, the history-aware head
+delivers the better *alert* — F1 0.608 against 0.507, false alarms halved from
+9.26/h to 4.79/h at higher recall and precision — and the worse *ordering*: ROC
+0.748 against 0.775, and within-host ROC **0.697 against 0.816**. The Run 8
+per-state head answers the timing question better on the one host validation
+has. *(§3.32.)*
+
+So "outperform" depends on the axis, and the two axes disagree in a way that is
+not noise: aggregate up, within-host down is the host-identity signature, and it
+now appears on the run that selects the architecture rather than on a probe.
 
 ## Q7 — Does the world model outperform a strong GRU sequence classifier?
 
