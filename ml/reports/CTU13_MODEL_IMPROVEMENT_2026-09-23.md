@@ -1429,3 +1429,61 @@ ensemble is five seeds, and only the retained outputs accumulate across members
 which is a caller argument defaulting to 128 and scales the peak almost
 linearly. Nothing here needs changing today; it needs to be known before someone
 sets `chunk` from a config file.
+
+### 3.23 Calibration, and the constant that makes it readable (§36 item 19, §32 criterion 8)
+
+Every benchmark has been writing a calibration block since Run 8 and nothing was
+reading it. It now reaches both the per-run tables and the scorecard, with one
+column that changes how the rest of them read.
+
+At these prevalences — 0.0003 to 0.007 — the Brier score is dominated by the
+negatives. A model that predicts 0.004 for every row and never moves scores
+p(1−p) = 0.00415, which *looks* excellent. So the tables carry that constant
+next to the model's Brier, and the comparison is not always flattering:
+
+| training → eval | split | Brier raw | ECE raw | Brier cal. | ECE cal. | constant | beats it? |
+|---|---|---|---|---|---|---|---|
+| CIC → CIC, `state` | test | 0.0872 | 0.266 | 0.00402 | 0.046 | 0.00415 | yes |
+| CIC → CIC, `state` | holdout | 0.0886 | 0.277 | 0.00030 | 0.050 | 0.00034 | yes |
+| **CIC → CIC, `state+hidden`** | test | 0.0633 | 0.211 | **0.00565** | 0.048 | 0.00415 | **no** |
+| **CIC → CIC, `state+hidden`** | holdout | 0.0653 | 0.227 | **0.00039** | 0.050 | 0.00034 | **no** |
+| CIC → CTU, `state` | test | 0.1332 | 0.303 | 0.01901 | 0.056 | 0.00743 | **no** |
+| CIC → CTU, `state` | holdout | 0.1153 | 0.288 | 0.01571 | 0.059 | 0.00408 | **no** |
+| comb → CIC, `state` | test | 0.0038 | 0.050 | 0.00407 | 0.046 | 0.00415 | yes |
+| comb → CIC, `state+hidden` | test | 0.0038 | 0.046 | 0.00404 | 0.046 | 0.00415 | yes |
+| comb → CTU, `state` | test | 0.0093 | 0.058 | 0.00735 | 0.043 | 0.00743 | yes |
+| CTU → CTU, `state` | test | 0.0067 | 0.047 | 0.00706 | 0.044 | 0.00743 | yes |
+
+Three things fall out, and two of them matter for the architecture decision.
+
+**Platt calibration is doing real work.** Raw ECE on the CIC-trained arms is 0.21
+to 0.30 and calibration takes it to 0.046–0.050 everywhere. The per-horizon Platt
+layer is not decoration.
+
+**The history-aware head is the worse-calibrated one.** On the same rows, same
+split, same calibration procedure, `state+hidden` scores 0.00565 against `state`'s
+0.00402 on CIC test, and 0.00039 against 0.00030 on holdout — and it is the only
+within-dataset arm that loses to the constant. §32 ranks calibration eighth of
+ten, so this does not by itself overturn the AP gain, but it is the second cost
+the head has now been shown to carry, after §3.20's explainability. Both should
+be on the table when the architecture is chosen, not discovered afterwards.
+
+**Training on both corpora produces a far better-calibrated raw score.** The
+combined arms' *raw* ECE is 0.046–0.058, where CIC-only raw is 0.211–0.277 — the
+combined model's uncalibrated output is already about as good as the CIC-only
+model's *calibrated* one. That is a point in favour of the combined regime that
+AP alone does not show, and it belongs in the Q2/Q3 answers alongside the AP
+comparison rather than in place of it.
+
+The transfer arms are the worst calibrated (CIC → CTU raw ECE 0.303, calibrated
+Brier 2.6× the constant), which is the same failure §3.18 measured as 208 false
+alarms an hour from the other direction: a threshold and a calibration fitted on
+one corpus's score distribution do not mean the same thing on another's.
+
+A caveat that travels with the whole table: **Brier at extreme imbalance is a
+weak instrument**, and "beats the constant" is a floor, not a standard. A model
+can rank well and score badly here, which is exactly why AP is the headline
+metric and this is a supporting one. What it does establish is that a
+`state+hidden` probability shown to an operator as a probability would be less
+trustworthy than a `state` one, and that is a deployment fact rather than a
+statistical artefact.

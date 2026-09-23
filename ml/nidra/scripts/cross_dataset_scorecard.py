@@ -27,6 +27,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
+# Shared with the per-run table rather than reimplemented: an ECE weighted by
+# sample count instead of population weight is a different number, and two
+# copies of that decision would eventually disagree.
+from nidra.scripts.report_tables import _base_rate, _ece
+
 logger = logging.getLogger(__name__)
 
 
@@ -56,6 +61,32 @@ def read_benchmark(path: Path) -> dict | None:
     except json.JSONDecodeError:
         logger.warning("%s is not readable JSON", path)
         return None
+
+
+def _calibration_fields(m: dict) -> dict:
+    """Brier and ECE for both arms, plus the constant a lazy predictor scores.
+
+    §36 item 19 and §32 criterion 8. The constant column is not decoration: at
+    these prevalences (0.0003 to 0.007) Brier is dominated by the negatives, so
+    a score near zero says almost nothing on its own and several arms here do
+    NOT beat predicting the prevalence and never moving. Reusing report_tables'
+    helpers so the scorecard and the per-run table cannot drift apart.
+    """
+    cal = m.get("calibration_published_label")
+    if not cal:
+        return {"brier_raw": None, "ece_raw": None, "brier_calibrated": None,
+                "ece_calibrated": None, "base_rate_from_bins": None, "brier_constant": None}
+    raw, cald = cal.get("raw") or {}, cal.get("calibrated") or {}
+    rel = cald.get("reliability") or raw.get("reliability") or []
+    p_bar = _base_rate(rel)
+    return {
+        "brier_raw": raw.get("brier_natural"),
+        "ece_raw": _ece(raw.get("reliability") or []),
+        "brier_calibrated": cald.get("brier_natural"),
+        "ece_calibrated": _ece(cald.get("reliability") or []),
+        "base_rate_from_bins": p_bar,
+        "brier_constant": p_bar * (1 - p_bar),
+    }
 
 
 def row_for(record: dict, system: str = "world_model_calibrated") -> dict:
@@ -105,6 +136,7 @@ def row_for(record: dict, system: str = "world_model_calibrated") -> dict:
         # machine". Within-host ROC can, and it is prevalence-independent, so
         # it is the one column that compares honestly across these regimes.
         **_host_identity_fields(m, system),
+        **_calibration_fields(m),
     }
 
 
@@ -184,6 +216,34 @@ def main() -> None:
                       "the column that does: on the infected host alone, does the system order the attack "
                       "windows above that host's own benign ones? It is prevalence-independent and is the "
                       "only column here that compares fairly across datasets."]
+
+    # Calibration gets its own table rather than three more columns on a table
+    # that is already twenty wide — and because it answers a different question.
+    # AP asks whether the ordering is right; these ask whether the number means
+    # what it says. §36 item 19, §32 criterion 8.
+    if any(r.get("brier_calibrated") is not None for r in raw.values()):
+        lines += ["", "### Calibration", "",
+                  "| Training | Evaluated on | split | Brier raw | ECE raw | Brier calibrated | "
+                  "ECE calibrated | base rate | Brier of that constant | beats it? |",
+                  "|---|---|---|---:|---:|---:|---:|---:|---:|:--:|"]
+        for train, evalset, label in regimes:
+            for split in splits:
+                r = raw.get(f"{label}/{split}")
+                if r is None or r.get("brier_calibrated") is None:
+                    continue
+                cb, const = r["brier_calibrated"], r["brier_constant"]
+                beats = "—" if const is None or const != const else ("yes" if cb < const else "**no**")
+                lines.append(
+                    f"| {train} | {evalset} | {split} | {_f(r['brier_raw'], 5)} | {_f(r['ece_raw'], 4)} | "
+                    f"{_f(cb, 5)} | {_f(r['ece_calibrated'], 4)} | {_f(r['base_rate_from_bins'], 5)} | "
+                    f"{_f(const, 5)} | {beats} |")
+        lines += ["", "ECE is weighted by each bin's **population** weight, not its sampled row count — the "
+                      "evaluation subsamples negatives, so those are different numbers. At these prevalences "
+                      "Brier is dominated by the negatives, so the last two columns are the ones that make it "
+                      "readable: predicting the base rate for every row and never moving scores p(1−p), and a "
+                      "**no** in the final column means the calibrated score does not beat that. It is not a "
+                      "verdict on the ranking, which is what AP measures — but a probability that loses to a "
+                      "constant should not be displayed to an operator as a probability."]
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

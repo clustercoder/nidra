@@ -155,3 +155,52 @@ def test_a_not_run_row_has_the_same_column_count_as_a_real_one(tmp_path, monkeyp
     assert rows[0].count("|") == rows[1].count("|")
     header = next(l for l in out.read_text().splitlines() if l.startswith("| Training"))
     assert header.count("|") == rows[0].count("|")
+
+
+def _with_calibration(record, raw_brier=0.063, cal_brier=0.0056):
+    """The calibration block as the benchmark actually writes it: an empty bin
+    carries `null`, not a zero frequency."""
+    record["metrics"]["calibration_published_label"] = {
+        "raw": {"brier_natural": raw_brier, "reliability": [
+            {"bin_center": 0.05, "n": 900, "weighted_n": 9900.0, "observed_frequency_natural": 0.002},
+            {"bin_center": 0.95, "n": 10, "weighted_n": 100.0, "observed_frequency_natural": 0.95},
+            {"bin_center": 0.45, "n": 0, "weighted_n": 0.0, "observed_frequency_natural": None}]},
+        "calibrated": {"brier_natural": cal_brier, "reliability": [
+            {"bin_center": 0.05, "n": 990, "weighted_n": 9950.0, "observed_frequency_natural": 0.006},
+            {"bin_center": 0.95, "n": 5, "weighted_n": 50.0, "observed_frequency_natural": 0.90}]}}
+    return record
+
+
+def test_the_row_carries_brier_and_ece_for_both_arms():
+    """§36 item 19 and §32 criterion 8. Without these in the scorecard, the
+    only calibration evidence lives inside per-run benchmark JSON."""
+    r = row_for(_with_calibration(_record()))
+    assert r["brier_raw"] == pytest.approx(0.063)
+    assert r["brier_calibrated"] == pytest.approx(0.0056)
+    assert r["ece_raw"] == pytest.approx((9900 * 0.048 + 100 * 0.0) / 10000)
+    assert r["ece_calibrated"] is not None
+
+
+def test_the_constant_base_rate_brier_travels_with_them():
+    """A Brier of 0.0056 at a prevalence of 0.006 is not a good Brier, and the
+    reader cannot know that without the constant a lazy predictor would score."""
+    r = row_for(_with_calibration(_record()))
+    p = (9950 * 0.006 + 50 * 0.90) / 10000
+    assert r["base_rate_from_bins"] == pytest.approx(p)
+    assert r["brier_constant"] == pytest.approx(p * (1 - p))
+
+
+def test_a_run_without_calibration_gets_none_not_zero():
+    r = row_for(_record())
+    assert r["brier_raw"] is None and r["ece_calibrated"] is None and r["brier_constant"] is None
+
+
+def test_an_all_empty_reliability_does_not_report_a_confident_zero():
+    rec = _record()
+    rec["metrics"]["calibration_published_label"] = {
+        "calibrated": {"brier_natural": 0.1, "reliability": [
+            {"bin_center": 0.05, "n": 0, "weighted_n": 0.0, "observed_frequency_natural": None}]}}
+    r = row_for(rec)
+    assert r["brier_calibrated"] == pytest.approx(0.1)
+    assert r["ece_calibrated"] != r["ece_calibrated"]      # nan
+    assert r["brier_constant"] != r["brier_constant"]      # nan
