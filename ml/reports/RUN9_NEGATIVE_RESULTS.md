@@ -259,6 +259,47 @@ the hypothesis alive on a partial match.
 
 ---
 
+## 13. "The decomposable head is a dead end" — closed on CTU, wrong in general
+
+§3.22 read the CTU component table and concluded that Q13's explainability cost
+was probably intrinsic: `state+logvar` carried a seventh of what the hidden state
+carried, so there was no decomposable head to retreat to. The same section
+pre-committed to running the four missing CIC arms, on the reasoning that a
+negative should close a direction properly rather than leave it standing as an
+untested suggestion.
+
+The CIC arms ran. `state+logvar` reaches **0.7754 against `state+hidden`'s
+0.7825** — 99.1%, inside the ±0.047 seed spread — where CTU gave 14%.
+
+The negative result here is the *generalisation*, not the direction: "the AP gain
+and the explainability loss are the same thing" was true of the dataset it was
+measured on and false as a statement about the model. It had been written into
+Q13 and Q14 as a general limit. Both are revised.
+
+What made the difference was running the control on the other dataset. The
+conclusion was already written and would have survived unchallenged. *(§3.38.)*
+
+## 14. A defect, not an intervention: the rollout's phantom features
+
+Listed here because the rule is that nothing gets hidden, and because it
+invalidates numbers this log has already published rather than an idea it was
+considering.
+
+The transition loss masks dropped features, so the network is untrained on those
+outputs; the rollout fed them back and they compounded to rms 2.03 by k=6 — more
+magnitude than the real features, in slots that are exactly zero in both the
+input and the truth. Every CTU and cross-dataset number in this phase was
+produced under it.
+
+Two findings in this log are now suspect as stated. §3.24's "the oracle is not an
+upper bound" and the deterministic arm's below-chance ROC both have an obvious
+candidate explanation in the defect. Neither is confirmed: the phantom magnitude
+does not order the anomaly, and the largest phantom-to-real ratio belongs to a
+cell that does *not* beat its oracle. A pre-registered test is recorded in §3.37
+and the answer will land either way. *(§3.37, D145.)*
+
+---
+
 ## What this list is for
 
 Three of the six interventions were killed by a measurement that cost minutes

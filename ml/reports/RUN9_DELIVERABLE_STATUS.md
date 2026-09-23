@@ -28,17 +28,17 @@ source file is uncommitted.
 | 11 | CTU-only results | ⏳ | `q_cross2` running |
 | 12 | CIC→CTU results | ✅ measured | `xeval_cic2ctu_*`; written up at §3.18 |
 | 13 | CTU→CIC results | ✅ measured | `xeval_ctu2cic_*` |
-| 14 | combined results | ⏳ comb2cic holdout pending | `q_cross2` |
-| 15 | unseen-family results | ⏳ | `lofo_without_neris` queued in `q_tail` |
+| 14 | combined results | ✅ measured, ⚠️ provisional | all cells scored; Q2/Q3 at a forced common readout in §3.40. Every cell was produced under D145 and is provisional until re-scored |
+| 15 | unseen-family results | ✅ measured | Neris withheld: AP 0.717 [0.485, 0.860], within-host ROC 0.949 across 10 hosts — **and persistence reaches 0.772**. §3.39. GRU baseline missing from these cells |
 | 16 | onset / advance warning | ⚠️ answered, negatively | log §3.10, §3.15; Q1, Q10 |
 | 17 | state-forecast results | ✅ | log §2 |
-| 18 | attack-risk results | ⏳ | blocked on 10/11/14 |
+| 18 | attack-risk results | ✅ measured, ⚠️ provisional | the full matrix is in `reports/run9/`; §3.40 gives the fixed-readout comparison. D145 re-score outstanding |
 | 19 | calibration | ✅ | log §3.23; per-run table in `report_tables.py`, cross-arm table in the scorecard |
 | 20 | false alarms per hour | ✅ column fixed | log §3.18; `cross_dataset_scorecard.py` |
-| 21 | confidence intervals | ⚠️ | the published system was missing from `BOOTSTRAP_SYSTEMS` (§3.31); present from here on, and the 20 recorded cells are queued for re-run into `repro_*` |
-| 22 | oracle gap | ⚠️ | log §3.24 — the oracle is not an upper bound on the deployed system, and 2 of 14 cells break even the matched bound. Open, not resolved |
+| 21 | confidence intervals | ✅ | the published system was missing from `BOOTSTRAP_SYSTEMS` (§3.31). The 28-cell re-run took coverage from 6/28 to **28/28**, and every cell reproduced bit-identically (§3.36, `reports/run9/reproduction_check.md`) |
+| 22 | oracle gap | ⚠️ open, better specified | the oracle is beaten in 11 of 28 cells even by the uncalibrated sampled arm (§3.40 withdraws the deterministic arm as a reference — it is below chance in 12 of 24 cells). D145 is a pre-registered candidate mechanism with a falsification test pending (§3.37) |
 | 23 | ablations | ✅ | log §4, §3.12, §3.22, §3.32 — including the persistence ablation landing **negative** for the candidate head |
-| 24 | failed experiments and what they taught us | ✅ living | `RUN9_NEGATIVE_RESULTS.md` (11 entries) |
+| 24 | failed experiments and what they taught us | ✅ living | `RUN9_NEGATIVE_RESULTS.md` (14 entries), incl. 13 (a conclusion that was right on CTU and wrong in general) and 14 (D145) |
 | 25 | hardware / training time | ✅ | log §3.25 — 42 runs, 11.09 h CPU occupancy, all rc=0 |
 | 26 | serving latency | ⚠️ measured 1-member, contended | log §3.21 — the 5-member number is an estimate and must be re-measured |
 | 27 | test count | ✅ refreshed below | see footer |
