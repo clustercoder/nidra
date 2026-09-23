@@ -17,7 +17,21 @@ exists yet.
 
 ## Q1 — Does CTU-13 contain enough temporal precursor information to make genuine advance warning feasible?
 
-**Answered: no, not from the state.** Every pre-onset positive on CTU is a
+**Answered: no.** Two independent measurements say so. The infected host has
+emitted nothing for a median of 4.5 minutes (validation) or 47 minutes (train)
+before an attack begins, so no finer window recovers a precursor — the Δ=15
+idea is closed by measurement. And a probe fit on that host's own training rows
+and scored on its validation rows returns AP equal to the base rate and ROC of
+exactly **0.5000**: a constant, which is all any function can produce when every
+row it scores is the same vector. *(§3.15.)*
+
+CIC is not the same and must not be answered with it: in 83% of CIC validation
+onsets the host is active in the window immediately before the attack, and the
+same probe reaches **ROC 0.7500** there against a model at the floor. Most of
+that is `is_active` alone (0.6783), so the genuine precursor content is the gap
+between the two — real, and modest.
+
+The detail behind the CTU answer: Every pre-onset positive on CTU is a
 silent window — 71 of 71 on train, 84 of 84 on validation at `is_active == 0` —
 and most are at the exact silence floor, bit-identical to 1,026,383 and 47,650
 negatives respectively. Inside that stratum the best AP any function of the
@@ -113,7 +127,13 @@ without Neris (queued), and the two transfer arms `cic2ctu` and `ctu2cic`.
 
 ## Q10 — Does it produce genuine advance warning?
 
-**Answered for CTU: no, and the reason is in the data.** See Q1. The pre-onset
+**Answered for CTU: no, and the reason is in the data. On CIC: not yet, and
+there is a measured ceiling on how much it could.** CIC's pre-onset windows are
+non-empty and weakly separable (probe ROC 0.75, of which `is_active` alone
+gives 0.68) while the model sits at the prevalence floor — a quantified,
+actionable gap, and a small one. *(§3.15.)*
+
+For CTU, see Q1. The pre-onset
 rows carry no state information and the history-aware head answers them with
 the infected host's identity rather than the moment. *(§3.10, D129.)* Run 8
 reported Task B near the prevalence floor on CIC and attributed it to a scarcity
@@ -173,11 +193,14 @@ a fourth.**
 2. **The stage-aware risk objective**, pre-registered at §3.13. If criterion 1
    fails, the pooled objective is not the explanation and this direction closes
    — which is itself worth knowing.
-3. **Δ smaller than 60 s for the pre-onset window.** CTU's precursors are empty
-   at Δ=60 because the host is silent for the whole minute. Whether they are
-   empty at Δ=15 is an open, cheap-to-test question, and it is the only one of
-   the three that could change the Q1 answer.
+3. **Advance warning, pursued on CIC rather than CTU.** This replaces the Δ=15
+   idea, which was tested and withdrawn the same day it was written: CTU's host
+   is silent for minutes before onset, so no window size recovers a precursor.
+   CIC's pre-onset windows *are* non-empty and carry ROC 0.75 of separable
+   signal against a model at the floor. The ceiling is modest and most of it is
+   bare activity, so the honest framing of the work is closing a small measured
+   gap, not unlocking advance warning. *(§3.15.)*
 
 Ruled out by measurement rather than opinion: score fusion of the two frozen
 heads (§3.9), `context_noise` as a fix for the exposure mismatch (§3.6, D126),
-and uncertainty as a head input (§3.4).
+uncertainty as a head input (§3.4), and a finer Δ for CTU precursors (§3.15).

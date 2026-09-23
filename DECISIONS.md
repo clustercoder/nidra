@@ -1599,3 +1599,21 @@ traffic: on CTU that is an internal infected workstation, but on CIC train/val i
 attack box will attack is an easier and different problem from forecasting internal
 compromise, and CIC's validation figures must be read that way; CIC test is where the
 internal 192.168.10.x hosts appear.
+
+**D134 — a finer Δ cannot help CTU's precursors, and the advance-warning question belongs on
+CIC.** (2026-09-23) Before paying the cost of changing `window_delta` — which invalidates
+every trained artifact and every recorded metric — measure whether Δ=60 is actually rounding
+a precursor away. It is not. CTU's infected host has emitted nothing for a median of 4.5
+minutes (val) or 47 minutes (train) before an attack starts, max 21 hours; splitting a silent
+minute into silent quarter-minutes yields silent quarter-minutes. The direction is closed for
+one query's cost. A probe fit on that host's own TRAIN rows and scored on its VAL rows —
+same host, so identity is unavailable, forward in time, so nothing leaks — returns AP equal
+to the base rate and ROC of exactly 0.5000. Q1 is answered: the absence of advance warning on
+CTU is a property of the capture.
+CIC is the opposite and must not be answered with CTU's number: in 83% of its validation
+onsets the host is active in the window immediately before the attack (median gap 60 s, p90
+60 s), and the same probe reaches ROC 0.7500 where Run 8 reported Task B at the prevalence
+floor. So there IS something to find on CIC — but `is_active` alone reaches 0.6783 of it, so
+the genuine precursor content beyond bare activity is the gap between 0.75 and 0.68. Q14's
+Δ=15 direction is withdrawn and replaced by advance-warning work on CIC, with that modest
+ceiling stated up front rather than discovered later.

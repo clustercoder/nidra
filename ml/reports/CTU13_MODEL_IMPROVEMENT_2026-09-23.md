@@ -941,3 +941,70 @@ outside the victim network. Forecasting that the attack box is about to attack i
 different and easier problem than forecasting that an internal host has been
 compromised, so CIC's validation figures should be read with that in mind. CIC's
 *test* split is the one that includes internal `192.168.10.x` hosts.
+
+### 3.15 The Δ=15 direction is dead, and the advance-warning question belongs on CIC (§10, §31 Q1, Q10, Q14)
+
+§3.10 established that CTU's pre-onset windows are empty. The obvious follow-up
+was whether a finer window would recover a precursor that Δ=60 rounded away — and
+that is worth measuring before paying for it, since changing `window_delta`
+invalidates every trained artifact and every recorded metric in the project.
+
+**How long is the infected host silent before an attack starts?**
+
+| | onsets | silent windows before onset (median / mean / max) | seconds since last active (median / min / p90) |
+|---|---|---|---|
+| CTU train | 16 | 29 / 193.6 / 1254 | 2820 / 120 / 27060 |
+| CTU val | 23 | 3 / 7.3 / 56 | 270 / 120 / 780 |
+| CIC train | 13 | 0 / 19.2 / 188 | 90 / 60 / 2598 |
+| CIC val | 12 | **0** / 2.6 / 30 | **60** / 60 / 60 |
+
+**A finer Δ cannot help CTU.** The host has emitted nothing for a median of 4.5
+minutes (validation) or 47 minutes (train) before an attack begins. Splitting a
+silent minute into four silent quarter-minutes produces four silent windows.
+There is no precursor being rounded away; there is no precursor. The Δ=15
+direction is closed by measurement, at the cost of one query.
+
+**CIC is the opposite.** In 83% of validation onsets the attacker host is active
+in the window immediately before the attack — median gap 60 s, p90 60 s, meaning
+essentially every onset follows an active window. CIC's precursor windows are not
+empty, so the reason Run 8 reported Task B near the prevalence floor there cannot
+be the one that applies to CTU.
+
+**So is there anything in them?** A gradient-boosted probe fit on the infected
+host's *training* rows and scored on its *validation* rows — same host on purpose,
+so host identity is not available and only the timing question remains, and
+forward in time, so nothing leaks:
+
+| | pre-onset rows (train → val) | base rate | probe AP | lift | probe ROC | `is_active` alone |
+|---|---|---|---|---|---|---|
+| CIC | 45 → 22 of 150 | 0.1467 | 0.3411 | **2.33×** | **0.7500** | 0.6783 |
+| CTU | 71 → 84 of 167 | 0.5030 | 0.5030 | **1.00×** | **0.5000** | degenerate |
+
+**CTU: exactly chance, to four decimal places.** AP equal to the base rate and ROC
+of exactly 0.5000 is what a constant predictor gives, which is all a probe can
+produce when every row it is scoring is the same vector. Q1 is answered: CTU-13
+does not contain enough temporal precursor information for genuine advance
+warning, and this is a property of the capture, not of NIDRA.
+
+**CIC: a real but modest signal, most of which is not interesting.** The probe
+reaches ROC 0.7500 where the model is at the floor — so there *is* something to
+find. But `is_active` alone reaches 0.6783 of it. Most of what distinguishes a CIC
+pre-onset window from the attack host's other benign windows is that the host is
+doing anything at all; the genuine precursor content beyond mere activity is the
+gap between 0.75 and 0.68.
+
+**What this changes.**
+
+- **Q1 and Q10 split by dataset.** CTU: no, structurally. CIC: a weak yes, with a
+  measured ceiling of ROC 0.75 against a model at the floor. Reporting a single
+  answer for both would have been wrong in one direction or the other.
+- **Q14 direction 3 is withdrawn** and replaced: the advance-warning work belongs
+  on CIC, where the precursor windows are non-empty, and its honest ceiling is
+  modest. A phase that chases advance warning on CTU is chasing an artifact.
+- **The probe's caveat applies here too** (§3.8): a probe that finds something
+  proves it is there; this one found ROC 0.75 on CIC, so that much is real. Its
+  0.5000 on CTU would normally prove nothing — except that here the rows being
+  scored are literally identical, so the ceiling argument of §3.10 carries it
+  rather than the probe.
+- Same-host by construction, so neither number says anything about transferring to
+  a host that was never infected during training.
