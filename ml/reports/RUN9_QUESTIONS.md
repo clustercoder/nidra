@@ -256,10 +256,24 @@ strong advance-warning claim.
 
 ## Q11 — What is the best configuration under natural prevalence?
 
-**Pending, deliberately.** Selection happens on validation only (§19), the
-screening is one seed per cell, and Stage B — three seeds for the two surviving
-head variants — is queued. No configuration will be called best before it has
-been confirmed across seeds and scored on a split that was not used to pick it.
+**`CIC+CTU → CIC` with the `state+hidden` head — and the honest form of the
+answer is that it is the only one of twelve cells where the model clearly beats
+its baselines.**
+
+On the corrected artifacts, that cell reaches AP **0.199** against a best
+baseline of 0.107 and a persistence of 0.034, at ROC 0.950, on 946 positives in
+21,173 rows at prevalence 0.00417. Nearly double the strongest baseline, and the
+best result the phase produced.
+
+**Across the whole scorecard the model beats its best baseline in 3 of 12
+cells** (§3.44). The other two wins are narrow enough — 0.1173 vs 0.0981 and
+0.3869 vs 0.3815 — that they would not be worth claiming alone. All four
+CTU-target cells lose, three of them to `noised_persistence`.
+
+So "best configuration" here names a cell, not a system. A configuration that
+wins one cell of twelve is a finding about that cell, and §32's ranking is
+explicit that cross-dataset generalisation outranks a single aggregate — by that
+ranking this configuration does not win, because it does not transfer. *(§3.44.)*
 
 ## Q12 — Which improvements are statistically supported rather than noise?
 

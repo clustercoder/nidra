@@ -22,7 +22,7 @@ source file is uncommitted.
 | 5 | training strategy + hardware constraints | ✅ | log §5, §3.21 |
 | 6 | experiment matrix | ✅ | `tables/experiment_matrix.md`, generated from each run's own provenance record |
 | 7 | best architecture | ⚠️ Stage B complete on CTU val; **the call is not obvious** | log §3.29, §3.32 — `state+hidden` wins the alert (F1 0.608 vs 0.507, FA/h halved) and loses the ordering (within-host ROC 0.697 vs 0.816); neither head beats persistence. Awaiting the CIC arms and the unseen-family run |
-| 8 | best training configuration | ⏳ | blocked on 7 |
+| 8 | best training configuration | ✅ named, with the caveat that makes it honest | `CIC+CTU` training, `state+hidden` head, evaluated on CIC — the one cell of twelve where the model clearly beats its baselines (AP 0.199 vs 0.107, ROC 0.950). §3.44, Q11 |
 | 9 | full-data strategy (§28) | ✅ | log §5 |
 | 10 | CIC-only results | ⏳ benchmarks run, table pending | `q_report` |
 | 11 | CTU-only results | ⏳ | `q_cross2` running |

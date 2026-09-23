@@ -2789,3 +2789,61 @@ was right to refuse a direction from three cells but would have been right in
 spirit if it had guessed one. The reason it is still not summarised as "the fix
 improves the model" is that seven cells got worse and two of those are validation
 cells, where the operating point is selected.
+
+### 3.44 The scorecard on corrected artifacts: the model beats its best baseline in 3 of 12 cells (§17, §23, §24, §31 Q7/Q8/Q11, §32 criterion 1)
+
+`reports/run9/scorecard_run9.md`, built from the `mask_*` artifacts, `state+hidden`
+head, natural prevalence, episode-cluster intervals. This is the table the phase
+was designed to produce.
+
+| regime | split | model AP | persistence | best baseline | model wins? | ROC |
+|---|---|---:|---:|---|:--:|---:|
+| CIC → CIC | test | 0.1173 | 0.0414 | `noised_persistence` 0.0981 | **yes** | 0.760 |
+| CIC → CIC | holdout | 0.3869 | 0.3422 | `lr_flattened_history` 0.3815 | **yes** | 0.839 |
+| CTU → CTU | test | 0.3186 | 0.3215 | `noised_persistence` 0.3532 | no | 0.691 |
+| CTU → CTU | holdout | 0.2273 | 0.1955 | `noised_persistence` 0.2452 | no | 0.720 |
+| CIC → CTU | test | 0.0105 | 0.0084 | `noised_persistence` 0.0125 | no | 0.580 |
+| CIC → CTU | holdout | 0.0159 | 0.0121 | `noised_persistence` 0.0172 | no | 0.758 |
+| CTU → CIC | test | 0.0040 | 0.0021 | `gbdt_current_state` 0.0240 | no | **0.222** |
+| CTU → CIC | holdout | 0.0003 | 0.0002 | `gbdt_current_state` 0.0014 | no | **0.133** |
+| **comb → CIC** | **test** | **0.1990** | 0.0342 | `noised_persistence` 0.1073 | **yes** | **0.950** |
+| comb → CIC | holdout | 0.3392 | 0.3414 | `persistence_rollout` 0.3556 | no | 0.923 |
+| comb → CTU | test | 0.3537 | 0.3623 | `persistence` 0.3623 | no | 0.789 |
+| comb → CTU | holdout | 0.2400 | 0.2026 | `gbdt_current_state` 0.2992 | no | 0.836 |
+
+**Three of twelve.** That is the §32 criterion-1 answer for the phase, stated as
+a fraction rather than as the best cell.
+
+**The one cell that is not close.** `comb → CIC` test: AP 0.199 against a best
+baseline of 0.107 and a persistence of 0.034 — nearly double the strongest
+baseline, at ROC 0.950, on 946 positives in 21,173 rows at prevalence 0.00417.
+It is the best result the phase produced, and it is the cell where training on
+both corpora meets the target the head can actually rank. The two CIC → CIC wins
+are narrow enough (0.1173 vs 0.0981; 0.3869 vs 0.3815) that on their own they
+would not be worth claiming.
+
+**Everything aimed at CTU loses.** In all four CTU-target cells the best baseline
+wins, and in three of them the winner is `noised_persistence` — persistence plus
+isotropic noise scaled to the model's own predicted variance. That is the §24
+question answered directly: on CTU, what the world model contributes over
+persistence is reproduced by adding correctly-scaled noise to persistence. The
+transition model's *mean* is not carrying the result there.
+
+**`CTU → CIC` is not weak, it is inverted.** ROC 0.222 on test and 0.133 on
+holdout — far below chance, on both splits, in the same direction. A model
+trained on CTU ranks CIC hosts close to backwards. This is worth separating from
+"transfer is hard": a coin flip would score 0.5. Whatever the CTU-trained head
+learned is a real ordering that is anti-correlated with CIC's labels, which is a
+more specific and more interesting failure than noise, and it is unexplained.
+
+**Calibration.** Five of twelve cells do not beat predicting the base rate and
+never moving — both `CIC → CTU` cells, both `CTU → CIC` cells, and `CIC → CIC`
+test. The `CIC → CTU` cells also carry 398 and 349 false alarms per hour. Those
+four transfer cells should not be displayed to an operator as probabilities at
+all, and the scorecard marks each one **no** rather than reporting only AP.
+
+**What this does to Q11 (best configuration under natural prevalence).** The
+answer is `CIC+CTU → CIC` with the `state+hidden` head, and the honest form of
+that answer is: *the best configuration is the only regime-and-target pair where
+the model clearly beats its baselines, and it does not generalise to the other
+five.* A configuration that wins one cell of twelve is a finding about that cell.
