@@ -2003,3 +2003,54 @@ calibration (§3.23), a lost explanation surface (§3.20), and a transition-mode
 contribution indistinguishable from zero for the winning head. Under §32's
 ranking that is not an obvious call, and it should not be made on CTU validation
 alone — the CIC arms and the unseen-family run are still in flight.
+
+### 3.33 Is the persistence ablation even valid for a history-aware head? (§18, §23)
+
+Before diagnosing §3.32's negative result, the obvious escape had to be closed:
+persistence keeps the encoder advancing, so perhaps a head reading the hidden
+state simply does not notice the ablation, and the null is an artefact of the
+control rather than a fact about the transition model. That would have been a
+comfortable explanation and it is wrong.
+
+From `WorldModel.rollout`, the hidden is advanced by feeding **the state actually
+produced**:
+
+```python
+h_t, h = self.encoder(nxt.unsqueeze(1), h)
+```
+
+Under `state_source="persist"`, `nxt = anchor` — the GRU is fed S_t six times.
+Under `"model"` it is fed the predicted trajectory. The two hidden paths are
+therefore different, `mu` is zeroed so `realized_deltas()` is identically zero,
+and only `logvar` is shared. **The ablation removes the transition's
+contribution from the hidden channel as well as the state channel**, which is
+exactly what it claims to do, for a trajectory head as much as a per-state one.
+
+§3.32's null stands. It is a measurement of the transition model, not of the
+control.
+
+**The diagnosis CLAUDE.md asks for, then.** §3.20 measured that this head's score
+is set by the encoder hidden state and that the origin state contributes almost
+nothing — risk moved from 0.0000128 to 1.0000000 behind a byte-identical origin
+state. The hidden state entering the rollout already summarises thirty observed
+windows. Six further steps, predicted or constant, are appended to that summary;
+if the signal the head reads is *what this host has been doing* rather than
+*where it is going*, those six steps cannot change much, and the transition's
+contribution is small **by construction for this head**.
+
+That account is testable and the test is cheap, so it is pre-registered here
+before running: measure the relative divergence between the persistence and
+model hidden states, ‖h_persist[k] − h_model[k]‖ / ‖h_model[k]‖, at each k.
+
+- If the hiddens stay close — say under ~10% by k=6 — the head is reading a
+  summary the rollout barely moves, the null is explained, and the implication
+  is that a history-aware head **cannot** demonstrate transition-model value
+  under this ablation no matter how good the transition model is. That would
+  make §3.32's null uninformative about the transition model after all, for a
+  different reason than the one just ruled out, and would call for a different
+  control.
+- If they diverge substantially and the AP still does not move, the transition
+  model genuinely is not contributing and the null means what it says.
+
+Both outcomes are reportable and they point at different next experiments, which
+is the reason to write the criterion down first.
