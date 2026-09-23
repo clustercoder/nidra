@@ -1672,3 +1672,15 @@ The number it was hiding matters: CIC->CTU transfer fires 207.97 false alarms/ho
 operating point frozen on CIC validation does not transfer to CTU at all — an unusable
 operating point reported as silence. One seed, state-only head, matrix incomplete; recorded
 now because the defect is, not as a conclusion.
+
+**D138 — the cross-dataset matrix was missing its most important arm.** (2026-09-23) Auditing
+the queue against §2's five regimes found no CTU->CTU evaluation at all: the `ctu_heads` runs
+had validation metrics only, so the within-dataset generalisation result for the dataset this
+whole phase is about was never going to be produced. It is also the only place CTU's
+cross-host question can be settled — CTU test carries ten infected hosts against validation's
+one (D133, D136) — which makes it the arm D130's host-versus-timing finding actually depends
+on. `comb2cic` likewise had val and test but no holdout, so the combined model would never
+have been scored on Thursday's infiltration. Both are queued in a second pass that waits for
+the first, reusing each run's frozen `operating_point.json` so test and holdout only LOAD the
+selection rather than redo it. `q_stage` was re-chained behind both passes (recreated rather
+than edited, since editing a running zsh script corrupts its read position — D124).
