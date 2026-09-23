@@ -222,3 +222,46 @@ def test_the_row_carries_the_deterministic_system_beside_the_oracle():
 
 def test_a_run_without_the_deterministic_system_gets_none():
     assert row_for(_record())["deterministic_ap"] is None
+
+
+def test_gaps_are_listed_with_the_path_that_was_missing(tmp_path, monkeypatch, capsys):
+    """Fourteen all-dash rows in one scorecard, of which eight were absent by
+    design (transfer arms have no val split) and six were crashes nobody
+    noticed. The table renders both identically. It cannot know which is which
+    — but it can say where it looked, which makes the difference auditable
+    instead of invisible."""
+    import sys
+
+    from nidra.scripts import cross_dataset_scorecard as sc
+
+    runs = tmp_path / "runs"
+    (runs / "arm_a" / "artifacts" / "metrics" / "test").mkdir(parents=True)
+    (runs / "arm_a" / "artifacts" / "metrics" / "test" / "benchmark.json").write_text(
+        json.dumps(_with_calibration(_record())))
+    out = tmp_path / "scorecard.md"
+    monkeypatch.setattr(sys, "argv", [
+        "prog", "--runs", str(runs), "--splits", "test,holdout",
+        "--map", "A:A:arm_a", "--map", "B:B:arm_b", "--out", str(out)])
+    sc.main()
+
+    text = out.read_text()
+    assert "3 of 4" in text                       # arm_a/holdout, arm_b/test, arm_b/holdout
+    assert "arm_b/artifacts/metrics/test" in text
+    assert "arm_a/artifacts/metrics/holdout" in text
+    assert "arm_a/artifacts/metrics/test" not in text.split("### Gaps")[1]   # the one that IS there
+
+
+def test_a_scorecard_with_no_gaps_says_nothing_about_them(tmp_path, monkeypatch):
+    import sys
+
+    from nidra.scripts import cross_dataset_scorecard as sc
+
+    runs = tmp_path / "runs"
+    (runs / "arm_a" / "artifacts" / "metrics" / "test").mkdir(parents=True)
+    (runs / "arm_a" / "artifacts" / "metrics" / "test" / "benchmark.json").write_text(
+        json.dumps(_with_calibration(_record())))
+    out = tmp_path / "sc.md"
+    monkeypatch.setattr(sys, "argv", ["prog", "--runs", str(runs), "--splits", "test",
+                                      "--map", "A:A:arm_a", "--out", str(out)])
+    sc.main()
+    assert "### Gaps" not in out.read_text()

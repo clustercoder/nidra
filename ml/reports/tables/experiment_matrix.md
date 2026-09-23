@@ -1,6 +1,6 @@
 ### Experiment matrix — every run on disk
 
-36 runs with a provenance record, 16 directories without one. Generated from the records, so a run that failed or produced an unwelcome result is here by construction and one that was deleted is visibly missing.
+39 runs with a provenance record, 26 directories without one. Generated from the records, so a run that failed or produced an unwelcome result is here by construction and one that was deleted is visibly missing.
 
 ⚠ Rows span 2 geometries (Δ60 L15 K3, Δ60 L30 K6) and 1 feature regimes (cross_core). Those are the two things that make a comparison meaningless without saying so; rows differing in either are not comparable.
 
@@ -10,7 +10,10 @@
 | `cic_core_heads` | head_ablation | CIC-IDS2017 | 2tr 3te 2ho | cross_core | Δ60 L30 K6 | — | 0,1,2,3,4 | — | cic_core_dyn | `05458199` | — | — | — |
 | `comb_dyn` | train | CIC-IDS2017+CTU-13 | 5tr 2va 6te 4ho | cross_core | Δ60 L30 K6 | dynamics | 0 | 20 | — | `59469f18` | 81m | ✓ | — |
 | `combined_heads` | head_ablation | CIC-IDS2017+CTU-13 | 5tr 2va 6te 4ho | cross_core | Δ60 L30 K6 | — | 0,1,2,3,4 | — | comb_dyn | `05458199` | — | — | — |
+| `ctu_confirm` | head_ablation | CTU-13 | 3tr 2va 3te 3ho | cross_core | Δ60 L30 K6 | — | 0,1,2,3,4 | — | ctu_dyn | `ee794000` | — | — | — |
 | `ctu_dyn` | train | CTU-13 | 3tr 7te 3ho | cross_core | Δ60 L30 K6 | dynamics | 0 | 20 | — | `5e1d6e18` | 45m | ✓ | — |
+| `ctu_dyn_s1` | train | CTU-13 | 3tr 7te 3ho | cross_core | Δ60 L30 K6 | dynamics | 1 | 20 | — | `eae98d93` | 79m | ✓ | — |
+| `ctu_dyn_s2` | train | CTU-13 | 3tr 2va 3te 3ho | cross_core | Δ60 L30 K6 | dynamics | 2 | 20 | — | `192e8e86` | 86m | ✓ | — |
 | `ctu_gru` | train | CTU-13 | 3tr 7te 3ho | cross_core | Δ60 L30 K6 | gru_baseline | 0 | — | ctu_dyn | `59469f18` | 4m | ✓ | — |
 | `ctu_heads` | head_ablation | CTU-13 | 3tr 7te 3ho | cross_core | Δ60 L30 K6 | — | 0,1,2,3,4 | — | ctu_dyn | `8f5b5390` | — | — | — |
 | `ctu_onset_hidden_hazard` | train | CTU-13 | 3tr 7te 3ho | cross_core | Δ60 L30 K6 | onset | 0 | — | ctu_dyn | `63d3ba4b` | 3m | ✓ | — |
@@ -43,6 +46,6 @@
 | `var_plain` | train | CIC-IDS2017 (TrafficLabelling CSVs + project tshark packet parquet) | 2tr 3te 2ho | — | Δ60 L15 K3 | dynamics,heads | 0 | 20 | — | `88c18ccc` | 19m | ✓ | ✓ |
 | `var_plain_h2` | train | CIC-IDS2017 (TrafficLabelling CSVs + project tshark packet parquet) | 2tr 3te 2ho | — | Δ60 L15 K3 | heads,onset | 0 | — | var_plain | `eb7b3e8f` | 2m | ✓ | ✓ |
 
-Recorded wall clock across all runs: **15.2 hours** (single machine, Apple M1, 8 cores, 16 GB; several runs overlapped, so elapsed time is less than the sum).
+Recorded wall clock across all runs: **17.9 hours** (single machine, Apple M1, 8 cores, 16 GB; several runs overlapped, so elapsed time is less than the sum).
 
-Directories without a provenance record — head-ablation variants, which carry their parent run's record: `cic_core_heads__prep`, `cic_core_heads__state`, `cic_core_heads__state+hidden`, `combined_heads__prep`, `combined_heads__state`, `combined_heads__state+hidden`, `ctu_dyn_s1`, `ctu_heads__hidden`, `ctu_heads__prep`, `ctu_heads__state`, `ctu_heads__state+hidden`, `ctu_heads__state+hidden+delta+logvar`, `ctu_heads__state+hidden+logvar`, `ctu_heads__state+logvar`, `xeval_cic2cic_state`, `xeval_cic2ctu_state`.
+Directories without a provenance record — head-ablation variants, which carry their parent run's record: `cic_core_heads__prep`, `cic_core_heads__state`, `cic_core_heads__state+hidden`, `combined_heads__prep`, `combined_heads__state`, `combined_heads__state+hidden`, `ctu_confirm__prep`, `ctu_confirm__state`, `ctu_confirm__state+hidden`, `ctu_heads__hidden`, `ctu_heads__prep`, `ctu_heads__state`, `ctu_heads__state+hidden`, `ctu_heads__state+hidden+delta+logvar`, `ctu_heads__state+hidden+logvar`, `ctu_heads__state+logvar`, `lofo_without_neris_dyn`, `xeval_cic2cic_state`, `xeval_cic2cic_state+hidden`, `xeval_cic2ctu_state`, `xeval_comb2cic_state`, `xeval_comb2cic_state+hidden`, `xeval_comb2ctu_state`, `xeval_ctu2cic_state`, `xeval_ctu2ctu_state`, `xeval_ctu2ctu_state+hidden`.

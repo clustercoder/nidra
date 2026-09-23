@@ -196,11 +196,13 @@ def main() -> None:
                  "episodes warned | positive hosts | within-host ROC |")
     lines.append("|---|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---|---|---|---:|---:|")
     raw: dict[str, Any] = {}
+    gaps: list[tuple[str, str, str, Path]] = []
     for train, evalset, label in regimes:
         for split in splits:
             path = runs_dir / label / "artifacts" / "metrics" / split / "benchmark.json"
             record = read_benchmark(path)
             if record is None:
+                gaps.append((train, evalset, split, path))
                 lines.append(f"| {train} | {evalset} | {split} | " + " | ".join(["—"] * 17) + " |")
                 continue
             r = row_for(record, args.system)
@@ -233,6 +235,19 @@ def main() -> None:
                       "the column that does: on the infected host alone, does the system order the attack "
                       "windows above that host's own benign ones? It is prevalence-independent and is the "
                       "only column here that compares fairly across datasets."]
+
+    # A gap is not a zero and not a failure — the scorecard cannot tell a cell
+    # that was never scheduled from one that crashed, and it rendered both
+    # identically when six state+hidden cells died silently (§3.30). It can at
+    # least say where it looked, which makes the difference auditable.
+    if gaps:
+        total = len(regimes) * len(splits)
+        lines += ["", "### Gaps", "",
+                  f"**{len(gaps)} of {total} cells have no benchmark.** A gap is not a zero and not a "
+                  "failure: this table cannot distinguish a cell that was never scheduled from one "
+                  "that crashed. Each path below is where it looked.", ""]
+        for train, evalset, split, path in gaps:
+            lines.append(f"- `{train} → {evalset}`, {split} — `{path}`")
 
     # Calibration gets its own table rather than three more columns on a table
     # that is already twenty wide — and because it answers a different question.
