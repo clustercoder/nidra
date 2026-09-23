@@ -1315,3 +1315,50 @@ than mysteriously. **Serving latency for this head is not yet measured** — the
 machine has two training jobs on it and a timing number taken under contention
 would be worthless. It is outstanding for §36 item 25, and it matters: the
 head's input is 173 wide against the per-state head's 45.
+
+### 3.21 Serving latency: the history-aware head costs nothing measurable (§36 item 25)
+
+Measured after the D141 fix, on the real `cic_core_heads__*` checkpoints through
+`NidraPredictor`, at `n_samples_per_member: 200`, `K=6`, `torch_num_threads: 2`.
+**The machine was running two training jobs throughout (1-minute load average
+6.1).** Absolute numbers are therefore contended and are an upper bound; the
+comparison is not, because the two arms' calls were interleaved A,B,A,B so load
+drift hits both equally.
+
+| head | median | p95 | max |
+|---|---|---|---|
+| `state` (45-wide) | 68.2 ms | 75.0 ms | 75.5 ms |
+| `state+hidden` (173-wide) | 70.4 ms | 77.9 ms | 80.6 ms |
+
+Ratio 1.033×, over 12 paired calls, one ensemble member. A second run
+decomposing the call put the two at 71.5 ms and 71.0 ms — the trajectory head
+nominally *faster*, which is the clearest statement available that the
+difference is noise. **The extra 128 input dimensions cost nothing worth
+reporting**, because they are one wider `Linear` on a path whose cost is
+elsewhere:
+
+| stage | `state` | `state+hidden` | scales with ensemble size? |
+|---|---|---|---|
+| ensemble rollout | 49.6 ms | 48.6 ms | **yes** |
+| KernelSHAP current-risk attribution (nsamples=100) | 8.9 ms | 9.7 ms | no |
+| temporal saliency | 9.1 ms | 9.4 ms | no |
+| everything else | 3.9 ms | 3.3 ms | no |
+| **total, 1 member** | **71.5 ms** | **71.0 ms** | |
+
+Substituting five members for one — the shipped `ensemble_seeds: [0,1,2,3,4]` —
+gives **270 ms** and **266 ms** against the 300 ms target. Two caveats, both
+load-bearing:
+
+1. That is an **estimate by substitution, not a measurement.** No 5-seed
+   trajectory-head artifact exists yet; §19 Stage B produces three. The
+   estimate assumes members cost the same and run sequentially, which is what
+   `_ensemble_rollout` does today.
+2. It is 270 ms of a 300 ms budget **on a machine under load 6.1**. A quiet
+   machine has more headroom than that, but the margin is thin enough that the
+   final ensemble must be measured rather than extrapolated before any latency
+   claim is made.
+
+If it does come in over target, CLAUDE.md's instruction applies unchanged — cut
+stochastic samples toward 100 before touching the ensemble size — and it applies
+equally to both heads, since the rollout is the term that scales and the head is
+not why.
