@@ -2122,3 +2122,66 @@ This is the sharpest thing the phase has to say about §31 Q13. The limit is not
 the head's capacity, the objective, or the corpus. It is that **a frozen
 observed-state head and a transition model are only coupled through a channel
 the head has no reason to read** — and measurably does not.
+
+### 3.35 The pre-registered stage-balanced objective: criterion 1 fails, and §12 is refuted
+
+§3.13 pre-registered this before running, with the primary criterion fixed: the
+risk head's per-stage ROC on `recon` and `c2` must rise **above 0.5** on observed
+validation states. The kill condition was stated in the same paragraph — if
+forcing the rare stages to own an equal share of the gradient still leaves them
+below chance, the pooled objective is not the explanation and the §12 direction
+is wrong.
+
+Same `ctu_dyn` checkpoint, same seed, same sampler, same data. The only thing
+that moves is the weighting inside the positive class.
+
+**`state+hidden`** (the head the §3.9 baseline was measured on):
+
+| stage | windows | baseline risk-head ROC | stage-balanced | Δ |
+|---|---|---|---|---|
+| recon | 17 | 0.320 | 0.309 | −0.011 |
+| c2 | 24 | 0.434 | 0.451 | +0.017 |
+| exfil | 172 | 0.915 | 0.917 | +0.002 |
+| *aggregate val AP* | | 0.4894 | 0.4927 | +0.003 |
+
+**`state`** (the Run 8 architecture; baseline diagnostic run for this comparison):
+
+| stage | windows | baseline risk-head ROC | stage-balanced | Δ |
+|---|---|---|---|---|
+| recon | 17 | 0.126 | 0.167 | +0.041 |
+| c2 | 24 | 0.301 | 0.271 | −0.030 |
+| exfil | 172 | 0.872 | 0.869 | −0.003 |
+| *aggregate val AP* | | 0.3531 | 0.2965 | **−0.057** |
+
+**Criterion 1 fails in every cell.** The best `c2` reaches is 0.451 and the best
+`recon` is 0.309; both remain below chance. Criterion 3's guardrail holds (exfil
+0.869 and 0.917, both above 0.85) and criterion 2 is moot, because the
+pre-registration made criterion 1 decisive on its own.
+
+**The intervention did apply** — checked rather than assumed, because a null that
+is really a plumbing failure is the worst outcome available here.
+`stage_balanced_positives: true` is in the run's config and absent from the
+baseline's, and the `state` arm's aggregate AP moved 16% (0.3531 → 0.2965),
+which is the objective visibly changing what the head learned. It changed the
+head; it did not change the ranking of the rare stages.
+
+**So the pooled objective is not why the risk head ranks recon and c2 below
+chance.** §12's direction — rebalance the positive class so the rare stages own
+their share of the gradient — is refuted on its own pre-registered terms. The AP
+cost was paid and bought nothing.
+
+**An honest limit on the strength of that.** One seed, and 17 and 24 positive
+windows. §3.29 measured the `state` head's head-training variance at sd 0.047 on
+aggregate AP, so a per-stage ROC on seventeen windows is noisy and this run
+cannot distinguish 0.434 from 0.451. What it can say is that the intervention
+produced **no movement toward the criterion** in any of the six cells — the
+largest change in the intended direction is +0.041 against a required +0.18 —
+and that is what refutes the direction, not a precisely measured null.
+
+**What it points at instead.** The `state+hidden` head barely responded to the
+reweighting at all (every Δ ≤ 0.017) while the `state` head moved substantially.
+That is consistent with §3.34: the history-aware head's score is set by a
+component of the encoder hidden state that encodes *which host this is*, and no
+reweighting of the positive class by stage touches that. The two nulls are the
+same null seen twice — the thing the head is reading is not the thing these
+interventions are moving.

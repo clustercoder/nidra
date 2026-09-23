@@ -25,17 +25,17 @@
 | CTU | CTU (state+hidden) | test | 25,099 | 0.00749 | 0.322 | 0.680 | 0.810 | 0.262 | 0.396 | 7.67 | 40.42 | 0.00192 | noised_persistence (0.339) | 0.352 / 0.305 | — / 0.101 | 0.003 / 0.010 | 0 / 131 | 10 | 0.5956 |
 | CTU | CTU (state+hidden) | holdout | 21,045 | 0.00409 | 0.221 | 0.769 | 1.000 | 0.155 | 0.268 | 0.00 | 9.13 | 0.00000 | noised_persistence (0.247) | 0.197 / 0.195 | — / 0.149 | 0.005 / 0.006 | 0 / 6 | 3 | 0.2418 |
 | CIC | CTU (state+hidden) | val | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
-| CIC | CTU (state+hidden) | test | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
-| CIC | CTU (state+hidden) | holdout | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| CIC | CTU (state+hidden) | test | 25,099 | 0.00749 | 0.009 [0.005, 0.018] | 0.468 | 0.013 | 0.050 | 0.021 | 477.96 | 484.24 | 0.11581 | noised_persistence (0.010) | 0.012 / 0.007 | — / 0.873 | 0.002 / 0.004 | 5 / 131 | 10 | 0.4828 |
+| CIC | CTU (state+hidden) | holdout | 21,045 | 0.00409 | 0.014 [0.000, 0.052] | 0.703 | 0.001 | 0.007 | 0.002 | 425.53 | 425.93 | 0.13585 | noised_persistence (0.015) | 0.013 / 0.008 | — / 0.874 | 0.000 / 0.000 | 0 / 6 | 3 | 0.7523 |
 | CTU | CIC (state+hidden) | val | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
-| CTU | CIC (state+hidden) | test | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
-| CTU | CIC (state+hidden) | holdout | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| CTU | CIC (state+hidden) | test | 21,173 | 0.00417 | 0.004 [0.001, 0.006] | 0.161 | 0.000 | 0.000 | 0.000 | 0.00 | 0.00 | 0.00000 | gbdt_current_state (0.024) | 0.002 / 0.002 | — / 0.006 | 0.000 / 0.001 | 0 / 15 | 9 | 0.4721 |
+| CTU | CIC (state+hidden) | holdout | 20,171 | 0.00034 | 0.000 [0.000, 0.001] | 0.086 | 0.000 | 0.000 | 0.000 | 0.00 | 0.00 | 0.00000 | gbdt_current_state (0.001) | 0.000 / 0.000 | — / -0.005 | 0.000 / 0.000 | 0 / 5 | 2 | 0.3572 |
 | CIC+CTU | CIC (state+hidden) | val | 20,451 | 0.00046 | 0.538 | 0.904 | 0.702 | 0.559 | 0.622 | 6.01 | 20.14 | 0.00113 | persistence (0.535) | 0.545 / 0.449 | — / 0.247 | 0.021 / 0.020 | 1 / 10 | 2 | 0.7855 |
 | CIC+CTU | CIC (state+hidden) | test | 21,173 | 0.00417 | 0.158 | 0.889 | 0.675 | 0.021 | 0.041 | 1.19 | 3.67 | 0.00033 | noised_persistence (0.079) | 0.052 / 0.041 | — / 0.267 | 0.005 / 0.009 | 0 / 15 | 9 | 0.5931 |
 | CIC+CTU | CIC (state+hidden) | holdout | 20,171 | 0.00034 | 0.328 | 0.900 | 0.860 | 0.402 | 0.547 | 0.99 | 7.04 | 0.00023 | persistence_rollout (0.356) | 0.363 / 0.346 | — / 0.240 | 0.071 / 0.285 | 1 / 5 | 2 | 0.6200 |
 | CIC+CTU | CTU (state+hidden) | val | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
-| CIC+CTU | CTU (state+hidden) | test | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
-| CIC+CTU | CTU (state+hidden) | holdout | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| CIC+CTU | CTU (state+hidden) | test | 25,099 | 0.00749 | 0.373 [0.204, 0.586] | 0.795 | 0.687 | 0.352 | 0.465 | 20.04 | 64.06 | 0.00501 | persistence (0.362) | 0.400 / 0.321 | — / 0.289 | 0.003 / 0.009 | 7 / 131 | 10 | 0.7786 |
+| CIC+CTU | CTU (state+hidden) | holdout | 21,045 | 0.00409 | 0.247 [0.000, 0.344] | 0.929 | 0.677 | 0.199 | 0.308 | 5.60 | 17.34 | 0.00113 | gbdt_current_state (0.299) | 0.206 / 0.225 | — / 0.270 | 0.000 / 0.000 | 0 / 6 | 3 | 0.7262 |
 
 **oracle AP / deterministic AP.** The oracle is the frozen head on the TRUE future state under a single-trajectory readout and no Platt layer. The published system pools ~200 stochastic trajectories and then calibrates, so the ratio of the two is NOT a fraction of an upper bound — the published score exceeds the oracle in half the cells measured, because its readout is a better estimator and the oracle is given neither half of it. The matched comparison is the deterministic column, which the oracle does bound in 12 of 14 (§3.24).
 
@@ -43,7 +43,7 @@
 
 ### Gaps
 
-**14 of 36 cells have no benchmark.** A gap is not a zero and not a failure: this table cannot distinguish a cell that was never scheduled from one that crashed. Each path below is where it looked.
+**8 of 36 cells have no benchmark.** A gap is not a zero and not a failure: this table cannot distinguish a cell that was never scheduled from one that crashed. Each path below is where it looked.
 
 - `CTU → CTU (state)`, val — `experiments/runs/xeval_ctu2ctu_state/artifacts/metrics/val/benchmark.json`
 - `CIC → CTU (state)`, val — `experiments/runs/xeval_cic2ctu_state/artifacts/metrics/val/benchmark.json`
@@ -51,14 +51,8 @@
 - `CIC+CTU → CTU (state)`, val — `experiments/runs/xeval_comb2ctu_state/artifacts/metrics/val/benchmark.json`
 - `CTU → CTU (state+hidden)`, val — `experiments/runs/xeval_ctu2ctu_state+hidden/artifacts/metrics/val/benchmark.json`
 - `CIC → CTU (state+hidden)`, val — `experiments/runs/xeval_cic2ctu_state+hidden/artifacts/metrics/val/benchmark.json`
-- `CIC → CTU (state+hidden)`, test — `experiments/runs/xeval_cic2ctu_state+hidden/artifacts/metrics/test/benchmark.json`
-- `CIC → CTU (state+hidden)`, holdout — `experiments/runs/xeval_cic2ctu_state+hidden/artifacts/metrics/holdout/benchmark.json`
 - `CTU → CIC (state+hidden)`, val — `experiments/runs/xeval_ctu2cic_state+hidden/artifacts/metrics/val/benchmark.json`
-- `CTU → CIC (state+hidden)`, test — `experiments/runs/xeval_ctu2cic_state+hidden/artifacts/metrics/test/benchmark.json`
-- `CTU → CIC (state+hidden)`, holdout — `experiments/runs/xeval_ctu2cic_state+hidden/artifacts/metrics/holdout/benchmark.json`
 - `CIC+CTU → CTU (state+hidden)`, val — `experiments/runs/xeval_comb2ctu_state+hidden/artifacts/metrics/val/benchmark.json`
-- `CIC+CTU → CTU (state+hidden)`, test — `experiments/runs/xeval_comb2ctu_state+hidden/artifacts/metrics/test/benchmark.json`
-- `CIC+CTU → CTU (state+hidden)`, holdout — `experiments/runs/xeval_comb2ctu_state+hidden/artifacts/metrics/holdout/benchmark.json`
 
 ### Calibration
 
@@ -83,8 +77,14 @@
 | CIC | CIC (state+hidden) | holdout | 0.06534 | 0.2273 | 0.00039 | 0.0501 | 0.00034 | 0.00034 | **no** |
 | CTU | CTU (state+hidden) | test | 0.00614 | 0.0479 | 0.00643 | 0.0457 | 0.00749 | 0.00743 | yes |
 | CTU | CTU (state+hidden) | holdout | 0.00359 | 0.0477 | 0.00375 | 0.0470 | 0.00409 | 0.00408 | yes |
+| CIC | CTU (state+hidden) | test | 0.17761 | 0.3452 | 0.04297 | 0.0833 | 0.00749 | 0.00743 | **no** |
+| CIC | CTU (state+hidden) | holdout | 0.17505 | 0.3480 | 0.04051 | 0.0879 | 0.00409 | 0.00408 | **no** |
+| CTU | CIC (state+hidden) | test | 0.00486 | 0.0476 | 0.00418 | 0.0458 | 0.00417 | 0.00415 | **no** |
+| CTU | CIC (state+hidden) | holdout | 0.00090 | 0.0510 | 0.00035 | 0.0497 | 0.00034 | 0.00034 | **no** |
 | CIC+CTU | CIC (state+hidden) | val | 0.00048 | 0.0504 | 0.00029 | 0.0498 | 0.00046 | 0.00046 | yes |
 | CIC+CTU | CIC (state+hidden) | test | 0.00384 | 0.0464 | 0.00404 | 0.0459 | 0.00417 | 0.00415 | yes |
 | CIC+CTU | CIC (state+hidden) | holdout | 0.00032 | 0.0501 | 0.00026 | 0.0499 | 0.00034 | 0.00034 | yes |
+| CIC+CTU | CTU (state+hidden) | test | 0.00605 | 0.0482 | 0.00573 | 0.0457 | 0.00749 | 0.00743 | yes |
+| CIC+CTU | CTU (state+hidden) | holdout | 0.00363 | 0.0486 | 0.00332 | 0.0468 | 0.00409 | 0.00408 | yes |
 
 ECE is weighted by each bin's **population** weight, not its sampled row count — the evaluation subsamples negatives, so those are different numbers. At these prevalences Brier is dominated by the negatives, so the last two columns are the ones that make it readable: predicting the base rate for every row and never moving scores p(1−p), and a **no** in the final column means the calibrated score does not beat that. It is not a verdict on the ranking, which is what AP measures — but a probability that loses to a constant should not be displayed to an operator as a probability.
