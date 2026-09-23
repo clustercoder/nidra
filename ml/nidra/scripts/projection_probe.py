@@ -29,25 +29,43 @@ import numpy as np
 #: so, rather than reading a pattern off two cells.
 MIN_CELLS_PER_GROUP = 3
 
-#: A training feature whose spread is below this has no scale, so a deviation in
-#: it has no meaning in sd units. Excluded rather than floored: flooring is what
-#: produced distances of 2e6 on the first attempt and led to D145.
-DEGENERATE_SD = 1e-6
+#: A training feature whose spread is below this has no usable scale, so a
+#: deviation in it has no meaning in sd units.
+#:
+#: §3.41 pre-registered "features with non-degenerate training variance only".
+#: The first implementation read that as sd > 1e-6 and did NOT implement it: a
+#: feature with training sd 5.3e-5 passed, contributed a mean z^2 of 1,009,400
+#: and produced a distance of 806 against a truth distance of 4.9 — the same
+#: failure the pre-registration named. The kept-feature set also moved with the
+#: training sample size (31 features at 1,500 samples, 32 at 2,500), so the
+#: statistic was unstable in a parameter that should not matter.
+#:
+#: 1e-2 is set against the scaling convention rather than against this data: the
+#: scaler maps features to roughly unit spread, so a training sd two orders
+#: below that is a constant. Because any such threshold is a judgement, the
+#: verdict is reported across THRESHOLD_SWEEP and is only a verdict if it
+#: survives all of them.
+DEGENERATE_SD = 1e-2
+
+#: The verdict is computed at each of these and reported at all of them. A
+#: conclusion that holds at one threshold and not another is not a conclusion.
+THRESHOLD_SWEEP = (3e-3, 1e-2, 3e-2, 1e-1)
 
 
-def non_degenerate(reference: np.ndarray) -> np.ndarray:
+def non_degenerate(reference: np.ndarray, threshold: float = DEGENERATE_SD) -> np.ndarray:
     """[F] bool — which features of the reference cloud carry a usable scale."""
-    return reference.std(axis=0) > DEGENERATE_SD
+    return reference.std(axis=0) > threshold
 
 
-def cloud_distance(reference: np.ndarray, probe: np.ndarray) -> float:
+def cloud_distance(reference: np.ndarray, probe: np.ndarray,
+                   threshold: float = DEGENERATE_SD) -> float:
     """Mean standardised L2 distance from `reference`'s centre to `probe`'s rows.
 
     Standardised by the reference cloud's own per-feature spread, over
     non-degenerate features only, so a wide feature does not dominate a narrow
     one and a constant one contributes nothing at all.
     """
-    keep = non_degenerate(reference)
+    keep = non_degenerate(reference, threshold)
     if not keep.any():
         return float("nan")
     mu = reference[:, keep].mean(axis=0)
@@ -86,6 +104,37 @@ def verdict(cells: list[dict[str, Any]]) -> dict[str, str]:
     return {"verdict": "supported",
             "reason": (f"all {len(beating)} oracle-beating cells have ratio < 1 and all {len(losing)} "
                        "oracle-winning cells have ratio >= 1")}
+
+
+def sweep_verdicts(cells: list[dict[str, Any]]) -> dict[float, dict[str, str]]:
+    """§3.41's criterion applied at every threshold in the sweep."""
+    out = {}
+    for t in THRESHOLD_SWEEP:
+        at_t = [{"cell": c.get("cell"), "beats_oracle": c["beats_oracle"], "ratio": c["ratios"][t]}
+                for c in cells]
+        out[t] = verdict(at_t)
+    return out
+
+
+def sweep_summary(cells: list[dict[str, Any]]) -> dict[str, Any]:
+    """One verdict only if every threshold agrees; otherwise, plainly, none.
+
+    The threshold is a judgement call made after the first implementation of it
+    failed, so a conclusion that depends on which value was chosen is a
+    conclusion about the choice.
+    """
+    per = sweep_verdicts(cells)
+    verdicts = {v["verdict"] for v in per.values()}
+    if len(verdicts) == 1:
+        only = verdicts.pop()
+        return {"stable": True, "verdict": only, "per_threshold": per,
+                "summary": f"**{only.upper()}**, and the same at every threshold in "
+                           f"{', '.join(str(t) for t in THRESHOLD_SWEEP)}."}
+    return {"stable": False, "verdict": "inconclusive", "per_threshold": per,
+            "summary": ("**INCONCLUSIVE — the verdict does not survive the threshold sweep.** "
+                        + "; ".join(f"{t}: {per[t]['verdict']}" for t in THRESHOLD_SWEEP)
+                        + ". The threshold is a judgement call, so a conclusion that depends on it "
+                          "is a conclusion about the choice and not about the model.")}
 
 
 def main() -> None:
@@ -140,20 +189,32 @@ def main() -> None:
                 pred = model.rollout(torch.from_numpy(X).float(), K=K,
                                      n_samples=8, stochastic=True).states.mean(1).numpy()
 
-            d_truth = cloud_distance(reference, Y[:, K - 1])
-            d_roll = cloud_distance(reference, pred[:, K - 1])
+            ratios, dt, dr = {}, {}, {}
+            for t in THRESHOLD_SWEEP:
+                dt[t] = cloud_distance(reference, Y[:, K - 1], t)
+                dr[t] = cloud_distance(reference, pred[:, K - 1], t)
+                ratios[t] = dr[t] / dt[t] if dt[t] else float("nan")
             cells.append({"cell": f"{d.name.removeprefix(args.prefix)}/{split}",
-                          "beats_oracle": bool(beats), "d_truth": d_truth, "d_rollout": d_roll,
-                          "ratio": d_roll / d_truth if d_truth else float("nan")})
+                          "beats_oracle": bool(beats), "ratios": ratios,
+                          "d_truth": dt[DEGENERATE_SD], "d_rollout": dr[DEGENERATE_SD],
+                          "ratio": ratios[DEGENERATE_SD]})
             print(f"{cells[-1]['cell']:38s} beats_oracle={beats!s:5s} "
-                  f"d_truth={d_truth:7.3f} d_rollout={d_roll:7.3f} ratio={cells[-1]['ratio']:.3f}", flush=True)
+                  f"d_truth={dt[DEGENERATE_SD]:7.3f} d_rollout={dr[DEGENERATE_SD]:7.3f} "
+                  f"ratio={ratios[DEGENERATE_SD]:.3f}  "
+                  f"(sweep {' '.join(f'{ratios[t]:.2f}' for t in THRESHOLD_SWEEP)})", flush=True)
 
-    v = verdict(cells)
-    lines = [f"**§3.41 verdict: {v['verdict'].upper()}** — {v['reason']}", "",
-             "| cell | beats its oracle | d(truth) | d(rollout) | ratio |", "|---|:--:|---:|---:|---:|"]
+    summary = sweep_summary(cells)
+    lines = [f"## §3.41 verdict: {summary['summary']}", ""]
+    for t in THRESHOLD_SWEEP:
+        v = summary["per_threshold"][t]
+        lines.append(f"- **sd > {t}** — {v['verdict']}: {v['reason']}")
+    lines += ["", f"Distances below are at the default threshold {DEGENERATE_SD}.", "",
+              "| cell | beats its oracle | d(truth) | d(rollout) | ratio | ratio across the sweep |",
+              "|---|:--:|---:|---:|---:|---|"]
     for c in sorted(cells, key=lambda c: c["ratio"]):
+        sweep = " / ".join(f"{c['ratios'][t]:.2f}" for t in THRESHOLD_SWEEP)
         lines.append(f"| {c['cell']} | {'yes' if c['beats_oracle'] else 'no'} | "
-                     f"{c['d_truth']:.3f} | {c['d_rollout']:.3f} | {c['ratio']:.3f} |")
+                     f"{c['d_truth']:.3f} | {c['d_rollout']:.3f} | {c['ratio']:.3f} | {sweep} |")
     text = "\n".join(lines)
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)

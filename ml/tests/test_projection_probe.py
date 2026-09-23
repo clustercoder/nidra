@@ -74,3 +74,59 @@ class TestVerdict:
         cells = self._cells([0.5, 0.6, 1.4], [1.2, 1.3, 1.4])
         cells[2]["cell"] = "comb2cic/test"
         assert "comb2cic/test" in verdict(cells)["reason"]
+
+
+class TestThresholdRobustness:
+    """§3.41 said to exclude features with degenerate training variance,
+    "the degenerate ones are what produced distances of 2e6 on the first
+    attempt". The code implemented that as sd > 1e-6, which does NOT implement
+    it: a feature with training sd 5.3e-5 passed the threshold and contributed
+    a mean z^2 of 1,009,400, giving a distance of 806 against a truth distance
+    of 4.9.
+
+    Worse, the kept-feature SET moved with the training sample size — 31
+    features at cap 1500, 32 at cap 2500 — so the statistic was not stable in a
+    parameter that is supposed to be irrelevant.
+
+    The fix is not to pick a better number. It is to report the verdict across a
+    range of thresholds, so the conclusion either does not depend on the choice
+    or is declared not to survive it.
+    """
+
+    def test_a_near_constant_feature_cannot_dominate_at_the_default(self):
+        import numpy as np
+        rng = np.random.default_rng(0)
+        ref = np.hstack([rng.standard_normal((200, 3)), rng.standard_normal((200, 1)) * 5.3e-5])
+        probe = np.hstack([np.zeros((1, 3)), np.array([[1.0]])])   # 19000 sd out on the flat one
+        assert cloud_distance(ref, probe) < 10.0
+
+    def test_the_kept_set_is_stable_across_sample_size_at_the_default(self):
+        import numpy as np
+        rng = np.random.default_rng(0)
+        big = np.hstack([rng.standard_normal((5000, 3)), rng.standard_normal((5000, 1)) * 5.3e-5])
+        assert non_degenerate(big[:500]).sum() == non_degenerate(big).sum() == 3
+
+    def test_sweep_reports_the_verdict_at_every_threshold(self):
+        from nidra.scripts.projection_probe import THRESHOLD_SWEEP, sweep_verdicts
+        cells = [{"cell": f"c{i}", "beats_oracle": i < 3,
+                  "ratios": {t: (0.5 if i < 3 else 1.5) for t in THRESHOLD_SWEEP}} for i in range(6)]
+        got = sweep_verdicts(cells)
+        assert set(got) == set(THRESHOLD_SWEEP)
+        assert all(v["verdict"] == "supported" for v in got.values())
+
+    def test_a_verdict_that_depends_on_the_threshold_is_not_a_verdict(self):
+        from nidra.scripts.projection_probe import THRESHOLD_SWEEP, sweep_summary
+        lo, hi = THRESHOLD_SWEEP[0], THRESHOLD_SWEEP[-1]
+        cells = [{"cell": f"c{i}", "beats_oracle": i < 3,
+                  "ratios": {t: (0.5 if i < 3 else 1.5) for t in THRESHOLD_SWEEP}} for i in range(6)]
+        cells[0]["ratios"][hi] = 1.4          # flips the verdict at one threshold only
+        s = sweep_summary(cells)
+        assert s["stable"] is False
+        assert "does not survive" in s["summary"]
+
+    def test_a_verdict_stable_across_the_sweep_is_reported_as_one(self):
+        from nidra.scripts.projection_probe import THRESHOLD_SWEEP, sweep_summary
+        cells = [{"cell": f"c{i}", "beats_oracle": i < 3,
+                  "ratios": {t: (0.5 if i < 3 else 1.5) for t in THRESHOLD_SWEEP}} for i in range(6)]
+        s = sweep_summary(cells)
+        assert s["stable"] is True and s["verdict"] == "supported"

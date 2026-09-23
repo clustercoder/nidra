@@ -2641,6 +2641,33 @@ the standardisation and the threshold are all fixed above.
 The measurement runs on the `mask_*` artifacts, after the sweep, so that it is
 made on the corrected model rather than on the one with phantom features.
 
+#### Amendment, before the verdict: the exclusion threshold was wrong
+
+The criterion above says "features with non-degenerate training variance only —
+the degenerate ones are what produced distances of 2×10⁶ on the first attempt".
+The code implemented that as `sd > 1e-6`, and **that does not implement it**. On
+the first cell scored, `rst_ratio` had a training sd of 5.33e-05, passed the
+threshold, contributed a mean z² of **1,009,400** and produced a rollout distance
+of 806 against a truth distance of 4.9 — the exact failure the pre-registration
+named, one order of magnitude down.
+
+Two things made it visible rather than plausible. The ratio was 167, which is not
+a number a distance ratio takes. And the kept-feature *set* moved with the
+training sample size — 31 features at 1,500 samples, 32 at 2,500 — so the
+statistic was unstable in a parameter that should be irrelevant.
+
+**What changed and what did not.** The statistic, the horizon, the standardisation
+and the ≥1 / <1 threshold are unchanged. Only the numeric definition of
+"degenerate" moved, from 1e-6 to 1e-2, set against the scaling convention rather
+than against this data: the scaler maps features to roughly unit spread, so a
+training sd two orders below that is a constant.
+
+**Because that is still a judgement made after seeing a failure, the verdict is
+computed at four thresholds — 3e-3, 1e-2, 3e-2, 1e-1 — and is only a verdict if
+all four agree.** If they disagree the probe reports `INCONCLUSIVE` and says so,
+because a conclusion that depends on which threshold was chosen is a conclusion
+about the choice. This amendment was written before any ratio was read.
+
 ### 3.42 Under the D145 fix, the decomposable head is no longer behind (§5, §27, §31 Q13/Q14)
 
 §3.38 found `state+logvar` at 99.1% of the history-aware head on CIC and flagged
@@ -2705,3 +2732,60 @@ even true as a ranking. What is now open is whether a 90-dimensional head built
 from named features can match a 173-dimensional one across seeds and on a split
 it was not selected on. That is a Stage B question and it is the strongest
 candidate this phase has produced.
+
+### 3.43 The full re-score under D145's fix: 21 cells up, 7 down, and the oracle anomaly got worse (§3.37, §36 items 10–14, 18)
+
+All 28 recorded cells re-scored into `mask_*`, zero failures. Full table in
+`reports/run9/mask_correction.md`.
+
+**21 up, 7 down.** Five moved the published arm by at least 0.05 AP. The deltas
+are not averaged anywhere, because an untrained signal projected through
+untrained weights has no reason to point the same way twice and the split is the
+finding. The largest movers:
+
+| cell | AP before | AP after | Δ |
+|---|---:|---:|---:|
+| comb → CIC `state`, holdout | 0.2243 | 0.3229 | **+0.0986** |
+| CTU → CIC `state`, test | 0.0448 | 0.1147 | **+0.0699** |
+| CIC → CIC `state+hidden`, test | 0.0642 | 0.1173 | **+0.0531** |
+| CTU → CTU `state`, holdout | 0.1884 | 0.2410 | **+0.0526** |
+| CIC → CIC `state`, test | 0.1110 | 0.1633 | **+0.0523** |
+| CIC → CIC `state`, val | 0.7809 | 0.7491 | **−0.0319** |
+| comb → CIC `state+hidden`, val | 0.5381 | 0.5156 | **−0.0225** |
+
+The oracle and persistence arms are unchanged in **all 28 cells**, which is the
+check that the re-score differs from the original in the fix and nothing else —
+their states hold dropped slots at exactly zero, so the mask cannot touch them,
+and `mask_correction.py` refuses to report a delta for any cell where they move.
+
+**The oracle anomaly did not shrink. It grew.**
+
+| | before | after |
+|---|---:|---:|
+| raw arm beats its oracle | 10 of 28 | **17 of 28** |
+
+Eight cells flipped from losing to their oracle to beating it; one went the other
+way. §3.37's pre-registered test had already been refuted on the two cells it
+named; the full sweep says the same thing at matrix scale and more loudly. **The
+phantom drift was not what made the model beat its oracle — removing it made more
+cells do so.** Negative result 10 stands, and §3.24 is now unexplained across a
+larger set of cells than when it was written.
+
+**What it does to the answers.** The direction of every published conclusion
+survives, and two get slightly weaker:
+
+| question | before | after |
+|---|---|---|
+| Q2 — does CTU help on CIC? (test) | 0.1584 vs 0.0642, gap +0.0942 | 0.1990 vs 0.1173, gap **+0.0817** |
+| Q3 — does CIC help on CTU? (test) | 0.3734 vs 0.3221, gap +0.0513 | 0.3537 vs 0.3186, gap **+0.0351** |
+
+Q2 remains supported as a direction and not as a quantity; Q3 remains
+unsupported, and its gap is now smaller than it was. Nothing flips.
+
+**One thing the sweep settles that was open.** §3.37 recorded, from three cells,
+that the correction "does not go one way". At 28 cells the split is 21 up and 7
+down — so the fix does help more often than it hurts, and the earlier statement
+was right to refuse a direction from three cells but would have been right in
+spirit if it had guessed one. The reason it is still not summarised as "the fix
+improves the model" is that seven cells got worse and two of those are validation
+cells, where the operating point is selected.
