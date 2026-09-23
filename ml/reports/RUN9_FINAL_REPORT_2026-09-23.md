@@ -159,18 +159,68 @@ than kept alive on a partial match.
 
 ---
 
-## 5. Still running, and what each could change
+## 5. Landed since the core was drafted
 
-| in flight | could overturn |
+Every row of the previous version of this section has now landed. What they changed:
+
+| result | what it did to the report |
 |---|---|
-| Six recovered `state+hidden` transfer cells | §2.5 and §3.2 — the cross-dataset half of the head comparison is currently CIC/CTU-within-dataset only |
-| `lofo_without_neris` (unseen attack family) | §2.1's generality; this is the §31 Q9 evidence and nothing here substitutes for it |
-| The pre-registered stage-balanced risk objective (§3.13) | §2.5 — if it lifts the below-chance stages, the pooled objective was the explanation |
-| CIC decomposable-head arms (`state+logvar`, `state+delta`) | §3.4's explainability cost, if a decomposable head keeps most of the gain |
-| Fixed-pooling cells | Q2/Q3 under a common readout |
-| Re-run of the 20 recorded cells into `repro_*` | everything in §2 that quotes the matrix, if the numbers do not reproduce |
+| Six recovered `state+hidden` transfer cells | completed the cross-dataset half of the head comparison (§3.30) |
+| `lofo_without_neris` (unseen attack family) | **Q9 answered.** AP 0.717 [0.485, 0.860] on a withheld family, within-host ROC 0.949 across ten infected hosts — and persistence reaches 0.772. The model transfers, and not better than persistence does (§3.39) |
+| Pre-registered stage-balanced risk objective | criterion 1 **failed**; the pooled objective is not the explanation, and §12 is refuted (§3.35, §3.27) |
+| CIC decomposable-head arms | **reversed the CTU verdict.** `state+logvar` reaches 99.1% of `state+hidden` on CIC against 14% on CTU, so the explainability cost is dataset-dependent (§3.38). Being re-trained under D145 |
+| Fixed-pooling cells | Q2 supported as a direction, Q3 not supported; persistence is level with the model on both CTU rows (§3.40) |
+| Re-run of the recorded cells into `repro_*` | **all 28 reproduce bit-identically**, and CI coverage went 6/28 → 28/28 (§3.36) |
 
-The last row is the one to watch: it is simultaneously the missing confidence
-intervals and a reproducibility check on every published number in the matrix, and
-it is written to a separate directory precisely so a disagreement is visible rather
-than overwritten.
+## 6. The defect found on the last day
+
+While investigating the oracle anomaly, the rollout was found to be manufacturing
+state in the 13–15 feature slots that the transition loss masks — slots where the
+network receives no gradient, so its output there is untrained, compounding to rms
+2.03 by k=6 against real features at 0.69. It reached the frozen head, whose
+weights on those slots were never constrained by data either. It was also present
+in head *training*, through `head_context`'s unmasked `logvar`.
+
+Three things follow, and they pull in different directions:
+
+1. **Every CTU and cross-dataset number in this phase is provisional.** The
+   28-cell re-score under the fix is running. Run 8 is unaffected — its regime
+   drops nothing — and its artifacts are untouched.
+2. **The correction does not go one way.** Raw AP by cell: comb → CIC test
+   **+0.055** (0.147 → 0.202, ROC 0.913 → 0.967), CTU → CTU test +0.005, comb →
+   CTU test **−0.015**. The first cell alone would have supported "the defect was
+   costing accuracy"; the third refutes it. The phantom helped some cells and hurt
+   others, which is what an untrained signal projected through untrained weights
+   should do, and it is why the whole matrix is being re-scored rather than the
+   correction being estimated from a sample. The oracle and persistence arms are
+   unchanged in every cell, as they must be — their states never carried it.
+3. **It explains neither of the two anomalies it looked like it would.** A test
+   was pre-registered before the re-scores ran, and it came back negative: the
+   model beats its oracle by *more* after masking (+0.150 against +0.095), and
+   the deterministic arm is still below chance. §3.24's cells remain unexplained.
+
+What the correction did surface is a sharper version of the anomaly. On
+`comb2cic/test` the oracle ranks at ROC 0.367 and persistence at 0.194 — both
+below chance — while the sampled rollout reaches 0.967. A frozen head trained on
+combined data appears anti-correlated on CIC's true state distribution and
+strongly correlated on states its own transition model produced. If that survives
+the full re-score it is the most interesting open question in the phase, and it is
+a question about what the rollout does to a state, not about accuracy.
+
+## 7. The honest summary, as of this draft
+
+NIDRA's transition model learns network dynamics that are real and measurable, and
+this phase added a second corpus, a cross-dataset matrix, a history-aware head, an
+unseen-family test and a reproducibility guarantee to the evidence for that.
+
+It did not turn those dynamics into attack forecasting that beats persistence.
+That is the finding. It holds on the unseen family (0.717 against 0.772), on both
+CTU rows of the fixed-readout comparison (0.322 against 0.322, 0.373 against
+0.362), and it is consistent with §3.34's mechanical diagnosis: the frozen head's
+answer moves 0.28% when the rollout moves the hidden state 40–62%, and its
+first-layer response to that displacement is 1.08× its response to noise. The
+invariant that makes the forecasting claim falsifiable is the same invariant that
+caps it, and the phase returned the negative rather than removing the invariant.
+
+The list of what is not yet known is in §3 and has not shrunk as much as the list
+of what was measured has grown. That is the accurate shape of the result.

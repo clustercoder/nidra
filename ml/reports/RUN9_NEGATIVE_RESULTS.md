@@ -307,9 +307,13 @@ things it looked like it would explain. Worth separating those: a defect large
 enough to be obviously important is not thereby the cause of whatever else is
 unexplained nearby.
 
-One finding in the other direction, which belongs here because it was not the
-hypothesis: **the phantom was costing accuracy, not manufacturing it.** Removing
-it is worth +0.055 raw AP and ROC 0.913 → 0.967 on that cell. *(§3.37, D145.)*
+And a claim of my own, written off the first re-scored cell and withdrawn two
+cells later. Raw AP: comb → CIC test **+0.0548**, CTU → CTU test +0.0050, comb →
+CTU test **−0.0147**. "The phantom was costing accuracy, not manufacturing it"
+was true of the cell it was drafted from and false of the third. An untrained
+signal projected through untrained weights has no reason to point the same way
+twice, and one cell was never enough to say which way it pointed. *(§3.37,
+D145.)*
 
 ---
 

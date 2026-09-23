@@ -1934,6 +1934,12 @@ and `state+hidden` as controls that do not read `logvar`.
 **The pre-registered test came back negative.** Masking does not remove the
 oracle-beating: on `comb2cic/test` the raw arm went from beating its oracle by +0.095
 to beating it by **+0.150**. The hypothesis in this entry is refuted and §3.24's cells
-remain unexplained. Two side findings: the phantom was *costing* accuracy (+0.055 raw
-AP once removed, ROC 0.913 → 0.967), and the deterministic arm's below-chance ROC is
-not the phantom either (0.254 → 0.266).
+remain unexplained. The deterministic arm's below-chance ROC is not the phantom either
+(0.254 → 0.266).
+
+The correction itself does not go one way. Raw AP: comb → CIC test +0.0548, CTU → CTU
+test +0.0050, comb → CTU test −0.0147. A claim drafted off the first cell — "the
+phantom was costing accuracy" — was withdrawn when the third landed. An untrained
+signal projected through untrained weights helps some cells and hurts others, which is
+why the whole matrix is being re-scored rather than the correction estimated from a
+sample.

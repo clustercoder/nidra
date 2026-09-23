@@ -2325,11 +2325,23 @@ oracle and persistence are unchanged, exactly as they should be — their states
 never carried the phantom. §3.24's cells stay unexplained and negative result 10
 stands as written.
 
-Two things the table settles in passing. **The phantom was hurting, not helping**:
-removing it is worth +0.055 raw AP and +0.054 ROC on this cell, so the defect was
-costing accuracy rather than inflating it. And **the deterministic arm's
-below-chance ROC is not the phantom either** — 0.254 to 0.266. That remains
-unexplained too.
+One thing the table settles in passing: **the deterministic arm's below-chance
+ROC is not the phantom either** — 0.254 to 0.266. That remains unexplained too.
+
+One thing it does *not* settle, and a claim drafted from this cell alone had to
+be withdrawn when the next two landed. Raw AP by cell:
+
+| cell | before | after | Δ |
+|---|---:|---:|---:|
+| comb → CIC, test | 0.1470 | 0.2018 | **+0.0548** |
+| CTU → CTU, test | 0.3203 | 0.3254 | +0.0050 |
+| comb → CTU, test | 0.3697 | 0.3551 | **−0.0147** |
+
+"The phantom was costing accuracy" was true of the first cell and false of the
+third. An untrained signal projected through untrained weights helps some cells
+and hurts others, which is the reason the correction is being measured across the
+whole matrix rather than estimated from a sample. The oracle and persistence arms
+are unchanged in every cell, as they must be — their states never carried it.
 
 What the table does point at is something the phantom was obscuring: on this
 cell the oracle itself ranks at ROC 0.367 and persistence at 0.194, both *below

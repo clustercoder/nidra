@@ -136,6 +136,14 @@ class NidraPredictor:
                 continue
             model = self._build_model()
             model.load_state_dict(torch.load(model_path, map_location=device))
+            # The transition receives no gradient on the features the scaler
+            # dropped (train/losses.py masks them), so its output there is
+            # untrained and the rollout compounds it into the state the frozen
+            # head reads. The benchmark sets this in load_models; serving loads
+            # its own ensemble and needs it too, or production is the one place
+            # the defect goes unmeasured. D145.
+            dropped = set(self.scaler.dropped_features or [])
+            model.set_feature_mask([f not in dropped for f in FEATURE_ORDER] if dropped else None)
             model.eval()
             model.freeze_all()
             self.models.append(model)

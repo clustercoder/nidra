@@ -16,6 +16,7 @@ The contract these tests pin: a dropped slot is zero in the input, zero in the
 truth, and must stay zero everywhere the rollout produces.
 """
 
+import pytest
 import torch
 
 from nidra.models.world_model import WorldModel
@@ -215,3 +216,37 @@ class TestHeadContextOutsideTheRollout:
         m = _model()
         lv = torch.randn(4, 8)
         torch.testing.assert_close(m.mask_logvar(lv), lv)
+
+
+class TestServedPathCarriesTheMask:
+    """The benchmark sets the mask in `load_models`; the served path loads its
+    own ensemble and would otherwise reproduce the phantom drift in production,
+    which is the one place it would go unmeasured.
+    """
+
+    def test_every_served_model_carries_the_scalers_mask(self, trained_predictor):
+        from nidra.data.schema import FEATURE_ORDER
+
+        trained_predictor, _ = trained_predictor
+        dropped = set(trained_predictor.scaler.dropped_features or [])
+        expected = [f not in dropped for f in FEATURE_ORDER]
+        for m in trained_predictor.models:
+            if not dropped:
+                assert m.feature_mask is None, "no dropped features means no mask, and the old path exactly"
+            else:
+                assert m.feature_mask is not None, "the served rollout would produce D145's phantom drift"
+                assert [bool(v) for v in m.feature_mask.tolist()] == expected
+
+    def test_a_served_rollout_holds_dropped_slots_at_zero(self, trained_predictor):
+        """The end-to-end statement, independent of how the mask got there."""
+        from nidra.data.schema import FEATURE_ORDER
+
+        trained_predictor, _ = trained_predictor
+        dropped = set(trained_predictor.scaler.dropped_features or [])
+        if not dropped:
+            pytest.skip("this fixture's scaler drops nothing; the regime cannot be exercised here")
+        idx = [i for i, f in enumerate(FEATURE_ORDER) if f in dropped]
+        m = trained_predictor.models[0]
+        x = torch.zeros(2, trained_predictor.L, len(FEATURE_ORDER))
+        out = m.rollout(x, K=trained_predictor.K, n_samples=4, stochastic=True)
+        assert out.states[..., idx].abs().max().item() == 0.0
