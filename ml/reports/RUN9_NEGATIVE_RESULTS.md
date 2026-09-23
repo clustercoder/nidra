@@ -5,7 +5,7 @@ list. Every entry names the intervention, the number that killed it, and what
 the phase did differently afterwards — because an experiment that changed
 nothing about the next one was not worth running.
 
-Ten entries. Six are interventions that did not beat their baseline, three are
+Eleven entries. Six are interventions that did not beat their baseline, four are
 mistakes in the measurement apparatus that produced confident wrong numbers
 before being caught, and one is a pre-registered explanation whose own test
 refused it.
@@ -155,6 +155,31 @@ Two shell-level mistakes belong in the same spirit and are recorded in
 running shell script corrupted its read position so a benchmark re-ran a variant
 it had been told to skip. Both are visible in the experiment matrix as 0-minute
 rows.
+
+### 11. Scoring a model with a scaler from a different feature regime
+
+**What happened.** A probe loaded `config/combined_eval_ctu.yaml` directly. The
+queue runs that config with `--set artifacts.scaler_dir=<source run>/artifacts/scaler`;
+without the override it resolves to the shared `ml/artifacts/scaler`, which a
+later training run had rewritten at the full-45 feature regime — against a model
+trained at `cross_core`'s 32.
+
+**Why nothing caught it.** A dropped feature is **zeroed, not removed**. Shapes
+match, `load_state_dict` succeeds, the rollout runs, the AP is finite and
+plausible. The only symptom was a number 2.9× away from the same cell's
+independently recorded value, and it was noticed only because that recorded
+value existed to check against.
+
+**Scope.** All 20 recorded cross-evaluation cells were audited; every one used a
+scaler from its own model's family. No published number is affected. The probe
+was the only thing wrong.
+
+**What it changed.** `load_models` now compares the loaded scaler's drop set
+against each checkpoint's recorded `dropped_features` and refuses on mismatch
+(D142, §3.28). The drop set rather than a file hash: a hash would false-alarm on
+an equivalent refit, is not recorded anywhere, and would not say what differs.
+The transfer configs are still not self-contained, which the guard converts from
+a wrong answer into a refusal but does not solve.
 
 ---
 
