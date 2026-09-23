@@ -348,6 +348,56 @@ unchanged again, the harness is lying rather than the result being negative.
 
 ---
 
+### 16. The projection hypothesis, refuted at every threshold and in the wrong direction
+
+§3.24's oracle anomaly survived three explanations, so the fourth was
+pre-registered in full: statistic, horizon, standardisation, threshold and the
+minimum cells per group, all fixed before the measurement. The idea was that a
+rolled-out state might lie nearer the frozen head's training distribution than
+the true future of a corpus it was not trained on alone, so the rollout would act
+as a projection and the head would do better on the projection than on the truth.
+
+**In 0 of 24 cells is the rollout closer.** It is further, in every cell, at every
+threshold. And the ratio does not separate the groups either — oracle-beating
+cells span 1.143–2.211, oracle-winning cells span 1.141–1.941.
+
+Two things about how this one was run are worth keeping. The criterion was
+amended mid-flight, because the code's `sd > 1e-6` did not implement the
+pre-registration's own words and let a feature with training sd 5.3e-5 produce a
+distance of 806. The amendment was written down before any ratio was read, and it
+replaced a single threshold with a sweep of four, so the verdict is only a verdict
+if it survives all of them. It did — refuted at all four.
+
+The refutation leaves a sharper question than it answered: the head ranks better
+on states measurably further from its own training distribution, median ratio
+1.42, in every cell. No fifth hypothesis is offered, because two of the four dead
+explanations were this log's own and a guess without a measurement behind it is
+what entries 10 and this one exist to discourage. *(§3.41, §3.45.)*
+
+### 17. A queue that reported rc=0 while dying, again
+
+§3.30 recorded six cross-evaluation cells that never ran and were logged `rc=0`,
+because `$?` after a zsh pipeline reads the last command's status — `tail`'s —
+and not the job's. The fix, `${pipestatus[1]}`, went into the queue scripts that
+existed then.
+
+Stage B for §3.42 was written **after** that section, in a new script, with
+`rc=$?`. It died in three seconds (`--init-from cic_core_dyn` has only seed 0,
+because the dynamics run that produced it used `--seeds 0`) and logged
+`END cic_core_decompB rc=0`.
+
+It was caught because three seconds is not a head ablation, and because the
+result was being waited on. Neither is a control. The re-queued script reads
+`${pipestatus[1]}` everywhere and exits non-zero on the first failed seed rather
+than proceeding to compare a variant that has no weights.
+
+The lesson is not about `$?`. It is that a hazard documented in a report does not
+propagate to the next script written by the same hand unless it is put somewhere
+the script has to pass through — which, for queue scripts written ad hoc into a
+scratchpad, it is not.
+
+---
+
 ## What this list is for
 
 Three of the six interventions were killed by a measurement that cost minutes

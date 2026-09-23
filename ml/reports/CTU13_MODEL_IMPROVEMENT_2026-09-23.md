@@ -2847,3 +2847,57 @@ answer is `CIC+CTU → CIC` with the `state+hidden` head, and the honest form of
 that answer is: *the best configuration is the only regime-and-target pair where
 the model clearly beats its baselines, and it does not generalise to the other
 five.* A configuration that wins one cell of twelve is a finding about that cell.
+
+### 3.45 §3.41's verdict: REFUTED, at every threshold, in the opposite direction (§25, §36 item 22)
+
+The pre-registered criterion, run as amended, on the `mask_*` artifacts. 24 cells,
+17 of which beat their oracle and 7 of which do not — both groups above the
+minimum of 3, so the test is powered.
+
+**REFUTED, and the same at all four thresholds** (3e-3, 1e-2, 3e-2, 1e-1), so the
+amendment to the exclusion threshold makes no difference to the answer.
+
+It fails in both of the ways it could:
+
+**The direction is wrong everywhere.** The hypothesis needed rolled-out states to
+be *closer* to the head's training distribution than the true future is. In
+**0 of 24 cells** are they closer. Not in the oracle-beating cells, not in the
+others, not at any threshold.
+
+**And the statistic does not separate the groups.**
+
+| group | n | min | median | max |
+|---|---:|---:|---:|---:|
+| beats its oracle | 17 | 1.143 | 1.424 | 2.211 |
+| oracle wins | 7 | 1.141 | 1.298 | 1.941 |
+
+The ranges are almost the same range. Even if the ≥1/<1 threshold were moved to
+wherever it separated them best, there is nothing here to separate.
+
+**So §3.24 is unexplained after four attempts**, three of them against criteria
+fixed in advance:
+
+| attempt | where | outcome |
+|---|---|---|
+| the horizon reduction | §3.26 | eliminated (6 of 6 individual horizons) |
+| combined-model drift amplification | §3.27 | criterion failed — the CIC-only model amplifies too |
+| D145's phantom features | §3.37 | refuted; masking made *more* cells beat their oracle, 10 → 17 |
+| projection onto the training manifold | §3.45 | refuted at every threshold, direction inverted |
+
+**What the refutation leaves is a sharper question than the one it answered.**
+The frozen head ranks *better* on states that are measurably *further* from its
+own training distribution — ratio median 1.42, and it holds in every cell. That
+is the opposite of how a frozen readout is supposed to behave, and it is now the
+most specific unexplained thing in the project.
+
+It is worth being precise about what is and is not surprising. A rollout drifting
+away from the training cloud is ordinary: six recursive steps with a learned mean
+will do that. What is not ordinary is that the head's *ranking quality* improves
+along that drift, while the same head applied to the true future — which is
+nearer its training data — ranks at or below chance in the cells where this is
+sharpest (oracle ROC 0.367 and 0.558, §3.37).
+
+No fifth hypothesis is offered here. §3.27 and this section are two cases of an
+explanation for §3.24 being written down and then refused by its own criterion,
+and a third guess without a new measurement behind it would be the thing those
+two sections exist to discourage.
