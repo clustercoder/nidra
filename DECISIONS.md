@@ -1752,3 +1752,31 @@ Six tests in `tests/test_predictor_trajectory_head.py` drive the whole served su
 test does assert that two windows sharing a final state but differing earlier score
 differently, which is the check that the history actually reaches the head rather than
 arriving zeroed.
+
+**D142 — the benchmark refuses a scaler fitted under a different feature regime than the checkpoint.**
+(2026-09-23) A probe resolved `config/combined_eval_ctu.yaml` without the queue's
+`--set artifacts.scaler_dir=<source run>/artifacts/scaler`, so it got the shared
+`ml/artifacts/scaler` — which a later training run had rewritten at the full-45 regime,
+against a model trained at `cross_core`'s 32. Nothing raised. A dropped feature is ZEROED
+rather than removed, so the tensor shapes match, `load_state_dict` succeeds and the rollout
+runs; the only symptom was an AP 2.9× away from the independently recorded value for that
+cell, and it was noticed only because that recorded value existed to cross-check against.
+All 20 recorded cross-evaluation cells were audited and every one used a scaler from its own
+model's family, so no published number is affected.
+
+`load_models` now compares the loaded scaler's `dropped_features` against each checkpoint's
+recorded `dropped_features` and raises, naming the differing features and the checkpoint
+rather than just the counts. Checkpoints written before that field existed pass through
+unchecked: refusing them would break replaying Run 8's artifacts, which §29 forbids, and the
+guard is worth having for new work even if it cannot cover old.
+
+The drop set is the right thing to compare rather than a file hash. A hash would false-alarm
+on a legitimately refit but equivalent scaler, it is not recorded in the checkpoint metadata,
+and it would not say what differs. The drop set is exactly the property whose mismatch is
+silent.
+
+What is NOT fixed: `config/cic2ctu.yaml`, `config/ctu2cic.yaml` and
+`config/combined_eval_ctu.yaml` are still not self-contained — each is correct only when run
+with the scaler override, and the shared directory they otherwise resolve to is rewritten by
+whatever trained last. The guard turns that from a wrong answer into a refusal, which is the
+right first move and not the whole fix.
