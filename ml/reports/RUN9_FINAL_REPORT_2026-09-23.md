@@ -38,9 +38,11 @@ Each of these is measured, reproducible from a recorded artifact, and does not
 depend on an arm still running.
 
 **2.1 The history-aware risk head is a real and replicated improvement over Run 8's
-per-state head.** Three training regimes, each with its own frozen encoder and
-transition so the head is the only thing that changes (§3.12), then three seeds off
-one shared checkpoint (§3.29):
+per-state head — on the objective heads are trained against, and not on the one the
+system is evaluated against.** This claim was the phase's headline and it has been
+narrowed by its own evidence; §2.1b states what happened. Three training regimes, each
+with its own frozen encoder and transition so the head is the only thing that changes
+(§3.12), then three seeds off one shared checkpoint (§3.29):
 
 | | validation AP |
 |---|---|
@@ -53,6 +55,29 @@ Stage B's distributions do not overlap: the worst history-aware seed is 0.11 abo
 the best per-state one. The history-aware head is also **5.6× more stable across
 seeds**, which with the transition model held fixed is purely head-training
 variance.
+
+**2.1b And it does not survive the forecast benchmark.** §3.29's own three-seed
+weights, scored on the benchmark instead of on head-training validation — same data,
+same dynamics, same seeds, only the evaluation differs — against a bar pre-registered
+before the run (win mean AP at both splits, no seed-distribution overlap at either,
+the same standard §3.29 cleared on validation):
+
+| split | `state` mean AP | `state+hidden` mean AP | paired | `state` ROC | `state+hidden` ROC |
+|---|---:|---:|:--:|---:|---:|
+| test | 0.1937 | **0.3624** | 3/3, no overlap | **0.797** | 0.693 |
+| holdout | **0.2273** | 0.2175 | 1/3, overlapping | **0.912** | **0.587** |
+
+**The bar is not met** — one split won decisively, the other lost narrowly — and this
+is recorded as a failure to replicate rather than as a tie, as pre-registered. On ROC
+the per-state head wins both splits, and on holdout it wins by 0.33: two systems with
+almost identical average precision, one of which ranks near chance. Across the wider
+one-seed matrix the same pattern holds — `state` ahead on ROC in **11 of 12** cells and
+clearing its own baselines in **7 of 12** against `state+hidden`'s 3 of 12 (§3.47,
+§3.49).
+
+So 2.1 is true as written and is a statement about head-training validation AP. The
+architecture the evidence supports under §32's ranking is **`state`, the Run 8
+architecture this phase set out to improve on.**
 
 **2.2 On the operating point it produces a materially better alert.** CTU
 validation, three-member ensembles, identical rows (§3.32): F1 **0.608** against
@@ -243,20 +268,51 @@ head reads something the rollout genuinely moves — without unfreezing it on
 predicted states, which would close the gap and simultaneously remove the reason
 the result means anything.
 
-## 8. The honest summary, as of this draft
+## 8. The honest summary
 
 NIDRA's transition model learns network dynamics that are real and measurable, and
 this phase added a second corpus, a cross-dataset matrix, a history-aware head, an
-unseen-family test and a reproducibility guarantee to the evidence for that.
+unseen-family test, a defect fix and a reproducibility guarantee to the evidence for
+that. Every recorded number reproduces bit-identically, every final metric has an
+interval, and the phase found and reported six ways it could have published something
+false.
 
-It did not turn those dynamics into attack forecasting that beats persistence.
-That is the finding. It holds on the unseen family (0.717 against 0.772), on both
-CTU rows of the fixed-readout comparison (0.322 against 0.322, 0.373 against
-0.362), and it is consistent with §3.34's mechanical diagnosis: the frozen head's
-answer moves 0.28% when the rollout moves the hidden state 40–62%, and its
-first-layer response to that displacement is 1.08× its response to noise. The
-invariant that makes the forecasting claim falsifiable is the same invariant that
-caps it, and the phase returned the negative rather than removing the invariant.
+**It did not turn those dynamics into attack forecasting that beats persistence.**
+That is the finding, and it held under every way the phase found to ask it:
 
-The list of what is not yet known is in §3 and has not shrunk as much as the list
-of what was measured has grown. That is the accurate shape of the result.
+- On the **unseen attack family**, 0.717 against persistence's 0.772 (§3.39).
+- On both **CTU rows** of the fixed-readout comparison, 0.322 against 0.322 and
+  0.373 against 0.362 (§3.40).
+- Across the **corrected cross-dataset scorecard**, the model beats its best baseline
+  in **3 of 12 cells**, and three of the four CTU-target losses are to persistence
+  plus noise scaled to the model's own predicted variance (§3.44).
+- And the **head that was supposed to fix it** wins the objective it is trained on and
+  loses the one it is evaluated on (§3.47, §3.49).
+
+The mechanism is measured, not inferred. The frozen head's answer moves **0.36%** when
+the rollout moves the hidden state **39–54%**, and its first layer responds to that
+displacement **1.15×** as strongly as to noise of equal size (§3.46). The invariant
+that makes the forecasting claim falsifiable — heads train on observed states and
+freeze — is the same invariant that caps it. The phase returned the negative rather
+than removing the invariant, which is the only choice under which the result means
+anything.
+
+**One cell is genuinely good and should not be lost in the summary.** `CIC+CTU → CIC`
+on test reaches AP 0.199 against a best baseline of 0.107, at ROC 0.950, natural
+prevalence 0.00417. Training on both corpora and evaluating on CIC is where this
+architecture works. It does not transfer to the other five regimes, and §32's ranking
+puts cross-dataset generalisation above a single aggregate, so this is a finding about
+that cell rather than a system to ship.
+
+**What is still unexplained, after four attempts and three pre-registered criteria:**
+the model beats its own oracle in 17 of 28 cells, and the frozen head ranks *better*
+on states measurably *further* from its training distribution — median ratio 1.42, in
+every cell measured (§3.45). No fifth hypothesis is offered here without a measurement
+behind it.
+
+**What the next phase should not be** is a larger sequence model. §14 proposed one
+after the simpler history-aware heads were tested; they have been, and a 90-dimensional
+head built from named features matches or beats the 173-dimensional one that reads the
+full recurrent summary (§3.48). The constraint is not head capacity. It is the coupling
+between a frozen head and a rollout it never saw, and that is a question about the
+architecture's shape rather than its size.

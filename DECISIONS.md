@@ -2000,3 +2000,41 @@ phantom was costing accuracy" — was withdrawn when the third landed. An untrai
 signal projected through untrained weights helps some cells and hurts others, which is
 why the whole matrix is being re-scored rather than the correction estimated from a
 sample.
+
+---
+
+## D146 — 2026-09-24 — Run 9's architecture call is `state`, the head it set out to replace
+
+Run 9 exists because Run 8's per-state `RiskHead` failed on unseen attack families, and
+the phase's candidate replacement was `TrajectoryRiskHead`, which reads the encoder's
+recurrent summary alongside the predicted state. On the objective heads are trained
+against it wins clearly and repeatedly: three training regimes with the encoder and
+transition frozen so the head is the only variable (§3.12), then three seeds off one
+checkpoint (§3.29), then a decomposable 90-dimensional variant that matches the opaque
+173-dimensional one (§3.48).
+
+**It does not win the objective the system is evaluated against.** §3.47 pre-registered
+the bar — win mean benchmark AP at both splits with no seed-distribution overlap at
+either, the same standard the validation claim cleared — and §3.49 ran it on §3.29's own
+weights. `state+hidden` won CTU test 3/3 with no overlap and lost CTU holdout 1/3 with
+overlap, so the bar is not met. On ROC the per-state head wins both splits, on holdout by
+0.912 against 0.587. Across the wider one-seed matrix `state` leads on ROC in 11 of 12
+cells and clears its own baselines in 7 of 12 against 3 of 12.
+
+**Decision.** §36 item 7 is answered `state`, and §32's ranking is what decides it: it
+puts recall at controlled false-alarm rates and cross-dataset generalisation above
+aggregate AP, and AP is the only axis on which the history-aware head leads. Two systems
+with almost identical average precision, one of which ranks near chance on the held-out
+split, are not equivalent for a head whose job is to order hosts.
+
+**What this is not.** It is not a release: no Run 9 artifact is proposed for shipping,
+and `MODEL_CARD_RUN9.md` designates no configuration. It is not a finding that the
+history-aware head is worthless — it halves false alarms at the operating point (§3.32)
+and is the better alert. And it does not close `state+logvar`, which won validation 3/3
+paired and has no benchmark evidence at all; that is the obvious next run and it was not
+run here.
+
+**Why this is written down.** The phase's headline claim was that the history-aware head
+is a real improvement. It is — on head-training validation AP. Recording the reversal as
+a decision rather than as a footnote is what keeps the two objectives from being quoted
+interchangeably later.

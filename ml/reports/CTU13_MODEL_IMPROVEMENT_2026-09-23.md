@@ -1393,6 +1393,35 @@ the p95 ordering *reversed* between the arms and the minima agreed to 0.13 ms �
 a real 6% cost does not do either. Fifteen paired samples is not enough to
 resolve a difference smaller than this machine's load noise.
 
+#### The five-member number, measured rather than extrapolated (§36 item 26)
+
+§3.21 measured one member under load average 6.1 and multiplied by five to reach
+270 ms. The machine is now idle (load 1.3, nothing else running), so the ensemble
+rollout is measured directly, at the shipped `n_samples_per_member: 200`, K=6,
+`torch_num_threads: 2`, 12 calls per point after two warm-ups:
+
+| members | `state` median | `state+hidden` median |
+|---:|---:|---:|
+| 1 | 20.7 ms | 20.4 ms |
+| 3 | 63.1 ms | 63.0 ms |
+| 5 | **105.6 ms** | **105.5 ms** |
+
+Linear in members at ~21 ms each, and the two heads are **indistinguishable at
+every ensemble size** — 105.6 against 105.5 at five, a 0.1 ms difference on a
+105 ms call.
+
+Two corrections to §3.21 follow. Its absolute figures were contention, not cost:
+one member is 20.7 ms idle against the 68.2 ms it recorded, a factor of 3.3. And
+its 270 ms extrapolation is therefore **2.5× too pessimistic**.
+
+**What this is not.** This measures the ensemble rollout, not a full
+`NidraPredictor.forecast()` — §3.21's decomposition put SHAP at ~9 ms, temporal
+saliency at ~9 ms and everything else at ~4 ms, none of which scale with ensemble
+size. Composing those with the measured rollout gives roughly **128 ms for a
+five-member forecast**, against the 300 ms target. That composition uses §3.21's
+own per-stage numbers, which were themselves taken under contention, so it is an
+upper bound on the non-rollout part and the 128 ms is conservative.
+
 ### 3.22 The explainability loss may not be a component choice (§5, §27, §31 Q14)
 
 §3.20 argued that a head driven by the encoder hidden state costs the project its
@@ -3072,3 +3101,72 @@ variant that currently has them only on CIC, plus twelve benchmark cells. It is
 the obvious next run and it is **not** run here; the phase's remaining compute is
 committed to re-asking §3.29's own question on the benchmark (§3.47), which is
 the prior claim and the one currently in the final report's §2.1.
+
+### 3.49 §3.29's claim on the forecast benchmark, three seeds: not confirmed, and not reversed either
+
+§3.47 pre-registered the bar before this ran: **`state+hidden` is confirmed if it
+wins the mean benchmark AP at both splits and its seed distribution does not
+overlap `state`'s at either** — the same standard §3.29 cleared on validation.
+§3.29's own weights, `ctu_confirm__*`, three seeds each off one `ctu_dyn`
+checkpoint, scored on the forecast benchmark. Same data, same dynamics, same
+seeds; only the evaluation differs.
+
+**Test split**
+
+| head | s0 | s1 | s2 | mean | sd | range |
+|---|---:|---:|---:|---:|---:|---|
+| `state` | 0.2041 | 0.1792 | 0.1978 | 0.1937 | 0.0129 | [0.179, 0.204] |
+| **`state+hidden`** | 0.3130 | 0.3766 | 0.3974 | **0.3624** | 0.0440 | [0.313, 0.397] |
+
+Paired +0.1089, +0.1974, +0.1997 — **3/3, mean +0.169, distributions do not
+overlap.**
+
+**Holdout split**
+
+| head | s0 | s1 | s2 | mean | sd | range |
+|---|---:|---:|---:|---:|---:|---|
+| **`state`** | 0.2400 | 0.1950 | 0.2471 | **0.2273** | 0.0283 | [0.195, 0.247] |
+| `state+hidden` | 0.2223 | 0.2046 | 0.2257 | 0.2175 | 0.0113 | [0.205, 0.226] |
+
+Paired −0.0177, +0.0096, −0.0213 — **1/3, mean −0.010, distributions overlap.**
+
+**Verdict: the bar is not met.** It required both splits; `state+hidden` wins one
+decisively and loses the other narrowly. **§3.29's claim does not replicate on the
+forecast benchmark**, and this is reported as a failure to replicate rather than
+as a tie, exactly as pre-registered.
+
+**And ROC separates them the other way, on both splits.**
+
+| split | `state` ROC | `state+hidden` ROC |
+|---|---:|---:|
+| test | **0.797** | 0.693 |
+| holdout | **0.912** | 0.587 |
+
+On holdout the history-aware head reaches AP 0.2175 at ROC **0.587** — within
+sight of chance — against the per-state head's 0.2273 at 0.912. Two systems with
+almost the same average precision and a 0.33 gap in ranking quality is the §3.11
+signature stated as sharply as this phase has managed: AP at this prevalence can
+be carried by a handful of recognised hosts while the global ordering is nearly
+uninformative.
+
+**What this does and does not do to §3.47.** It confirms it on the two CTU cells
+and at three seeds rather than one: §3.47's one-seed table had `state+hidden`
+winning CTU test AP and `state` winning CTU holdout AP, and both hold here. It
+does not extend to the other ten cells, which remain one seed each. §3.47's ROC
+finding — `state` ahead in 11 of 12 — is the part that now has seed-level support,
+and it is the part that matters for a head whose job is to order hosts.
+
+**The architecture call (§36 item 7), stated plainly.** There is no single winner.
+
+| | best on | evidence |
+|---|---|---|
+| `state` | benchmark ROC, baseline-clearing (7/12 vs 3/12) | §3.47 one seed ×12 cells, §3.49 three seeds ×2 cells |
+| `state+hidden` | head-training validation AP; benchmark AP on CTU test | §3.29, §3.49 three seeds |
+| `state+logvar` | validation AP over `state+hidden`, 3/3 paired, and decomposable | §3.48 three seeds, **no benchmark evidence at all** |
+
+Under §32's ranking — which puts recall at controlled false-alarm rates and
+cross-dataset generalisation above aggregate AP — the evidence favours **`state`,
+the Run 8 architecture this phase set out to improve on.** That is the answer the
+measurements support today, and the honest form of it is that the phase's
+headline improvement is an improvement on the objective the head is trained
+against and not on the objective the system is evaluated against.

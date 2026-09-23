@@ -1,9 +1,11 @@
 # Model Card — NIDRA Run 9 (CTU-13 integration + head research, Δ=60 s, 2026-09-23)
 
 **Status: research phase, not a release.** This card describes what Run 9 measured and
-what it has so far established. It does **not** designate a shipped configuration —
-§36 item 7's architecture selection is not final, and every CTU-13 and cross-dataset
-number below is provisional pending the D145 re-score (see *Known defects*).
+what it established. It does **not** designate a shipped configuration. §36 item 7's
+architecture question has an answer — the evidence favours `state`, the Run 8
+architecture the phase set out to improve on — and an answer of that shape is a reason
+not to ship something new, not a release decision. Every CTU-13 and cross-dataset number
+below is post-D145-correction (see *Known defects*).
 
 `MODEL_CARD.md` (Run 8, Δ=60 s, 2026-09-20) remains the card for the **shipped**
 artifacts under `ml/artifacts/`. Run 9 did not retrain them, did not overwrite them and
@@ -76,10 +78,13 @@ serving (masked is slower in 19 of 40 paired calls).
 combined and `cic_core` run (13). The 23 `full`-regime runs, including Run 8's lineage,
 drop nothing and are arithmetically unaffected.
 
-**Consequence:** every CTU-13 and cross-dataset number in Run 9 was produced under the
-defect. The re-score is in progress. The correction does not go one way — it has helped
-some cells and hurt others — so no number here should be adjusted by an assumed
-direction.
+**Consequence:** every CTU-13 and cross-dataset number in Run 9 was first produced under
+the defect, and all 28 cells have since been re-scored under the fix. The correction does
+not go one way — **21 cells up, 7 down** — so no number may be adjusted by an assumed
+direction, only re-measured. Every published direction survived: Q2's cross-dataset gap
+narrowed from +0.094 to +0.082 and Q3's from +0.051 to +0.035, and both kept their sign.
+The one thing the correction changed materially is the oracle anomaly, which it made
+*worse*: cells where the model beats its own oracle went from 10 of 28 to 17 of 28.
 
 ---
 
@@ -88,10 +93,14 @@ direction.
 1. **The transition model learns dynamics that are real and measurable**, and this holds
    on a second corpus. That was Run 8's central claim and it survived the addition of
    CTU-13.
-2. **The history-aware head wins the alert and not the forecast.** It halves false
-   alarms and wins F1, and its within-host ROC *falls* (0.816 → 0.697) while its margin
-   over persistence is −0.0100 [−0.0342, +0.0034]. A GRU sequence classifier on identical
-   rows beats both.
+2. **The history-aware head wins the objective it is trained against and not the one
+   the system is evaluated against.** On head-training validation AP it beats every
+   per-state head across three regimes and three seeds. On the forecast benchmark, at
+   the same three seeds, it fails a bar pre-registered before the run: it wins CTU test
+   AP 3/3 with no overlap and loses CTU holdout 1/3, and on ROC it loses both splits
+   (0.693 vs 0.797 test, 0.587 vs 0.912 holdout). It halves false alarms and wins F1 at
+   the operating point, and its margin over persistence is −0.0100 [−0.0342, +0.0034]. A
+   GRU sequence classifier on identical rows beats both.
 3. **The model transfers to an unseen attack family** — AP 0.717 [0.485, 0.860], ROC
    0.950, within-host ROC 0.949 across ten infected hosts, the first genuinely
    cross-host within-host measurement in the project. **Persistence reaches 0.772.**
@@ -101,28 +110,37 @@ direction.
 5. **Every recorded number reproduces bit-identically** under pinned seeds.
 6. **On CIC a fully decomposable risk head matches the opaque one.** Under the
    D145 fix, `state+logvar` (90 dims, all derived from the 45 named features)
-   reaches 0.7869 against `state+hidden`'s 0.7825 on validation, with every
-   control that does not read `logvar` bit-identical. One seed, 94 validation
-   positives, no test cell yet — a candidate for Stage B, not a conclusion. It
-   matters because §3.20 found the winning head's score impossible to attribute
-   through the project's 45-feature explanation surface, and a decomposable head
-   would not have that problem.
+   beats `state+hidden` (173 dims, reading the recurrent summary) on validation AP
+   at **3/3 paired seeds** in Stage B. It matters because §3.20 found the winning
+   head's score impossible to attribute through the project's 45-feature explanation
+   surface, and a decomposable head would not have that problem. It has **no forecast-
+   benchmark evidence at all** — the benchmark is the evaluation that reversed the
+   history-aware head's validation win, so this is a validated candidate and not a
+   selection.
 
 ## What Run 9 has not established
 
 - **That the forecast beats persistence.** It does not, on the slices where the question
-  is sharpest. §3.34 gives the mechanism: the frozen head's answer moves 0.28% when the
-  rollout moves the hidden state 40–62%, and its first-layer response to that
-  displacement is 1.08× its response to noise. The invariant that makes the forecasting
+  is sharpest: the unseen family (0.717 against 0.772), both CTU rows of the fixed
+  readout, and 9 of 12 cells of the corrected cross-dataset scorecard. §3.34, re-measured
+  under the D145 fix in §3.46, gives the mechanism: the frozen head's answer moves 0.36%
+  when the rollout moves the hidden state 39–54%, and its first-layer response to that
+  displacement is 1.15× its response to noise. The invariant that makes the forecasting
   claim falsifiable is the same one that caps it, and Run 9 reported the negative rather
   than removing the invariant.
 - **Genuine advance warning.** CTU's pre-onset windows carry no state information; CIC's
   are weakly separable (probe ROC 0.75, of which bare activity gives 0.68) against a
   model at the prevalence floor. Neither corpus supports the claim.
-- **Why the model beats its oracle in 11 of 28 cells.** Three explanations have now been
-  tested and refuted, two of them against criteria fixed in advance. §3.41 registers the
-  fourth.
-- **A shipped configuration.** Selection is not final and this card does not make one.
+- **Why the model beats its oracle in 17 of 28 cells.** Four explanations have been
+  tested and refuted, three against criteria fixed in advance: horizon reduction,
+  drift amplification (§3.27), D145 itself (§3.37 — masking made *more* cells beat the
+  oracle) and projection onto the training manifold (§3.45 — refuted at all four
+  thresholds, with the direction inverted in 24 of 24 cells). What is left is a
+  restatement rather than an answer: the frozen head ranks better on states measurably
+  further from its training distribution, median ratio 1.42.
+- **A shipped configuration.** The architecture question is answered — under §32's
+  ranking the evidence favours `state`, which is what Run 8 already ships — and no
+  Run 9 artifact is proposed for release. This card does not designate one.
 
 ---
 
@@ -134,10 +152,11 @@ Unchanged from Run 8 and binding here. This system performs **learned dynamics**
 feature is inert rather than a confident answer about a quantity the model has no
 information on.
 
-Run 9 added one discipline worth naming: **pre-registration**. Five criteria were
-written down before the measurement that would decide them. Three refused the
-hypothesis they were written for, including two of this log's own explanations. They are
-in `reports/RUN9_NEGATIVE_RESULTS.md`, which has 15 entries.
+Run 9 added one discipline worth naming: **pre-registration**. Six criteria were written
+down before the measurement that would decide them, and **five refused the hypothesis
+they were written for** — the roadmap's §12 stage-balanced objective, three successive
+explanations for the oracle gap, and this phase's own headline claim. They are in
+`reports/RUN9_NEGATIVE_RESULTS.md`, which has 17 entries.
 
 ---
 
