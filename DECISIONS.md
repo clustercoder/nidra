@@ -1944,10 +1944,19 @@ clean. The consequence is that §3.38's decomposable-head comparison must be
 *re-trained*, not merely re-scored — `cic_core_decomp_masked` does that, with `state`
 and `state+hidden` as controls that do not read `logvar`.
 
-**The pre-registered test came back negative.** Masking does not remove the
-oracle-beating: on `comb2cic/test` the raw arm went from beating its oracle by +0.095
-to beating it by **+0.150**. The hypothesis in this entry is refuted and §3.24's cells
-remain unexplained. The deterministic arm's below-chance ROC is not the phantom either
+**The pre-registered test came back negative on both cells it named.** Masking does not
+remove the oracle-beating: `comb2cic/test` went from +0.0951 over its oracle to
+**+0.1499** (the gap grew), and `comb2ctu/holdout` from +0.0528 to **+0.0435** (shrank
+18%, nowhere near closed). The hypothesis in this entry is refuted and §3.24's cells
+remain unexplained.
+
+What the correction surfaced instead, in both anomalous cells: the frozen head ranks at
+or below chance on the **true** future states (oracle ROC 0.367 and 0.558, persistence
+0.194 and 0.456) and far above chance on states its own transition model produced
+(0.967 and 0.897). Both are combined-training cells. A projection-onto-the-learned-
+manifold hypothesis fits that, and is recorded as a hypothesis with no criterion yet —
+§3.27 is the standing reminder of what happens to an explanation on this question that
+is not given one in advance. The deterministic arm's below-chance ROC is not the phantom either
 (0.254 → 0.266).
 
 The correction itself does not go one way. Raw AP: comb → CIC test +0.0548, CTU → CTU

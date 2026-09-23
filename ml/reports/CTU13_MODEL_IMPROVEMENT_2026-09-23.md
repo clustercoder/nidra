@@ -2347,10 +2347,43 @@ the oracle anomaly, masking removes the oracle-beating in `comb2cic/test` and
 | `oracle_true_future` | 0.0519 | 0.0519 | 0.367 | 0.367 |
 | `persistence` | 0.0342 | 0.0342 | 0.194 | 0.194 |
 
-The model beat its oracle by +0.095 before and beats it by **+0.150** after. The
-oracle and persistence are unchanged, exactly as they should be — their states
-never carried the phantom. §3.24's cells stay unexplained and negative result 10
-stands as written.
+Both cells the test named have now run, and both still beat their oracle:
+
+| cell | raw arm − oracle, before | after | |
+|---|---:|---:|---|
+| comb → CIC, test | +0.0951 | **+0.1499** | the gap *grew* |
+| comb → CTU, holdout | +0.0528 | **+0.0435** | shrank by 18%, nowhere near closed |
+
+The phantom accounts for a small part of one gap and none of the other. The
+oracle and persistence arms are unchanged in both, exactly as they should be —
+their states never carried it. **§3.24's cells stay unexplained and negative
+result 10 stands as written.**
+
+#### What the correction did surface
+
+With the phantom removed, the same pattern is visible in both anomalous cells and
+it is sharper than anything §3.24, §3.26 or §3.27 had:
+
+| cell | oracle ROC | persistence ROC | raw rollout ROC |
+|---|---:|---:|---:|
+| comb → CIC, test | 0.367 | 0.194 | **0.967** |
+| comb → CTU, holdout | 0.558 | 0.456 | **0.897** |
+
+The frozen head ranks at or below chance on the **true** future states and far
+above chance on states its own transition model produced. Both cells are
+combined-training cells, which is the condition under which a head is furthest
+from the state distribution of whichever single corpus it is then scored on.
+
+The hypothesis this suggests — that the rollout acts as a *projection onto the
+model's own learned manifold*, where the frozen head is reliable, and that the
+oracle's true states are out-of-distribution for a head trained on a different
+mixture — is stated here as a hypothesis and nothing more. §3.27 is the standing
+reminder of what happens to an explanation on this question that is not given a
+criterion in advance. The test it needs is a distance measurement between the
+head-training state distribution and each of the two candidate inputs, on cells
+where the model beats its oracle and on cells where it does not; the first
+attempt at that measurement is what found D145, so it has not yet been run to
+answer the question it was written for.
 
 One thing the table settles in passing: **the deterministic arm's below-chance
 ROC is not the phantom either** — 0.254 to 0.266. That remains unexplained too.
