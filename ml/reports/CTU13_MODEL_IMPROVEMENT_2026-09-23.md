@@ -1922,3 +1922,83 @@ set is a worse finding than a moved one. Tolerance is 0.005 AP — a re-run is
 seeded but the bootstrap resamples and the rollout draws, and 0.005 is an order
 of magnitude below the smallest difference this phase draws a conclusion from.
 Queued behind every other queue; it cannot starve anything.
+
+### 3.32 Stage B on the selection metric, and the number that complicates it (§19, §23, §24, §31 Q6/Q7/Q8)
+
+§3.29 confirmed the head comparison on the head-training metric. This is the
+same two models on the **forecast benchmark**, which is what actually selects.
+CTU-13 validation, identical rows, same pooling rule, three-member ensembles:
+
+| | `state` | `state+hidden` |
+|---|---|---|
+| AP | 0.3660 | **0.4910** |
+| ROC | **0.7752** | 0.7484 |
+| precision @ operating point | 0.663 | **0.818** |
+| recall | 0.410 | **0.484** |
+| F1 | 0.507 | **0.608** |
+| **false alarms / hour** | 9.26 | **4.79** |
+| within-host ROC | **0.8158** | 0.6967 |
+| oracle (frozen head on the true future) | 0.3350 | 0.5352 |
+| persistence (frozen head, no transition step) | 0.3364 | 0.4991 |
+| GRU sequence classifier, same rows | 0.5093 | 0.5093 |
+
+**On the operating point the history-aware head wins outright.** Half the false
+alarms — 4.79 an hour against 9.26 — at *higher* recall and markedly higher
+precision. F1 0.608 against 0.507. For a system whose output is an alert, that
+is the comparison that matters and it is not close.
+
+Three things in the same table pull the other way, and the phase has to carry
+all of them.
+
+**AP rises while ROC falls** (0.366 → 0.491, 0.775 → 0.748). A gain concentrated
+at the top of the ranking and a loss in the global ordering. Good for an alerting
+threshold, and not the same thing as "the model got better".
+
+**Within-host ROC falls from 0.816 to 0.697.** §3.11 established this as the one
+column that separates learning the behaviour from learning the host: on the
+infected host alone, where identity is constant, does the system order the attack
+windows above that host's own benign ones? The Run 8 per-state head does that
+*better*. The history-aware head is worse at the timing question while being far
+better in aggregate — which is the host-identity signature, now appearing on the
+run that selects the architecture rather than on a probe. (Validation carries one
+infected host, so this is one host's ordering; §3.14 and §3.17 apply.)
+
+**Neither head beats persistence.** The paired episode-cluster bootstrap on the
+difference:
+
+| head | world model − persistence | 95% CI |
+|---|---|---|
+| `state` | +0.0388 | [−0.0104, +0.0923] |
+| `state+hidden` | **−0.0100** | [−0.0342, +0.0034] |
+
+Both intervals contain zero, and the history-aware head's point estimate is
+**negative**. Persistence here is the frozen head applied with the transition
+step removed while the encoder still advances — so a history-aware head keeps
+its history and the *only* thing taken away is the predicted change. The reading
+is direct: on this split, the transition model contributes nothing measurable,
+and the whole of the +0.125 is the head reading history that persistence gives
+it anyway.
+
+That is the ablation CLAUDE.md names explicitly — "if persistence matches the
+model, we report that honestly and diagnose" — landing on the phase's own
+candidate architecture.
+
+**And a GRU sequence classifier on the identical rows reaches 0.5093**, ahead of
+both. §24 asks whether the world model outperforms a strong sequence classifier;
+on this split it does not.
+
+**What the absolute CIs are worth here: very little.** Validation has eight
+positive episode clusters, so the bootstrap on an absolute AP spans
+[0.001, 0.826] and says nothing. The *paired difference* bootstrap resamples 347
+clusters and is informative, which is why the persistence comparison above is
+quoted from it and the absolute APs are quoted bare. A single-number AP on this
+split should not be treated as measured to three decimals.
+
+**Status.** These are **validation** numbers, which is where the operating point
+is selected; test and holdout remain untouched. The architecture decision
+therefore rests on: a large, replicated, low-variance head-training gain (§3.29);
+a decisive operating-point gain here; against a worse within-host ordering, worse
+calibration (§3.23), a lost explanation surface (§3.20), and a transition-model
+contribution indistinguishable from zero for the winning head. Under §32's
+ranking that is not an obvious call, and it should not be made on CTU validation
+alone — the CIC arms and the unseen-family run are still in flight.
