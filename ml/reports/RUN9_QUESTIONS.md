@@ -320,9 +320,11 @@ order they bind:
    gain, which read as "there is nothing to retreat to". On CIC the same arm
    reaches **99.1%** — 0.7754 against 0.7825, well inside the ±0.047 seed
    spread. A head that keeps essentially all of the gain *and* decomposes into
-   the 45 named features may exist on CIC. One seed, validation only, and it is
-   the arm most exposed to D145 (it reads 45 log-variances, 13 of them
-   untrained), so it is an open candidate rather than a finding. *(§3.38.)*
+   the 45 named features may exist on CIC. **Under the D145 fix it no longer
+   merely keeps most of the gain — it edges ahead, 0.7869 against 0.7825**, with
+   every non-`logvar` control bit-identical. One seed, validation only, 94
+   positives: an open candidate rather than a finding, and Stage B is queued.
+   *(§3.38, §3.42.)*
 
 6. **The rollout was writing untrained values into the state it forecasts.**
    Not a limit of the approach — a defect, found late, now fixed. The transition
@@ -386,10 +388,18 @@ a fourth.**
    is shippable through the existing SHAP surface in a way `state+hidden` is
    not.
 
-   Two conditions before it becomes a recommendation: Stage B across seeds
-   (one-seed screening cannot settle a 0.007 gap), and a re-run under D145 —
-   this arm reads 45 log-variances of which 13 were untrained, so it is the
-   single arm most exposed to the defect. *(§3.38, §3.37.)*
+   **The D145 re-run is done and it moved further in this direction, not less.**
+   Pinning the 13 untrained log-variances *improved* the arms that read them:
+   `state+logvar` 0.7754 → **0.7869**, `state+delta+logvar` 0.7330 → **0.7817**,
+   while all four controls that do not read `logvar` came back bit-identical. So
+   the decomposable head now edges *past* `state+hidden`'s 0.7825, and a second
+   decomposable arm lands within 0.0008 of it. The untrained channel was noise
+   the head worked around, not signal it exploited. *(§3.42.)*
+
+   One condition remains before it becomes a recommendation: **Stage B across
+   seeds**, queued. A 0.0044 margin against a ±0.047 seed spread is not a margin,
+   and the validation split carries 94 positives in 893,701 rows. No test or
+   holdout cell exists for these arms yet.
 
 5. **Re-establish the cross-dataset matrix under the D145 fix.** Not a research
    direction so much as a debt: every CTU and cross-dataset number in this phase

@@ -2640,3 +2640,68 @@ the standardisation and the threshold are all fixed above.
 
 The measurement runs on the `mask_*` artifacts, after the sweep, so that it is
 made on the corrected model rather than on the one with phantom features.
+
+### 3.42 Under the D145 fix, the decomposable head is no longer behind (§5, §27, §31 Q13/Q14)
+
+§3.38 found `state+logvar` at 99.1% of the history-aware head on CIC and flagged
+it as the arm most exposed to D145, because it reads 45 log-variances of which 13
+were untrained. §3.37's fix pins those to the transition's floor in head
+*training* as well as at serving, so the comparison was re-trained rather than
+re-scored.
+
+**The controls first, because the first attempt at this run was a silent no-op**
+(negative result 15). `state`, `state+hidden`, `hidden` and `state+delta` do not
+read `logvar` and must therefore be unchanged:
+
+| control | before | after | Δ |
+|---|---:|---:|---:|
+| `state` | 0.6780771051850328 | 0.6780771051850328 | 0 |
+| `state+hidden` | 0.7825444222939472 | 0.7825444222939472 | 0 |
+| `hidden` | 0.7553316342825650 | 0.7553316342825650 | 0 |
+| `state+delta` | 0.6606590852996989 | 0.6606590852996989 | 0 |
+
+Bit-identical, all four. The two arms that read `logvar` are the two that moved,
+which is what says the harness is reporting the fix rather than reporting
+nothing.
+
+| head reads | val AP before | val AP after | Δ | input dim | decomposable? |
+|---|---:|---:|---:|---:|---|
+| **`state+logvar`** | 0.7754 | **0.7869** | **+0.0114** | 90 | **yes** |
+| `state+hidden` | 0.7825 | 0.7825 | 0 | 173 | no |
+| `state+delta+logvar` | 0.7330 | **0.7817** | **+0.0487** | 135 | **yes** |
+| `hidden` | 0.7553 | 0.7553 | 0 | 128 | no |
+| `state` | 0.6781 | 0.6781 | 0 | 45 | yes |
+| `state+delta` | 0.6607 | 0.6607 | 0 | 90 | yes |
+
+**On CIC the decomposable head now edges ahead of the opaque one** — 0.7869
+against 0.7825 — and a second decomposable arm, `state+delta+logvar`, lands
+within 0.0008 of it. Both are built entirely from quantities defined over the 45
+named features; neither reads the 128-dimensional recurrent summary that §3.20
+found impossible to attribute.
+
+That is the first genuinely positive architectural result in the phase, and the
+reasons to hold it loosely are the same three as before plus one:
+
+1. **One seed, Stage A, validation only.** The 0.0044 margin is two orders below
+   the ±0.047 seed spread §3.29 measured. This selects a candidate for Stage B; it
+   settles nothing. §19 and §33 both forbid reporting a screening run as final.
+2. **94 positives.** The head-training validation split carries 94 positive rows
+   in 893,701. An AP computed on 94 positives is not a precise instrument, and no
+   part of this table should be read to more than two decimal places.
+3. **No test or holdout cell exists for these arms.** §3.29 and §3.32 are the
+   standing reminder that a validation ranking in this phase has twice failed to
+   survive the forecast benchmark.
+4. **The direction of the correction is itself informative and was not
+   predicted.** Removing 13 untrained log-variances *improved* both arms that read
+   them, by +0.011 and +0.049. The untrained channel was noise the head had to
+   work around, not signal it was exploiting — which is the opposite of the worry
+   in §3.38's third caveat, where the concern was that part of the 0.7754 might be
+   the head reading structure in slots that carry no information.
+
+**Q13's limit 5 and Q14's direction 4 are revised again.** The claim "the AP gain
+and the explainability loss are the same thing" was a CTU statement read as a
+general one (negative result 13); on CIC, under the corrected model, it is not
+even true as a ranking. What is now open is whether a 90-dimensional head built
+from named features can match a 173-dimensional one across seeds and on a split
+it was not selected on. That is a Stage B question and it is the strongest
+candidate this phase has produced.

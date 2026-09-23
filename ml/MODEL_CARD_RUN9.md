@@ -99,6 +99,14 @@ direction.
    uncalibrated, intervals overlapping on 15 positive clusters). **Adding CIC does not
    help on CTU.**
 5. **Every recorded number reproduces bit-identically** under pinned seeds.
+6. **On CIC a fully decomposable risk head matches the opaque one.** Under the
+   D145 fix, `state+logvar` (90 dims, all derived from the 45 named features)
+   reaches 0.7869 against `state+hidden`'s 0.7825 on validation, with every
+   control that does not read `logvar` bit-identical. One seed, 94 validation
+   positives, no test cell yet — a candidate for Stage B, not a conclusion. It
+   matters because §3.20 found the winning head's score impossible to attribute
+   through the project's 45-feature explanation surface, and a decomposable head
+   would not have that problem.
 
 ## What Run 9 has not established
 
