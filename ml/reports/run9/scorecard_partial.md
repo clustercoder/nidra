@@ -1,3 +1,13 @@
+> **SUPERSEDED — kept, not cited.** Rendered 06:05 on 2026-09-23, before three
+> corrections to the scorecard itself. Its `FA/h` column reports a per-row
+> fraction rather than a rate (§3.18); its `oracle AP` column has no
+> `deterministic AP` beside it, which invites the comparison §3.24 shows is
+> unsound; and it predates the calibration table, the gap listing and the head
+> variant appearing in the row label, so each regime is one row rather than two.
+> The current artifact is `scorecard.md`. This is kept because a superseded
+> render is still a record of what was believed when, and deleting results is
+> not something this phase does — but no number here should be quoted.
+
 | Training | Evaluated on | split | rows | prevalence | AP [95% CI] | ROC | P | R | F1 | FA/h | alerts/h | FA rate on active benign | best baseline (AP) | oracle AP | state skill vs persistence / ridge | onset AP 5/15 | episodes warned | positive hosts | within-host ROC |
 |---|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---|---|---|---:|---:|
 | CIC | CIC | val | 20,113 | 0.00012 | 0.781 | 0.904 | 0.955 | 0.753 | 0.842 | 0.38 | 8.40 | 0.00007 | world_model_deterministic (0.793) | 0.797 | — / 0.694 | 0.000 / 0.000 | 0 / 2 | 1¹ | 0.8571 |
