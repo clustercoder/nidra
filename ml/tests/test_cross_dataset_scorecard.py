@@ -265,3 +265,18 @@ def test_a_scorecard_with_no_gaps_says_nothing_about_them(tmp_path, monkeypatch)
                                       "--map", "A:A:arm_a", "--out", str(out)])
     sc.main()
     assert "### Gaps" not in out.read_text()
+
+
+def test_the_published_system_is_bootstrapped():
+    """§33 requires confidence intervals, and `world_model_calibrated` is the
+    system every headline AP in this phase is quoted from. It was absent from
+    BOOTSTRAP_SYSTEMS while ten other systems were in it, so the scorecard's
+    `AP [95% CI]` column rendered a bare AP in every cell.
+
+    The uncalibrated `world_model` is not a substitute: Platt is monotone
+    within a horizon but the composite takes `max` ACROSS horizons afterwards,
+    so the two can rank rows differently — §3.24 found calibration flipping two
+    oracle comparisons for exactly that reason."""
+    from nidra.eval.benchmark import BOOTSTRAP_SYSTEMS
+    assert "world_model_calibrated" in BOOTSTRAP_SYSTEMS
+    assert "world_model" in BOOTSTRAP_SYSTEMS

@@ -1863,3 +1863,43 @@ as a gap rather than borrowing a neighbour's number — which is the only reason
 this surfaced as three dashes instead of three plausible numbers. `q_report`
 will render the scorecard before the recovered cells land, so a second pass
 regenerates it once they do; the published artifact is the complete one.
+
+### 3.31 The published system was the one system without a confidence interval (§33, §36 item 21)
+
+Reading the Stage B selection benchmark, `world_model_calibrated` had no
+`auc_pr_bootstrap`. Ten other systems in the same table did:
+
+| system | AP | 95% CI |
+|---|---|---|
+| `gru_classifier` | 0.509 | yes |
+| `gbdt_current_state` | 0.463 | yes |
+| `world_model` (pooled, uncalibrated) | 0.375 | yes |
+| `noised_persistence` | 0.375 | yes |
+| `persistence` | 0.336 | yes |
+| `world_model_deterministic` | 0.318 | yes |
+| **`world_model_calibrated`** — *the published system* | **0.366** | **no** |
+
+`BOOTSTRAP_SYSTEMS` listed ten systems and not the one every headline AP in this
+phase is quoted from. The consequence is visible in the artifact: the
+scorecard's column is headed `AP [95% CI]` and has been rendering a bare AP in
+**every cell**, because `_ci()` reads a key that was never written. §33 says
+report confidence intervals; the table said it was reporting them.
+
+The uncalibrated `world_model` is not a substitute. Platt is monotone *within* a
+horizon, but the composite takes `max` **across** horizons afterwards, so the
+two can order rows differently — §3.24 measured exactly that, with calibration
+flipping two oracle comparisons.
+
+Fixed, with `world_model_calibrated` first in the list so the omission is hard
+to repeat. The cost is one more bootstrap per benchmark, negligible beside the
+rollout.
+
+**What this does not retroactively fix.** Every benchmark already on disk was
+written without it, and the interval cannot be recovered from a summary — the
+per-row scores are not stored. So the 20 recorded cross-evaluation cells keep a
+bare AP, and every benchmark from here carries the interval: the six recovered
+cells, the stage-balanced run, the decomposable-head arms, and the test/holdout
+runs that follow the architecture freeze. The final report's headline numbers
+come from that second group, which is the one that matters for §36 item 21 — but
+the log should say plainly that the earlier table was not what its header
+claimed.

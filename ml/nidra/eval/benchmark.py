@@ -82,8 +82,16 @@ ATTRIBUTION_PAIRS = [
     ("world_model", "gbdt_current_state"),
     ("world_model", "gru_classifier"),
 ]
-BOOTSTRAP_SYSTEMS = ("world_model", "world_model_deterministic", "persistence", "persistence_rollout", "noised_persistence",
-                     "ridge_two_lag", "lr_current_state", "lr_flattened_history", "gbdt_current_state", "gru_classifier")
+#: `world_model_calibrated` leads this list because it is the PUBLISHED system —
+#: every headline AP in the phase is quoted from it — and it was the one member
+#: of the table missing from here, so the scorecard's `AP [95% CI]` column
+#: rendered a bare AP in every cell while ten baselines carried intervals.
+#: The uncalibrated `world_model` does not stand in for it: Platt is monotone
+#: within a horizon, but the composite takes `max` across horizons afterwards,
+#: so the two can order rows differently (§3.24).
+BOOTSTRAP_SYSTEMS = ("world_model_calibrated", "world_model", "world_model_deterministic", "persistence",
+                     "persistence_rollout", "noised_persistence", "ridge_two_lag", "lr_current_state",
+                     "lr_flattened_history", "gbdt_current_state", "gru_classifier")
 
 
 PER_GROUP_SYSTEMS = ("world_model_calibrated", "world_model", "persistence", "persistence_rollout", "oracle_true_future",
