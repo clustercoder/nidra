@@ -1701,3 +1701,22 @@ including their pooling, which is the right unit for "what would you deploy" and
 for "does adding CTU help the dynamics" — that needs pooling held fixed and is a separate run
 not in this matrix. It is also the mechanism behind D137's 208 false alarms/hour: a threshold
 chosen against CIC's score distribution means something else against CTU's.
+
+**D140 — `--force-pooling`, so Q2 and Q3 can be asked with the readout held fixed.**
+(2026-09-23) D139 found that each run selects its own pooling on its own validation, so a
+scorecard row-to-row comparison differs in the readout as well as the training set. That is
+the right unit for "what would you deploy" and the wrong one for §31 Q2 and Q3, which ask
+whether ADDING a dataset helps. `benchmark.py --force-pooling '<method>|q=<q>|<horizon>'`
+scores under a named rule instead of the selected one, changing only the readout — the
+threshold and calibration still come from the source run's own selection, which is why the
+result is a controlled comparison and explicitly NOT a deployable configuration. The metrics
+record `pooling_forced: true` and `pooling_key_selected`, so a forced run cannot be mistaken
+for a selected one; the key must round-trip through `pooling_key` or the run is refused,
+since silently scoring under a rule other than the one named would make the comparison
+meaningless. Four cells are queued at lowest priority behind every other queue: CIC-only and
+combined on CIC test, CTU-only and combined on CTU test, all at `mean|q=-|max`. If the machine
+does not reach them, the scorecard is reported with the caveat attached rather than without.
+
+(Entry written late: the code and tests shipped in 0d9ded9, but the background job holding
+this text was waiting on a sentinel its test run never printed, so it never fired. Nothing
+about the decision changed — only when it was recorded.)
