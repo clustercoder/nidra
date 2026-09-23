@@ -37,7 +37,7 @@ from nidra.explain.forecast_attribution import explain_forecast
 from nidra.explain.shap_runner import explain_current_risk, explain_predicted_stage, load_background, top_signals
 from nidra.models.risk_pooling import pool_ensemble_risk
 from nidra.models.build import world_model_from_config
-from nidra.models.world_model import WorldModel
+from nidra.models.world_model import RolloutOutput, WorldModel
 from nidra.utils.config import load_config
 
 logger = logging.getLogger(__name__)
@@ -265,21 +265,38 @@ class NidraPredictor:
         return self.scaler.transform(states)
 
     @torch.no_grad()
+    def _risk_context(self, scaled: np.ndarray) -> dict:
+        """The trajectory-head inputs for the observed origin state, which a
+        conditional attribution holds fixed while SHAP perturbs the state.
+
+        Passed unconditionally: a per-state head's attribution ignores it
+        (`shap_runner._risk_predict_fn` reads only what the head declares),
+        and a trajectory head's attribution refuses to run without it rather
+        than silently attributing the head against a zero context.
+        """
+        return self.models[0].observed_context(torch.from_numpy(scaled).float().unsqueeze(0))
+
+    @torch.no_grad()
     def _ensemble_rollout(self, scaled_states: np.ndarray) -> dict:
         """Runs every ensemble member's rollout and pools trajectories
         before scoring — ~n_samples_per_member * len(models) trajectories
         total, matching the ~1000-trajectory target for a 5-seed ensemble
         at 200 samples/member."""
         x = torch.from_numpy(scaled_states).float().unsqueeze(0)  # [1, L, F]
-        all_states = []
-        for model in self.models:
-            out = model.rollout(x, K=self.K, n_samples=self.n_samples_per_member, stochastic=True)
-            all_states.append(out.states)  # [1, S, K, F]
-        pooled_states = torch.cat(all_states, dim=1)  # [1, S_total, K, F]
+        # The WHOLE rollout output is pooled, not just the states: a
+        # trajectory head reads the hidden state, realized delta and
+        # log-variance of each step too, and pooling only the states left the
+        # served path unable to score the very head this phase selects (it
+        # raised a bare TypeError). A per-state head still sees only
+        # `states`, so its numbers are unchanged.
+        outs = [model.rollout(x, K=self.K, n_samples=self.n_samples_per_member, stochastic=True)
+                for model in self.models]
+        pooled = RolloutOutput.pool(outs)
+        pooled_states = pooled.states  # [1, S_total, K, F]
 
         risk_list, stage_list = [], []
         for model in self.models:
-            r, s = model.score_states(pooled_states.reshape(-1, self.K, pooled_states.shape[-1]))
+            r, s = model.score_trajectory(pooled)
             risk_list.append(r.reshape(1, pooled_states.shape[1], self.K))
             stage_list.append(s.reshape(1, pooled_states.shape[1], self.K, -1))
         per_head_risk = torch.stack(risk_list, dim=0)        # [M, 1, S_total, K]
@@ -338,10 +355,13 @@ class NidraPredictor:
         # one it sits beside. On a real CIC-IDS2017 host, seed 0 alone scored
         # 0 true positives against 4 false ones across 48 windows where the
         # pooled forecast got 17 against 12.
+        # score_observed, not score_states: for the per-state head the two are
+        # the same call on scaled[-1], and a trajectory head additionally gets
+        # the encoder context of the history window it is entitled to read.
         with torch.no_grad():
-            observed_batch = torch.from_numpy(scaled[-1]).float().unsqueeze(0)
+            observed_batch = torch.from_numpy(scaled).float().unsqueeze(0)  # [1, L, F]
             member_risk, member_stage = zip(
-                *(m.score_states(observed_batch) for m in self.models)
+                *(m.score_observed(observed_batch) for m in self.models)
             )
         observed_risk = float(torch.stack(member_risk).mean().item())
         observed_stage_probs_t = torch.stack(member_stage).mean(dim=0)
@@ -376,7 +396,8 @@ class NidraPredictor:
         risk_curve = self._risk_curve(rollout, window_seconds)
 
         background = self._shap_background(scaled)
-        attributions = explain_current_risk(scaled[-1], background, self.models[0], nsamples=100)
+        attributions = explain_current_risk(
+            scaled[-1], background, self.models[0], nsamples=100, context=self._risk_context(scaled))
         signals = self._signals(attributions, n=5)
 
         saliency = temporal_saliency(self.models[0], scaled, target_feature=FEATURE_ORDER[0], horizon_k=0, K=self.K)
@@ -424,13 +445,15 @@ class NidraPredictor:
             xb = torch.from_numpy(self.scaler.transform(states_batch[lo:lo + chunk].reshape(-1, states_batch.shape[2]))
                                   .reshape(-1, self.L, states_batch.shape[2])).float()
             B = xb.shape[0]
-            all_states = [m.rollout(xb, K=self.K, n_samples=n_samples, stochastic=True).states for m in self.models]
-            pooled = torch.cat(all_states, dim=1)                              # [B, S, K, F]
-            S = pooled.shape[1]
-            flat = pooled.reshape(B * S, self.K, -1)
+            # The whole RolloutOutput is pooled, not just `.states` — the same
+            # reason as in _ensemble_rollout: a trajectory head reads the
+            # hidden state, realized delta and log-variance of each step.
+            pooled = RolloutOutput.pool(
+                [m.rollout(xb, K=self.K, n_samples=n_samples, stochastic=True) for m in self.models])
+            S = pooled.states.shape[1]
             risks, stages = [], []
             for m in self.models:
-                r, st = m.score_states(flat)
+                r, st = m.score_trajectory(pooled)
                 risks.append(r.reshape(B, S, self.K))
                 stages.append(st.reshape(B, S, self.K, -1))
             risk = torch.stack(risks).mean(0)                                  # [B, S, K] head-mean per trajectory
@@ -570,7 +593,8 @@ class NidraPredictor:
         scaled = self._validate_and_scale(states)
         background = self._shap_background(scaled)
 
-        current_risk_attributions = explain_current_risk(scaled[-1], background, self.models[0], nsamples=100)
+        current_risk_attributions = explain_current_risk(
+            scaled[-1], background, self.models[0], nsamples=100, context=self._risk_context(scaled))
 
         with torch.no_grad():
             out = self.models[0].rollout(
@@ -578,7 +602,7 @@ class NidraPredictor:
             )
         predicted_state = out.states[0, 0, step_index, :].numpy()
         with torch.no_grad():
-            _, stage_probs = self.models[0].score_states(torch.from_numpy(predicted_state).float().unsqueeze(0))
+            stage_probs = self.models[0].score_stage(torch.from_numpy(predicted_state).float().unsqueeze(0))
         predicted_stage_idx = int(stage_probs.argmax(dim=-1).item())
         stage_attributions = explain_predicted_stage(predicted_state, background, self.models[0], predicted_stage_idx, nsamples=100)
 

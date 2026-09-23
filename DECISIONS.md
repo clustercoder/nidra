@@ -1720,3 +1720,35 @@ does not reach them, the scorecard is reported with the caveat attached rather t
 (Entry written late: the code and tests shipped in 0d9ded9, but the background job holding
 this text was waiting on a sentinel its test run never printed, so it never fired. Nothing
 about the decision changed — only when it was recorded.)
+
+**D141 — the served path could not run the head this phase is selecting.**
+(2026-09-23) `NidraPredictor` is the whole ML surface the backend imports, and every one of
+`forecast`, `forecast_batch`, `counterfactual` and `explain` raised on a `TrajectoryRiskHead`.
+Four call sites asked `score_states` for a risk number, which a history-aware head cannot
+produce from a bare state, and two asked `explain_current_risk` for an attribution without
+the context it holds fixed. Nothing caught it because every serving test built the Run 8
+per-state head, so §4's whole point — pick the head on evidence — would have produced a head
+that could be evaluated and not served.
+
+The fix keeps the per-state numbers bit-identical, which is the condition that makes it safe:
+`RolloutOutput.pool` concatenates the WHOLE rollout rather than just `states`, and scoring
+goes through `score_trajectory`, which for a per-state head is exactly `score_states(states)`;
+the observed origin goes through `score_observed`, which for a per-state head is exactly
+`score_states(x[:, -1, :])`; the one stage-only call uses the new `score_stage`. Both
+attribution sites now pass `WorldModel.observed_context`, making the current-risk explanation
+a CONDITIONAL attribution (the head's other inputs held at the origin's real values while
+SHAP perturbs the state) rather than an attribution against an implicit zero context, which
+would have looked entirely plausible and meant something else.
+
+`score_states` now raises a `TypeError` naming the three alternatives instead of a bare arity
+error from inside `nn.Module.__call__`. `eval/baselines.py` is deliberately NOT taught the
+history-aware heads: it serves only `run_eval.py`, the legacy balanced-subsample harness whose
+numbers are already not comparable to the natural-prevalence protocol, and a loud refusal
+naming the fix is the right failure there. The natural-prevalence harness
+(`benchmark.py` → `systems.py`) already handled both.
+
+Six tests in `tests/test_predictor_trajectory_head.py` drive the whole served surface with a
+`("state", "hidden")` head. Its weights are random, so none of its NUMBERS are asserted — one
+test does assert that two windows sharing a final state but differing earlier score
+differently, which is the check that the history actually reaches the head rather than
+arriving zeroed.

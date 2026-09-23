@@ -95,7 +95,7 @@ def _risk_predict_fn(model: WorldModel, context: dict | None = None):
 def _stage_predict_fn(model: WorldModel, stage_idx: int):
     def f(X: np.ndarray) -> np.ndarray:
         with torch.no_grad():
-            _, stage_probs = model.score_states(torch.from_numpy(X).float())
+            stage_probs = model.score_stage(torch.from_numpy(X).float())
         return stage_probs[:, stage_idx].numpy()
     return f
 

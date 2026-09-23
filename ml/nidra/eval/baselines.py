@@ -16,6 +16,14 @@
 
 If the world model cannot beat baseline #2, that is reported, not hidden —
 see eval/ablations.py and the ablation-suite honesty rule in CLAUDE.md.
+
+PER-STATE RISK HEADS ONLY. Every function here reaches the risk head through
+`score_states`, which a `TrajectoryRiskHead` cannot answer from a bare state
+and refuses rather than guessing. This module serves `eval/run_eval.py`, the
+legacy balanced-subsample harness whose numbers are explicitly not comparable
+to the natural-prevalence protocol (CLAUDE.md §Key parameters), so it has not
+been taught the history-aware heads. The natural-prevalence harness
+(`eval/benchmark.py` via `eval/systems.py`) handles both.
 """
 
 from __future__ import annotations

@@ -29,6 +29,28 @@ class RolloutOutput:
     hiddens: torch.Tensor       # [B, S, K, H] encoder state AFTER ingesting step k
     anchor: torch.Tensor        # [B, S, F] the observed S_t the rollout started from
 
+    @staticmethod
+    def pool(outs: "list[RolloutOutput]") -> "RolloutOutput":
+        """Concatenate several members' rollouts along the sample axis.
+
+        The predictor pools every member's trajectories and then scores the
+        pooled set with each member's head. Pooling only `states` and calling
+        `score_states` was enough for the per-state head and raises a bare
+        TypeError for a trajectory head, which reads three more tensors — so
+        the whole output is pooled and scored through `score_trajectory`, and
+        the per-state head's numbers are unchanged because it still sees only
+        the states.
+        """
+        if not outs:
+            raise ValueError("pool() needs at least one rollout")
+        return RolloutOutput(
+            states=torch.cat([o.states for o in outs], dim=1),
+            mus=torch.cat([o.mus for o in outs], dim=1),
+            logvars=torch.cat([o.logvars for o in outs], dim=1),
+            hiddens=torch.cat([o.hiddens for o in outs], dim=1),
+            anchor=torch.cat([o.anchor for o in outs], dim=1),
+        )
+
     def realized_deltas(self) -> torch.Tensor:
         """[B, S, K, F] backward difference of the trajectory itself,
         states[k] - states[k-1], with states[-1] taken as the anchor S_t.
@@ -248,12 +270,31 @@ class WorldModel(nn.Module):
             logits = self.risk_head(x[:, -1, :]).squeeze(-1)
         return torch.sigmoid(logits), stage_probs
 
+    def score_stage(self, states: torch.Tensor) -> torch.Tensor:
+        """Stage probabilities for arbitrary states: [..., F] -> [..., n_stages].
+
+        The stage head is per-state under every configuration, so this is
+        always well defined. Call sites that want only the stage distribution
+        use this rather than discarding the risk half of `score_states`,
+        which a trajectory head cannot produce from a bare state.
+        """
+        return torch.softmax(self.stage_head(states), dim=-1)
+
     def score_states(self, states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Apply the (frozen, at inference time) heads to arbitrary states —
         observed or rolled-out. states: [..., F]. Returns
-        (risk_prob [...], stage_probs [..., n_stages])."""
+        (risk_prob [...], stage_probs [..., n_stages]).
+
+        Per-state risk heads only. A trajectory head reads context a bare
+        state does not carry, so this raises rather than guessing at it.
+        """
+        if isinstance(self.risk_head, TrajectoryRiskHead):
+            raise TypeError(
+                f"score_states cannot score a risk head that reads "
+                f"{self.risk_head.components}: a bare state carries only 'state'. "
+                "Use score_trajectory(RolloutOutput) for rolled-out states, "
+                "score_observed(x) for a history window, or score_stage(states) "
+                "if only the stage distribution is wanted.")
         risk_logits = self.risk_head(states).squeeze(-1)
-        stage_logits = self.stage_head(states)
         risk_prob = torch.sigmoid(risk_logits)
-        stage_probs = torch.softmax(stage_logits, dim=-1)
-        return risk_prob, stage_probs
+        return risk_prob, self.score_stage(states)
