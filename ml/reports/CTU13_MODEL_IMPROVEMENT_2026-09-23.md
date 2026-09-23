@@ -1183,9 +1183,27 @@ combined run chose a different member-aggregation (`p_above_half` rather than
 validation, which is the rule. But it means a row-to-row comparison in the
 scorecard compares *systems*, pooling rule included, not just training sets. That
 is the right unit for "which configuration would you deploy" and the wrong unit
-for "does adding CTU help the dynamics" — the latter needs the pooling held
-fixed, which is a separate, cheaper run and is not in this matrix.
+for "does adding CTU help the dynamics", which is exactly what §31 Q2 and Q3
+ask. The latter needs the readout held fixed, so `benchmark.py` gained a
+`--force-pooling` flag and four cells are queued at lowest priority behind
+everything else: CIC-only and combined on CIC test, CTU-only and combined on
+CTU test, all at `mean｜q=-｜max`. Those runs are **not** deployable
+configurations — the threshold and calibration still come from each run's own
+selection under a different rule — and their metrics record `pooling_forced:
+true` alongside the rule they replaced, so a forced run can never be mistaken
+for a selected one in the scorecard. If the machine does not get to them, the
+scorecard is reported with this caveat attached rather than without it.
 
 This is also the mechanism behind §3.18's 208 false alarms an hour: a threshold
 of 0.501969 chosen against CIC's score distribution means something entirely
 different against CTU's.
+
+**The comparison pairs do evaluate identical rows.** Checked rather than assumed,
+because a cross-dataset table whose cells are scored on different data is worse
+than no table: `ctu2ctu` and `comb2ctu` both test on ctu_8/9/10, `cic2cic` and
+`comb2cic` both on friday morning/portscan/ddos, and the two transfer arms land
+on those same sets. One declaration differs — the CTU-only config lists `ctu_5`
+in `holdout_days` and the cross-eval configs do not — but `ctu_5` contributes
+**zero rows**: at 17.7 MB it is too short for any host to reach the 36 windows
+`min_windows_per_host` requires. Both holdouts are ctu_12 + ctu_13, 267,388 rows
+and 1,134 positives, and are comparable.

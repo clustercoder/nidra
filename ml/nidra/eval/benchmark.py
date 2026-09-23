@@ -186,6 +186,31 @@ def _host_identity(ev: EvalSet, scores: dict[str, np.ndarray], y: np.ndarray) ->
     return out
 
 
+def _with_forced_pooling(op: dict, key: str) -> dict:
+    """A copy of the operating point reading a different pooling rule.
+
+    Each run selects its own pooling on its own validation, which is the
+    protocol and the right unit for "what would you deploy". It is the wrong
+    unit for "does adding CTU help the dynamics", because a row-to-row
+    comparison then differs in the readout as well as the training set. This
+    forces a common readout so that question can be asked; the threshold and
+    calibration still come from the source run's selection, which is why the
+    result is a controlled comparison and NOT a deployable configuration.
+
+    `key` is a `pooling_key` string: "<method>|q=<quantile>|<horizon_reduction>".
+    """
+    parts = key.split("|")
+    if len(parts) != 3:
+        raise ValueError(f"force_pooling {key!r} is not '<method>|q=<quantile>|<horizon_reduction>'")
+    method, q, horizon = parts
+    quantile = None if q in ("q=-", "-") else float(q.removeprefix("q="))
+    pooling = {"method": method, "quantile": quantile, "horizon_reduction": horizon}
+    if pooling_key(pooling) != key:
+        raise ValueError(f"force_pooling {key!r} did not round-trip to {pooling_key(pooling)!r}")
+    return {**op, "pooling": pooling, "pooling_key": key,
+            "pooling_key_selected": op.get("pooling_key"), "pooling_forced": True}
+
+
 def load_models(cfg: dict, seeds: list[int]) -> list[WorldModel]:
     weights_dir = resolve_path(cfg, cfg["artifacts"]["weights_dir"])
     models = []
@@ -306,7 +331,7 @@ def _calibration(y: np.ndarray, s: np.ndarray, w: np.ndarray) -> dict[str, Any]:
 
 def run(cfg: dict, split: str, seeds: list[int], n_samples: int, out_dir: Path, operating_point_path: Path | None,
         select_op: bool, caps: dict | None, n_resamples: int, chunk: int, gru_classifier: Path | None,
-        with_ablations: bool = True, eval_seed: int = 0) -> dict[str, Any]:
+        with_ablations: bool = True, eval_seed: int = 0, force_pooling: str | None = None) -> dict[str, Any]:
     t0 = time.time()
     window_seconds, L, K = geometry_from_config(cfg)
     scaler_dir = resolve_path(cfg, cfg["artifacts"]["scaler_dir"])
@@ -366,6 +391,13 @@ def run(cfg: dict, split: str, seeds: list[int], n_samples: int, out_dir: Path, 
               "threshold": {"f1_optimal_calibrated": threshold_mandated, "mandated": threshold_mandated}}
         op_source = "NO operating point file: config pooling, identity calibration, mandated threshold"
         logger.warning(op_source)
+    if force_pooling is not None:
+        op = _with_forced_pooling(op, force_pooling)
+        op_source += f"; pooling OVERRIDDEN to {force_pooling}"
+        logger.warning("pooling forced to %s — the threshold and calibration were selected under "
+                       "%s, so this run answers 'does the training set help at a FIXED readout', "
+                       "not 'what would you deploy'", force_pooling, op.get("pooling_key_selected"))
+
     applied = apply_operating_point(bundle, op)
     threshold = float(op["threshold"]["f1_optimal_calibrated"])
 
@@ -376,6 +408,8 @@ def run(cfg: dict, split: str, seeds: list[int], n_samples: int, out_dir: Path, 
     results: dict[str, Any] = {
         "eval_set": ev.summary(),
         "operating_point": {"source": op_source, "pooling": op["pooling"], "pooling_key": op.get("pooling_key"),
+                            "pooling_forced": bool(op.get("pooling_forced")),
+                            "pooling_key_selected": op.get("pooling_key_selected"),
                             "threshold_used": threshold, "threshold_mandated": threshold_mandated,
                             "calibration_degenerate": [p.get("degenerate", False) for p in op["calibration"]["params_by_k"]],
                             "calibration_fitted_horizons": len(op["calibration"]["params_by_k"]),
@@ -496,6 +530,11 @@ def main() -> None:
     parser.add_argument("--set", dest="overrides", action="append", default=[],
                         help="config override key.path=value (e.g. windowing.horizon_length=6 for a K-extension check; "
                              "labels.risk_threshold_windows must be set to match)")
+    parser.add_argument("--force-pooling", default=None,
+                        help="score with this pooling_key instead of the selected one, e.g. "
+                             "'mean|q=-|max'. For holding the readout fixed while comparing "
+                             "training sets; NOT a deployable configuration, since the threshold "
+                             "and calibration were selected under a different rule.")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     torch.set_num_threads(args.threads)
@@ -516,7 +555,7 @@ def main() -> None:
         caps["silent_negative"] = args.silent_negative_cap
     gru = Path(args.gru_classifier) if args.gru_classifier else resolve_path(cfg, cfg["artifacts"]["weights_dir"]) / "gru_classifier.pt"
     run(cfg, args.split, seeds, n_samples, out_dir, op_path, args.select_operating_point, caps or None,
-        args.n_resamples, args.chunk, gru, with_ablations=not args.no_ablations)
+        args.n_resamples, args.chunk, gru, with_ablations=not args.no_ablations, force_pooling=args.force_pooling)
 
 
 if __name__ == "__main__":
