@@ -49,6 +49,8 @@ The findings that later sections depend on, in the order they bind:
 | 4 | A fifth of CTU's forecast positives are the **silence floor** — bit-identical to 47,650 negatives. CTU cannot support an advance-warning claim; CIC weakly can. | §3.10, §3.15 |
 | 5 | Two conclusions **withdrawn**: "Rbot C2 is not separable" (§3.8) and "cross-host by construction" (§3.17). Both are struck through rather than deleted. | §3.8, §3.17 |
 | 6 | The history-aware head **could not be served at all** until D141, and once served, SHAP over the 45 named features attributes a risk of 1.00 to nothing larger than 0.0003. The AP gain costs the project's explainability. | §3.20 |
+| 7 | The history-aware head is also the **worse-calibrated** one, and the only within-dataset arm whose calibrated score loses to predicting the prevalence and never moving. Second cost on the same candidate. | §3.23 |
+| 8 | **The oracle is not an upper bound on the deployed system** — it is beaten in 7 of 14 cells, because the oracle gets neither trajectory pooling nor the Platt layer. Every "% of oracle" statement has to be against the deterministic arm. Two cells break even that bound and are unexplained. | §3.24, §3.26, §3.27 |
 
 ---
 
