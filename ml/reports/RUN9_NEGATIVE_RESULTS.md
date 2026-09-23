@@ -317,6 +317,37 @@ D145.)*
 
 ---
 
+## 15. A fix that was a no-op, and reported itself as a result
+
+Not an experiment — a near-miss, listed because it would have produced a
+published number.
+
+D145's mask was wired at each call site: `benchmark.load_models` and
+`NidraPredictor`. The *training* entry point was missed. Re-running §3.38's
+decomposable-head comparison "under the fix" returned `state+logvar` =
+**0.7754417090891179**, bit-identical to the unfixed run, because
+`build_head_context` was calling `mask_logvar` on a model whose mask was still
+`None`.
+
+The run exited zero. It wrote a full provenance record. Its conclusion —
+"§3.38's result is unaffected by D145" — is a perfectly reasonable finding, and
+would have gone into the report as one.
+
+What caught it was that bit-identical is *too good* for a retraining run. Two
+head trainings that differ in their inputs do not agree to sixteen significant
+figures; two that agree to sixteen significant figures had identical inputs. The
+same property that made §3.36's reproducibility check strong made this one
+impossible to miss once looked at.
+
+Two changes followed. The mask now comes from `world_model_from_config`, the
+single construction point, so a path cannot be added without it. And the
+re-queued comparison carries `state` and `state+hidden` as controls: they do not
+read `logvar`, so they must come back unchanged — if *everything* comes back
+unchanged again, the harness is lying rather than the result being negative.
+*(D145.)*
+
+---
+
 ## What this list is for
 
 Three of the six interventions were killed by a measurement that cost minutes

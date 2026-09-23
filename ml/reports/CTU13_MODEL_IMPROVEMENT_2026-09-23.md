@@ -2286,7 +2286,7 @@ the scaler that D142's guard already forces to match. Passing `None` restores th
 old path exactly, so every recorded run stays reproducible — which §3.36 has just
 finished demonstrating and which must not be broken by the fix for it.
 
-Twenty-two tests in `tests/test_rollout_dropped_features.py`; suite 762 → 784.
+Twenty-five tests in `tests/test_rollout_dropped_features.py`; suite 762 → 787.
 
 **Four paths hand a head a transition output, and all four needed the contract.**
 Found by grepping for every direct `transition()` call and every `WorldModel`
@@ -2309,11 +2309,22 @@ there appears in front of a viewer rather than in a metric. The mask is applied
 *after* the intervention, so a what-if on a dropped feature is inert rather than a
 confident answer about a quantity the model has no information on.
 
-Two builders are deliberately left unmasked: `eval/run_eval.py` and
-`scripts/fit_calibration.py`, the legacy balanced-subsample harness. They produce
-no Run 9 number, `CLAUDE.md` and `PRODUCTION_RUN_GUIDE.md` both already record
-them as not comparable, and masking them would silently change the Runs 1–7
-figures they are kept around to reproduce.
+**Wiring it at each call site was itself the bug.** The first attempt set the
+mask in `benchmark.load_models` and `NidraPredictor` and missed the training
+entry point, so re-running §3.38's comparison "under the fix" returned
+`state+logvar` = **0.7754417090891179**, bit-identical to the unfixed run,
+because `build_head_context` was calling `mask_logvar` on a model whose mask was
+still `None`. The run exited zero and wrote a full provenance record; its
+apparent conclusion — "§3.38 is unaffected by D145" — is a plausible finding.
+Bit-identical to sixteen significant figures is what caught it: two head
+trainings with different inputs do not agree that closely.
+
+The mask now comes from `world_model_from_config`, the single construction point,
+and both call sites were deleted rather than kept in parallel. `eval/run_eval.py`
+and `scripts/fit_calibration.py` go through the same builder, which is safe
+rather than a change of policy: the default scaler drops nothing, so their mask
+is `None` and the Runs 1–7 figures they exist to reproduce are untouched.
+Recorded as negative result 15.
 
 **Blast radius.** 40 of 63 run scalers drop features: every CTU-13 run drops 15,
 every combined and `cic_core` run drops 13. The 23 `full`-regime runs drop nothing

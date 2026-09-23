@@ -1936,6 +1936,25 @@ Runs 1–7.
 In the counterfactual the mask is applied *after* the intervention, so a what-if on a
 dropped feature is inert rather than a confident answer about a quantity the model has
 no information on.
+
+**Third correction, and the one worth reading.** Wiring the mask at each call site was
+itself the bug. `benchmark.load_models` and `NidraPredictor` got it; the *training*
+entry point did not. Re-running the decomposable-head comparison "under the fix" then
+returned `state+logvar` = **0.7754417090891179** — bit-identical to the unfixed run,
+because `build_head_context` was calling `mask_logvar` on a model whose mask was still
+`None`. The run exited zero, produced a full record, and said nothing had changed,
+which is exactly what a real negative result would have looked like. It was caught only
+because bit-identical is too good for a retraining run.
+
+The mask now comes from `world_model_from_config`, the single construction point, so
+every path that builds a model gets it and the two call sites were deleted rather than
+kept in parallel. `run_eval.py` and `fit_calibration.py` go through the same builder,
+which is safe: the default scaler drops nothing, so their mask is `None` and Runs 1–7
+reproduce unchanged.
+
+A no-op that reads as a result is worse than a crash. The re-queued comparison carries
+`state` and `state+hidden` as controls: they do not read `logvar`, so they must come
+back unchanged, and if everything comes back unchanged again the harness is lying.
 `observed_context` (serving) and `train/head_context.py` (head *training*) both call the
 transition directly and take its `logvar`, so a `state+logvar` head was trained against
 13 untrained log-variances out of 45. Both now go through a shared `mask_logvar`

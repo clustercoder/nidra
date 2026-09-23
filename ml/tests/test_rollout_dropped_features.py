@@ -324,3 +324,62 @@ class TestCounterfactualCarriesTheContract:
         assert abs(out["predicted_states_mean"][..., j]).max() == 0.0, (
             "a clamp on a dropped feature put a value into a slot the model was "
             "never trained on")
+
+
+class TestTheBuilderSetsTheMask:
+    """The mask has to come from the single construction point, or each caller
+    is one more place to forget it.
+
+    Found the hard way: the first attempt wired `benchmark.load_models` and
+    `NidraPredictor` but not the training entry point, so re-running the
+    decomposable-head comparison under "the fix" returned
+    0.7754417090891179 — bit-identical to the unfixed run, because
+    `build_head_context` was calling `mask_logvar` on a model whose mask was
+    still None. A no-op that looks like a result is worse than a crash.
+    """
+
+    def test_builder_sets_the_mask_from_the_configs_scaler(self, tmp_path):
+        import json
+        from nidra.models.build import world_model_from_config
+        from nidra.data.schema import FEATURE_ORDER
+
+        scaler_dir = tmp_path / "scaler"
+        scaler_dir.mkdir()
+        (scaler_dir / "scaler_metadata.json").write_text(json.dumps(
+            {"dropped_features": ["retrans_count", "ttl_var"], "drop": None}))
+        cfg = _min_cfg(str(scaler_dir))
+        m = world_model_from_config(cfg)
+        assert m.feature_mask is not None
+        assert m.feature_mask.sum().item() == len(FEATURE_ORDER) - 2
+
+    def test_builder_leaves_the_mask_unset_when_nothing_is_dropped(self, tmp_path):
+        import json
+        from nidra.models.build import world_model_from_config
+
+        scaler_dir = tmp_path / "scaler"
+        scaler_dir.mkdir()
+        (scaler_dir / "scaler_metadata.json").write_text(json.dumps({"dropped_features": [], "drop": None}))
+        m = world_model_from_config(_min_cfg(str(scaler_dir)))
+        assert m.feature_mask is None, "no dropped features must leave the old path exactly"
+
+    def test_builder_tolerates_a_missing_scaler(self, tmp_path):
+        """Models are built before a scaler exists in some paths (tests, first
+        run). That must not become a construction-time failure."""
+        from nidra.models.build import world_model_from_config
+
+        m = world_model_from_config(_min_cfg(str(tmp_path / "does-not-exist")))
+        assert m.feature_mask is None
+
+
+def _min_cfg(scaler_dir: str) -> dict:
+    return {
+        "paths": {"root": "."},
+        "artifacts": {"scaler_dir": scaler_dir, "weights_dir": scaler_dir},
+        "model": {
+            "n_features": 45,
+            "encoder": {"hidden_size": 16, "num_layers": 1, "dropout": 0.0},
+            "transition": {"mlp_hidden": 16, "logvar_min": -6.0, "logvar_max": 3.0, "state_clamp": 10.0},
+            "risk_head": {"hidden": 8},
+            "stage_head": {"hidden": 8, "n_stages": 6},
+        },
+    }
