@@ -401,7 +401,25 @@ a fourth.**
    and the validation split carries 94 positives in 893,701 rows. No test or
    holdout cell exists for these arms yet.
 
-5. **Re-establish the cross-dataset matrix under the D145 fix.** Not a research
+5. **Not a bigger sequence model.** §14 proposed a transformer or TCN once the
+   simpler history-aware heads had been tested. They have now been tested, and
+   two results point away from it. §3.34: the frozen head's answer moves 0.28%
+   when the rollout moves the hidden state 40–62%, and its first-layer response
+   to that displacement is 1.08× its response to noise. §3.42: a 90-dimensional
+   head built from named features matches a 173-dimensional one that reads the
+   full recurrent summary. The binding constraint is not head capacity, and
+   adding capacity to the component that is not short of it is the predictable
+   way to spend a phase and learn nothing.
+
+   What both point at is the **coupling** between a frozen head and a rollout it
+   never saw — weak by construction, because invariant 1 exists to make the
+   forecasting claim falsifiable. The honest options are narrow: keep the
+   invariant and accept the cap, or find an architecture where the head reads
+   something the rollout genuinely moves, without unfreezing it on predicted
+   states. Unfreezing would close the gap and remove the reason the result means
+   anything, so it is not one of the options. *(§3.34, §3.42.)*
+
+6. **Re-establish the cross-dataset matrix under the D145 fix.** Not a research
    direction so much as a debt: every CTU and cross-dataset number in this phase
    was produced while the rollout was writing untrained values into 13–15 of the
    45 feature slots, at a magnitude exceeding the real features. The fix is in

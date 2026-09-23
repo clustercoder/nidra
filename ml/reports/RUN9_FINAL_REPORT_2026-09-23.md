@@ -168,7 +168,7 @@ Every row of the previous version of this section has now landed. What they chan
 | Six recovered `state+hidden` transfer cells | completed the cross-dataset half of the head comparison (§3.30) |
 | `lofo_without_neris` (unseen attack family) | **Q9 answered.** AP 0.717 [0.485, 0.860] on a withheld family, within-host ROC 0.949 across ten infected hosts — and persistence reaches 0.772. The model transfers, and not better than persistence does (§3.39) |
 | Pre-registered stage-balanced risk objective | criterion 1 **failed**; the pooled objective is not the explanation, and §12 is refuted (§3.35, §3.27) |
-| CIC decomposable-head arms | **reversed the CTU verdict.** `state+logvar` reaches 99.1% of `state+hidden` on CIC against 14% on CTU, so the explainability cost is dataset-dependent (§3.38). Being re-trained under D145 |
+| CIC decomposable-head arms | **reversed the CTU verdict, then went further.** Re-trained under the D145 fix, `state+logvar` (90 dims, all from the 45 named features) reaches **0.7869 against `state+hidden`'s 0.7825** — ahead, not merely close — with every non-`logvar` control bit-identical. One seed, 94 validation positives; Stage B queued (§3.38, §3.42) |
 | Fixed-pooling cells | Q2 supported as a direction, Q3 not supported; persistence is level with the model on both CTU rows (§3.40) |
 | Re-run of the recorded cells into `repro_*` | **all 28 reproduce bit-identically**, and CI coverage went 6/28 → 28/28 (§3.36) |
 
@@ -207,7 +207,39 @@ strongly correlated on states its own transition model produced. If that survive
 the full re-score it is the most interesting open question in the phase, and it is
 a question about what the rollout does to a state, not about accuracy.
 
-## 7. The honest summary, as of this draft
+## 7. What the evidence says about where to go next
+
+Two results in this phase point the same way, and it is not the way the roadmap's
+§14 assumed.
+
+**§3.34:** the frozen head's answer moves 0.28% when the rollout moves the hidden
+state by 40–62%, and its first-layer response to that displacement is 1.08× its
+response to a random displacement of the same size. The head is barely coupled to
+the transition model.
+
+**§3.42:** a 90-dimensional head built from named features matches — on one seed,
+slightly beats — a 173-dimensional one that reads the full recurrent summary.
+
+Together these say the binding constraint is **not head capacity**. §14 proposed
+a transformer or TCN once the simpler history-aware heads had been tested; they
+have now been tested, and the result is that the simplest competitive head is
+already competitive. Spending the next phase on a larger sequence model would be
+adding capacity to the component that is not short of it.
+
+What both results point at instead is the **coupling** between a frozen head and
+a rollout it never saw. That coupling is weak by construction: invariant 1 freezes
+the heads on observed states precisely so that any forward-looking capability has
+to originate in the transition model, which is what makes the forecasting claim
+falsifiable. §3.34 measured the cost of that design and it is most of the gap.
+
+This is the uncomfortable shape of the finding. The invariant that makes the
+claim testable is the same invariant that caps it, and the honest options are
+narrow: keep the invariant and accept the cap, or change the architecture so the
+head reads something the rollout genuinely moves — without unfreezing it on
+predicted states, which would close the gap and simultaneously remove the reason
+the result means anything.
+
+## 8. The honest summary, as of this draft
 
 NIDRA's transition model learns network dynamics that are real and measurable, and
 this phase added a second corpus, a cross-dataset matrix, a history-aware head, an
