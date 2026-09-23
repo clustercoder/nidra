@@ -145,7 +145,11 @@ def build_head_context(table: pd.DataFrame, scaler: FeatureScaler, model: WorldM
                 h_prev,
                 torch.from_numpy(np.ascontiguousarray(prev1[c0:c1])).to(device),
                 torch.from_numpy(np.ascontiguousarray(prev2[c0:c1])).to(device))
-            logvar[lo + c0: lo + c1] = lv.cpu().numpy()
+            # Dropped slots carry no gradient in the transition loss, so the
+            # log-variance there is untrained. A `state+logvar` head would read
+            # it as a feature. Same treatment as the serving path
+            # (`WorldModel.observed_context`), through the same helper. D145.
+            logvar[lo + c0: lo + c1] = model.mask_logvar(lv).cpu().numpy()
 
     logger.info("build_head_context: %d rows over %d hosts at L=%d", len(df), len(bounds) - 1, L)
     return HeadContext(hidden=hidden, delta=delta, logvar=logvar,

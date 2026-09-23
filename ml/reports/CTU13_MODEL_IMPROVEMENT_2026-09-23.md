@@ -2286,12 +2286,62 @@ the scaler that D142's guard already forces to match. Passing `None` restores th
 old path exactly, so every recorded run stays reproducible — which §3.36 has just
 finished demonstrating and which must not be broken by the fix for it.
 
-Twelve tests in `tests/test_rollout_dropped_features.py`. Suite 762 → 774.
+Seventeen tests in `tests/test_rollout_dropped_features.py`.
 
 **Blast radius.** 40 of 63 run scalers drop features: every CTU-13 run drops 15,
 every combined and `cic_core` run drops 13. The 23 `full`-regime runs drop nothing
 and are arithmetically unaffected, so **Run 8 is not touched by this** — and its
 artifacts are not re-run regardless (§33).
+
+**The rollout was not the only exposed path.** `observed_context` (serving,
+`score_observed`) and `train/head_context.py` (head *training*) both call the
+transition directly and take its `logvar`, so a `state+logvar` head was reading
+13 untrained log-variances of 45 **while it was being trained** — which is
+precisely the number §3.38 turns on. Both now go through the same
+`mask_logvar` helper. `state`, `hidden` and `delta` are built from observed data
+and were always clean; only `logvar` needed it. This means §3.38's comparison
+has to be re-trained, not merely re-scored, and it is: `cic_core_decomp_masked`
+re-runs all six arms, with `state` and `state+hidden` included as controls that
+do not read `logvar` and should therefore be unchanged.
+
+#### The pre-registered test, and its answer
+
+§3.37 registered this before the re-scores ran: *if D145 is the mechanism behind
+the oracle anomaly, masking removes the oracle-beating in `comb2cic/test` and
+`comb2ctu/holdout`.*
+
+**It does not. The hypothesis is refuted.**
+
+| system | AP before | AP after | ROC before | ROC after |
+|---|---:|---:|---:|---:|
+| `world_model_calibrated` | 0.1584 | **0.1990** | 0.889 | 0.950 |
+| `world_model` (raw) | 0.1470 | **0.2018** | 0.913 | 0.967 |
+| `world_model_deterministic` | 0.0405 | 0.0408 | 0.254 | 0.266 |
+| `oracle_true_future` | 0.0519 | 0.0519 | 0.367 | 0.367 |
+| `persistence` | 0.0342 | 0.0342 | 0.194 | 0.194 |
+
+The model beat its oracle by +0.095 before and beats it by **+0.150** after. The
+oracle and persistence are unchanged, exactly as they should be — their states
+never carried the phantom. §3.24's cells stay unexplained and negative result 10
+stands as written.
+
+Two things the table settles in passing. **The phantom was hurting, not helping**:
+removing it is worth +0.055 raw AP and +0.054 ROC on this cell, so the defect was
+costing accuracy rather than inflating it. And **the deterministic arm's
+below-chance ROC is not the phantom either** — 0.254 to 0.266. That remains
+unexplained too.
+
+What the table does point at is something the phantom was obscuring: on this
+cell the oracle itself ranks at ROC 0.367 and persistence at 0.194, both *below
+chance*, while the sampled rollout reaches 0.967. A frozen head trained on
+combined data appears to be anti-correlated on CIC's true state distribution and
+strongly correlated on states its own transition model produced. That is a
+sharper statement of §3.24's anomaly than anything before it, and it is the next
+thing to test.
+
+On a non-anomalous cell the correction is much smaller — CTU → CTU test moves
++0.005 raw, −0.004 calibrated, and the oracle still wins by 0.026. The
+correction is not uniform, and the full 28-cell re-score is running.
 
 ### 3.38 On CIC, the decomposable head is not the loser it was on CTU (§5, §27, §31 Q13/Q14)
 

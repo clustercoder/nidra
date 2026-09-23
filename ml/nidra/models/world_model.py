@@ -129,6 +129,20 @@ class WorldModel(nn.Module):
                              f"{self.n_features} features")
         self.feature_mask = mask
 
+    def mask_logvar(self, logvar: torch.Tensor) -> torch.Tensor:
+        """Pin a predicted log-variance to the floor in dropped slots.
+
+        `rollout()` is not the only path that hands a head a transition output:
+        `observed_context` (serving) and `train/head_context.py` (head
+        training) both call `transition()` directly. A `state+logvar` head
+        therefore reads the untrained slots in both places, so both go through
+        here. A no-op when no mask is set.
+        """
+        if self.feature_mask is None:
+            return logvar
+        mask = self.feature_mask.to(logvar.dtype)
+        return logvar * mask + (1.0 - mask) * self.transition.logvar_min
+
     def encode(self, x: torch.Tensor, h: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
         return self.encoder(x, h)
 
@@ -247,7 +261,7 @@ class WorldModel(nn.Module):
                 # which is what a dropped feature means. Sampling in these slots
                 # cannot reach the state — the mask above is applied after the
                 # noise is added.
-                logvar = logvar * mask + (1.0 - mask) * self.transition.logvar_min
+                logvar = self.mask_logvar(logvar)
 
             traj.append(nxt)
             mus.append(mu)
@@ -307,7 +321,11 @@ class WorldModel(nn.Module):
         prev1 = x[:, -2, :] if x.shape[1] >= 2 else torch.zeros_like(x[:, -1, :])
         prev2 = x[:, -3, :] if x.shape[1] >= 3 else torch.zeros_like(x[:, -1, :])
         _, logvar = self.transition(h_prev, prev1, prev2)
-        return {"state": x[:, -1, :], "hidden": out[:, -1, :], "delta": x[:, -1, :] - prev1, "logvar": logvar}
+        # `state`, `hidden` and `delta` come from observed data, whose dropped
+        # slots are already exactly zero. `logvar` is a transition output and
+        # is untrained there — see `mask_logvar`.
+        return {"state": x[:, -1, :], "hidden": out[:, -1, :], "delta": x[:, -1, :] - prev1,
+                "logvar": self.mask_logvar(logvar)}
 
     def score_observed(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Heads applied to the observed state at the end of each history

@@ -158,3 +158,60 @@ class TestLogvarInDroppedSlots:
         m.set_feature_mask([i not in dropped for i in range(8)])
         out = m.rollout(_history(4, 3, 8, dropped), K=6, n_samples=16, stochastic=True)
         assert out.states[..., dropped].abs().max().item() == 0.0
+
+
+class TestHeadContextOutsideTheRollout:
+    """`rollout()` is not the only path that hands a head a transition output.
+
+    `observed_context` (serving, `score_observed`) and
+    `train/head_context.py` (head TRAINING) both call `transition()` directly
+    and take its `logvar`. A `state+logvar` head therefore reads 13 untrained
+    log-variances in the `cross_core` regime at training time *and* at serving
+    time, which is the number §3.38 turns on. Masking only inside the rollout
+    would leave that conclusion contaminated.
+
+    `state`, `hidden` and `delta` come from observed data, whose dropped slots
+    are already exactly zero, so only `logvar` needs the treatment here.
+    """
+
+    def test_observed_context_pins_logvar_in_dropped_slots(self):
+        dropped = [2, 5]
+        m = _model()
+        m.set_feature_mask([i not in dropped for i in range(8)])
+        ctx = m.observed_context(_history(4, 3, 8, dropped))
+        lv = ctx["logvar"][:, dropped]
+        assert lv.min().item() == lv.max().item() == m.transition.logvar_min
+
+    def test_observed_context_leaves_kept_logvars_alone(self):
+        dropped = [2, 5]
+        kept = [i for i in range(8) if i not in dropped]
+        x = _history(4, 3, 8, dropped)
+        plain = _model().observed_context(x)
+        m = _model()
+        m.set_feature_mask([i not in dropped for i in range(8)])
+        torch.testing.assert_close(m.observed_context(x)["logvar"][:, kept], plain["logvar"][:, kept])
+
+    def test_observed_context_state_delta_hidden_are_untouched(self):
+        dropped = [2, 5]
+        x = _history(4, 3, 8, dropped)
+        plain = _model().observed_context(x)
+        m = _model()
+        m.set_feature_mask([i not in dropped for i in range(8)])
+        got = m.observed_context(x)
+        for key in ("state", "hidden", "delta"):
+            torch.testing.assert_close(got[key], plain[key])
+
+    def test_observed_delta_was_already_clean(self):
+        """Stated so the scope of the defect stays on the record: `delta` is a
+        backward difference of two observed states, so it never carried the
+        contamination that `logvar` did."""
+        dropped = [2, 5]
+        m = _model()
+        m.set_feature_mask([i not in dropped for i in range(8)])
+        ctx = m.observed_context(_history(4, 3, 8, dropped))
+        assert ctx["delta"][:, dropped].abs().max().item() == 0.0
+
+    def test_mask_logvar_is_a_no_op_without_a_mask(self):
+        m = _model()
+        lv = torch.randn(4, 8)
+        torch.testing.assert_close(m.mask_logvar(lv), lv)

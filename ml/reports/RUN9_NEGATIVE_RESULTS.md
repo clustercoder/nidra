@@ -291,12 +291,25 @@ magnitude than the real features, in slots that are exactly zero in both the
 input and the truth. Every CTU and cross-dataset number in this phase was
 produced under it.
 
-Two findings in this log are now suspect as stated. §3.24's "the oracle is not an
-upper bound" and the deterministic arm's below-chance ROC both have an obvious
-candidate explanation in the defect. Neither is confirmed: the phantom magnitude
-does not order the anomaly, and the largest phantom-to-real ratio belongs to a
-cell that does *not* beat its oracle. A pre-registered test is recorded in §3.37
-and the answer will land either way. *(§3.37, D145.)*
+Two findings in this log looked, briefly, as though the defect explained them.
+§3.24's "the oracle is not an upper bound" and the deterministic arm's
+below-chance ROC both have an obvious candidate mechanism in the phantom drift. A
+test was pre-registered in §3.37 before the re-scores ran: masking should remove
+the oracle-beating.
+
+**It did not, and both candidate explanations are dead.** On `comb2cic/test` the
+raw arm went from beating its oracle by +0.095 to beating it by **+0.150**, and
+the deterministic arm's ROC moved 0.254 → 0.266. §3.24's cells stay unexplained
+and entry 10 stands exactly as written.
+
+So the defect is real, it invalidates numbers, and it explains neither of the two
+things it looked like it would explain. Worth separating those: a defect large
+enough to be obviously important is not thereby the cause of whatever else is
+unexplained nearby.
+
+One finding in the other direction, which belongs here because it was not the
+hypothesis: **the phantom was costing accuracy, not manufacturing it.** Removing
+it is worth +0.055 raw AP and ROC 0.913 → 0.967 on that cell. *(§3.37, D145.)*
 
 ---
 

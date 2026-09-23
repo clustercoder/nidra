@@ -1921,3 +1921,19 @@ not re-run regardless.
 The correction is being measured on six affected cells, written to `mask_*` rather than
 over the originals, for the same reason the reproduction re-run was: if the numbers
 move, the published figures must stay matched to the artifacts that produced them.
+
+**Scope correction, same day.** `rollout()` was not the only exposed path.
+`observed_context` (serving) and `train/head_context.py` (head *training*) both call the
+transition directly and take its `logvar`, so a `state+logvar` head was trained against
+13 untrained log-variances out of 45. Both now go through a shared `mask_logvar`
+helper. `state`, `hidden` and `delta` are built from observed data and were always
+clean. The consequence is that §3.38's decomposable-head comparison must be
+*re-trained*, not merely re-scored — `cic_core_decomp_masked` does that, with `state`
+and `state+hidden` as controls that do not read `logvar`.
+
+**The pre-registered test came back negative.** Masking does not remove the
+oracle-beating: on `comb2cic/test` the raw arm went from beating its oracle by +0.095
+to beating it by **+0.150**. The hypothesis in this entry is refuted and §3.24's cells
+remain unexplained. Two side findings: the phantom was *costing* accuracy (+0.055 raw
+AP once removed, ROC 0.913 → 0.967), and the deterministic arm's below-chance ROC is
+not the phantom either (0.254 → 0.266).
