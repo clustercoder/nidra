@@ -204,3 +204,21 @@ def test_an_all_empty_reliability_does_not_report_a_confident_zero():
     assert r["brier_calibrated"] == pytest.approx(0.1)
     assert r["ece_calibrated"] != r["ece_calibrated"]      # nan
     assert r["brier_constant"] != r["brier_constant"]      # nan
+
+
+def test_the_row_carries_the_deterministic_system_beside_the_oracle():
+    """§25. `oracle_true_future` is the frozen head on the TRUE future under a
+    single-trajectory readout; `world_model_calibrated` pools ~200 stochastic
+    trajectories and then applies Platt. Comparing those two is not a ratio to
+    an upper bound, and in 7 of 14 measured cells it exceeds 1. The matched
+    comparison is against `world_model_deterministic`, so it has to be in the
+    row for the oracle column to be readable at all."""
+    rec = _record()
+    rec["metrics"]["task_published_label"]["systems"]["world_model_deterministic"] = {"auc_pr": 0.21}
+    r = row_for(rec)
+    assert r["deterministic_ap"] == pytest.approx(0.21)
+    assert r["oracle_ap"] == pytest.approx(0.9)
+
+
+def test_a_run_without_the_deterministic_system_gets_none():
+    assert row_for(_record())["deterministic_ap"] is None

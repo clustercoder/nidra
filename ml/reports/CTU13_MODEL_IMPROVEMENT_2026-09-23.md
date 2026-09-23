@@ -1487,3 +1487,64 @@ metric and this is a supporting one. What it does establish is that a
 `state+hidden` probability shown to an operator as a probability would be less
 trustworthy than a `state` one, and that is a deployment fact rather than a
 statistical artefact.
+
+### 3.24 The oracle is not the upper bound the scorecard was treating it as (§25, §36 item 22)
+
+§25 asks for the oracle gap to be investigated. Collected across every
+cross-evaluation arm measured so far, the gap does not behave like a gap:
+
+| training → eval | split | published AP | oracle AP | published ÷ oracle |
+|---|---|---|---|---|
+| CIC → CIC, `state` | test | 0.111 | 0.155 | 0.72 |
+| CIC → CIC, `state` | holdout | 0.332 | 0.489 | 0.68 |
+| CIC → CIC, `state+hidden` | test | 0.064 | 0.051 | **1.26** |
+| CIC → CIC, `state+hidden` | holdout | 0.380 | 0.375 | **1.01** |
+| CIC → CTU, `state` | holdout | 0.035 | 0.034 | **1.05** |
+| comb → CIC, `state` | test | 0.164 | 0.089 | **1.85** |
+| comb → CIC, `state+hidden` | test | 0.158 | 0.052 | **3.05** |
+| comb → CTU, `state` | holdout | 0.307 | 0.232 | **1.32** |
+| CTU → CTU, `state` | holdout | 0.188 | 0.188 | **1.00** |
+| *(the remaining 5 cells)* | | | | 0.28 – 0.92 |
+
+**The published system beats the oracle in 7 of 14 cells.** A ratio to an upper
+bound cannot exceed 1, so either the model is doing something impossible or the
+oracle is not bounding what the column implies. It is the second, and the reason
+is a readout mismatch rather than a defect in `_oracle_risk`:
+
+- `oracle_true_future` is the frozen head on the **true** future state, reduced
+  over horizons. One trajectory, no pooling, **no Platt layer**.
+- `world_model_calibrated` is the frozen head on ~200 **predicted** trajectories,
+  pooled by the validation-selected rule, **then** per-horizon Platt.
+
+Pooling and calibration are part of the system under test and the oracle is
+given neither. Attributing each inversion by comparing against the pooled but
+uncalibrated `world_model`: in **5 of the 7**, pooling alone already beats the
+oracle; in the other 2, calibration flips it. The readout, not the state
+forecast, is what the oracle is missing.
+
+**The matched comparison is `world_model_deterministic`** — one predicted
+trajectory, no pooling, the same reduction the oracle gets — and there the
+oracle behaves: 0.014 against 0.051, 0.236 against 0.375, 0.005 against 0.011.
+It bounds the deterministic system in **12 of the 14** cells. So the oracle is a
+sound upper bound on *state-forecasting error at a fixed single-trajectory
+readout*, which is what it was built to isolate, and an unsound one on the
+deployed system. The scorecard now prints `oracle AP / deterministic AP` with
+that stated, because the one-column version invited exactly the reading it
+cannot support.
+
+**Two cells break even the matched bound** and are not explained here:
+`comb → CIC` test (deterministic 0.157 against oracle 0.089) and `comb → CTU`
+holdout (0.339 against 0.232). Both are combined-trained and both use the
+per-state head, where the oracle is simply `score_states` on the true future —
+so the frozen head ranks the transition model's *predicted* states better than
+the real ones. A rollout acting as a learned prior that pushes states toward
+regions the head separates well would produce this, and so would an artefact of
+the horizon `max` reduction interacting with a smoother predicted trajectory.
+**Neither is tested**, and they are named as candidates, not causes. It is
+recorded as an open item rather than resolved, because the honest position is
+that a 2-of-14 violation of a bound we thought was structural is not yet
+understood.
+
+What this does *not* change: the oracle gap where it is a gap. CIC → CIC with
+the `state` head reaches 68–72% of the oracle, and that remains the cleanest
+statement of how much of the head's ceiling the forecast actually delivers.

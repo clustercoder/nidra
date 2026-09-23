@@ -121,6 +121,13 @@ def row_for(record: dict, system: str = "world_model_calibrated") -> dict:
         "alerts_per_hour": sysrow.get("alerts_per_hour"),
         "active_benign_fa_rate": sysrow.get("active_benign_false_alarm_rate"),
         "oracle_ap": pub["systems"].get("oracle_true_future", {}).get("auc_pr"),
+        # §25: the oracle is the frozen head on the TRUE future under a SINGLE
+        # trajectory, with no Platt layer. `world_model_calibrated` pools ~200
+        # stochastic trajectories and then calibrates, so the ratio of the two
+        # is not a fraction of an upper bound and exceeds 1 in half the cells
+        # measured. The matched comparison is this one, and it holds in 12 of
+        # those 14 — so the column has to travel beside the oracle's.
+        "deterministic_ap": pub["systems"].get("world_model_deterministic", {}).get("auc_pr"),
         "persistence_ap": pub["systems"].get("persistence", {}).get("auc_pr"),
         "best_baseline": best_baseline,
         "best_baseline_ap": best_ap if best_baseline else None,
@@ -184,7 +191,7 @@ def main() -> None:
 
     lines: list[str] = []
     lines.append("| Training | Evaluated on | split | rows | prevalence | AP [95% CI] | ROC | P | R | F1 | FA/h | "
-                 "alerts/h | FA rate on active benign | best baseline (AP) | oracle AP | "
+                 "alerts/h | FA rate on active benign | best baseline (AP) | oracle AP / deterministic AP | "
                  "state skill vs persistence / ridge | onset AP 5/15 | "
                  "episodes warned | positive hosts | within-host ROC |")
     lines.append("|---|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---|---|---|---:|---:|")
@@ -204,11 +211,21 @@ def main() -> None:
                 f"{_f(r['ap'])}{r['ap_ci']} | {_f(r['roc'])} | {_f(r['precision'])} | {_f(r['recall'])} | "
                 f"{_f(r['f1'])} | {_f(r['false_alarms_per_hour'], 2)} | {_f(r['alerts_per_hour'], 2)} | "
                 f"{_f(r['active_benign_fa_rate'], 5)} | "
-                f"{r['best_baseline'] or '—'} ({_f(r['best_baseline_ap'])}) | {_f(r['oracle_ap'])} | "
+                f"{r['best_baseline'] or '—'} ({_f(r['best_baseline_ap'])}) | {_f(r['oracle_ap'])}"
+                f"{' / ' + _f(r['deterministic_ap']) if r['deterministic_ap'] is not None else ''} | "
                 f"{_f(r['state_skill_vs_persistence'])} / {_f(r['state_skill_vs_ridge'])} | "
                 f"{_f(r['onset_ap_5'])} / {_f(r['onset_ap_15'])} | {warned} | "
                 f"{r['n_positive_hosts'] if r['n_positive_hosts'] is not None else '—'}"
                 f"{'¹' if r['n_positive_hosts'] == 1 else ''} | {_f(r['within_host_roc'], 4)} |")
+
+    if any(r.get("deterministic_ap") is not None for r in raw.values()):
+        lines += ["", "**oracle AP / deterministic AP.** The oracle is the frozen head on the TRUE future "
+                      "state under a single-trajectory readout and no Platt layer. The published system pools "
+                      "~200 stochastic trajectories and then calibrates, so the ratio of the two is NOT a "
+                      "fraction of an upper bound — the published score exceeds the oracle in half the cells "
+                      "measured, because its readout is a better estimator and the oracle is given neither "
+                      "half of it. The matched comparison is the deterministic column, which the oracle does "
+                      "bound in 12 of 14 (§3.24)."]
 
     if any(r.get("n_positive_hosts") == 1 for r in raw.values()):
         lines += ["", "¹ Every positive in that evaluation sits on a single host, so its AP does not "
