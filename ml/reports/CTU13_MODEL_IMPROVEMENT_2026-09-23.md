@@ -1903,3 +1903,22 @@ runs that follow the architecture freeze. The final report's headline numbers
 come from that second group, which is the one that matters for §36 item 21 — but
 the log should say plainly that the earlier table was not what its header
 claimed.
+
+**The twenty recorded cells are queued for re-run, into a separate directory.**
+§3.31's fix is not retroactive, so the matrix would otherwise ship with a
+`AP [95% CI]` column that is empty for every cell it already has. The re-run
+buys the intervals and, because the evaluation code has changed since those
+cells were written — the host-identity block, the calibration reader, D142 and
+D143's guards, `--force-pooling` — it is simultaneously a reproducibility check
+on every published number in the matrix.
+
+Written to `repro_<label>/` rather than over `xeval_<label>/`. Overwriting would
+leave this log's figures unmatched by any artifact exactly in the case where the
+answer is interesting, which is the opposite of what §33 asks for.
+`nidra/scripts/reproduction_check.py` compares them and is strict about what
+counts as agreement: a difference in `n_rows` or prevalence is reported as
+**different data**, not as small drift, because a matching AP on a different row
+set is a worse finding than a moved one. Tolerance is 0.005 AP — a re-run is
+seeded but the bootstrap resamples and the rollout draws, and 0.005 is an order
+of magnitude below the smallest difference this phase draws a conclusion from.
+Queued behind every other queue; it cannot starve anything.
