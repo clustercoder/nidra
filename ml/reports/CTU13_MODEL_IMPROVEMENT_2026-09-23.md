@@ -2286,7 +2286,13 @@ the scaler that D142's guard already forces to match. Passing `None` restores th
 old path exactly, so every recorded run stays reproducible — which §3.36 has just
 finished demonstrating and which must not be broken by the fix for it.
 
-Seventeen tests in `tests/test_rollout_dropped_features.py`.
+Nineteen tests in `tests/test_rollout_dropped_features.py`; suite 762 → 781.
+
+**The served path needed it too.** `NidraPredictor` loads its own ensemble rather
+than going through `benchmark.load_models`, so production would have been the one
+place the defect went unmeasured. Two of the nineteen tests run against the real
+`trained_predictor` fixture: every served model carries the scaler's mask, and a
+served rollout holds dropped slots at zero end to end.
 
 **Blast radius.** 40 of 63 run scalers drop features: every CTU-13 run drops 15,
 every combined and `cic_core` run drops 13. The 23 `full`-regime runs drop nothing
