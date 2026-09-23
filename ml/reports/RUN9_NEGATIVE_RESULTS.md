@@ -396,6 +396,23 @@ propagate to the next script written by the same hand unless it is put somewhere
 the script has to pass through — which, for queue scripts written ad hoc into a
 scratchpad, it is not.
 
+**It happened a third time the same afternoon, in a different form.** A compound
+command — a Python edit to `DECISIONS.md`, then the test suite — was run in the
+background. The edit's old-text match failed on a line wrap, the script raised,
+and the suite then passed, so the whole command **exited 0** and the completion
+notice said so. A commit went out whose message described a withdrawal that was
+not in the tree; the report section had landed, the decision entry had not. Fixed
+in the next commit, which says so.
+
+All three are one failure: **a success signal derived from the last thing that
+ran rather than from every thing that ran**, reported through a channel nobody
+was reading at the time. `${pipestatus[1]}` fixes the shell case. The general
+case does not have a one-line fix, and the practical defence used for the rest of
+the phase was the one that caught all three: look at *what the step produced*, not
+at whether it claimed success. Three seconds is not a head ablation; a
+bit-identical AP is not a retraining; and a file that does not contain the string
+you just wrote was not written.
+
 ---
 
 ## What this list is for
