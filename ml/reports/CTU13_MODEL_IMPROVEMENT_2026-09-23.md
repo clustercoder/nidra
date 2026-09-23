@@ -1759,3 +1759,49 @@ So the gain is not the head separating attacks more cleanly; it is a re-ranking
 whose mechanism is still not identified. The control behaves as expected: the
 rollout degrades everything and AP falls to a fifth. §3.24's two cells remain
 open.
+
+### 3.29 Stage B: the head comparison confirmed on three seeds (§19, §36 item 7)
+
+§19 forbids calling a one-seed screening result final. The confirmation ran on
+CTU-13, three head-training seeds per variant, all six cells initialised from the
+**same** `ctu_dyn` checkpoint so the encoder and transition are byte-identical
+and the only thing that changes is what the head reads:
+
+| head | seeds | mean val AP | sd | individual seeds |
+|---|---|---|---|---|
+| `state` (Run 8 architecture) | 3 | 0.3212 | 0.0468 | 0.3751, 0.2975, 0.2910 |
+| `state+hidden` | 3 | **0.4931** | **0.0083** | 0.4877, 0.5027, 0.4889 |
+
+**+0.172 mean, and the distributions do not overlap** — the worst history-aware
+seed (0.4877) is 0.11 above the best per-state seed (0.3751). Against the Stage A
+screening's +0.1363 on one seed, the effect replicates and is if anything larger.
+This is the phase's central hypothesis and on the selection metric it holds.
+
+The second column was not expected and matters on its own. **The history-aware
+head is 5.6× more stable across seeds** (sd 0.0083 against 0.0468). With the
+transition model held fixed, that 0.0468 is *entirely* head-training noise — 15%
+of the per-state head's own mean. §32 ranks reproducibility ninth, and this is a
+point for the same head that §3.23 and §3.20 counted two points against.
+
+It also recalibrates how every Stage A number in this log should be read. §3.12's
+one-seed cells carry roughly ±0.05 of head-training noise on the `state` arm; its
+CTU row (0.3531) sits within one sd of the confirmed mean (0.3212). The gaps it
+reported are several times that noise, so its conclusions stand — but a Stage A
+difference smaller than about 0.1 on a `state` arm should not have been believed,
+and none was relied on.
+
+Three things this does **not** say, all of which the phase has to keep straight:
+
+1. **The seeds vary head training, not dynamics.** One `ctu_dyn` checkpoint
+   underlies all six cells. That is what §4 requires for a controlled head
+   comparison, and it means the sd is head-training variance, not end-to-end.
+   `ctu_dyn_s1` and `ctu_dyn_s2` exist for the end-to-end question and are not
+   consumed here.
+2. **This is head-training AP on observed states, not the forecast benchmark.**
+   The benchmark is the selection metric and it is running now, validation only —
+   test and holdout stay untouched until a winner is frozen.
+3. **It is CTU-13.** §3.11 already showed that most of CTU's history-aware gain
+   is the head recognising the infected host rather than the moment, while CIC's
+   survives the within-host test. A confirmed aggregate on the corpus where the
+   decomposition is worst is confirmation that the effect is real, not that it is
+   the effect we want.
