@@ -1,0 +1,59 @@
+{
+  "label": "ctu_confirm",
+  "init_from": "ctu_dyn",
+  "variants": {
+    "state": {
+      "components": [
+        "state"
+      ],
+      "run_dir": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/ctu_confirm__state",
+      "seeds": {
+        "0": {
+          "val_auc_pr_natural": 0.3750698324549635,
+          "val_auc_pr": 0.3750698324549635,
+          "best_epoch": 29,
+          "input_dim": 45
+        },
+        "1": {
+          "val_auc_pr_natural": 0.2974666144688805,
+          "val_auc_pr": 0.2974666144688805,
+          "best_epoch": 10,
+          "input_dim": 45
+        },
+        "2": {
+          "val_auc_pr_natural": 0.2909796720746767,
+          "val_auc_pr": 0.2909796720746767,
+          "best_epoch": 5,
+          "input_dim": 45
+        }
+      }
+    },
+    "state+hidden": {
+      "components": [
+        "state",
+        "hidden"
+      ],
+      "run_dir": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/ctu_confirm__state+hidden",
+      "seeds": {
+        "0": {
+          "val_auc_pr_natural": 0.4876542491481715,
+          "val_auc_pr": 0.4876542491481715,
+          "best_epoch": 7,
+          "input_dim": 173
+        },
+        "1": {
+          "val_auc_pr_natural": 0.5026719542206984,
+          "val_auc_pr": 0.5026719542206984,
+          "best_epoch": 6,
+          "input_dim": 173
+        },
+        "2": {
+          "val_auc_pr_natural": 0.48891410622713916,
+          "val_auc_pr": 0.48891410622713916,
+          "best_epoch": 3,
+          "input_dim": 173
+        }
+      }
+    }
+  }
+}

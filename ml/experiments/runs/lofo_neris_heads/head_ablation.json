@@ -1,0 +1,35 @@
+{
+  "label": "lofo_neris_heads",
+  "init_from": "lofo_without_neris_dyn",
+  "variants": {
+    "state": {
+      "components": [
+        "state"
+      ],
+      "run_dir": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/lofo_neris_heads__state",
+      "seeds": {
+        "0": {
+          "val_auc_pr_natural": 0.011063341084830704,
+          "val_auc_pr": 0.011063341084830704,
+          "best_epoch": 8,
+          "input_dim": 45
+        }
+      }
+    },
+    "state+hidden": {
+      "components": [
+        "state",
+        "hidden"
+      ],
+      "run_dir": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/lofo_neris_heads__state+hidden",
+      "seeds": {
+        "0": {
+          "val_auc_pr_natural": 0.0847840760093199,
+          "val_auc_pr": 0.0847840760093199,
+          "best_epoch": 2,
+          "input_dim": 173
+        }
+      }
+    }
+  }
+}

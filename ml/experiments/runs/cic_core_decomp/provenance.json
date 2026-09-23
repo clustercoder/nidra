@@ -1,0 +1,245 @@
+{
+  "stage": "head_ablation",
+  "recorded_at": "2026-09-23T05:03:53Z",
+  "git_commit": "a52708a1384e5e80684ab40a92cb17b75215f46c",
+  "config_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/cic_core_decomp__prep/config.yaml",
+  "config_hash": "4f5275e364cd25fc",
+  "schema_version": "1.0",
+  "n_features": 45,
+  "geometry": {
+    "window_seconds": 60,
+    "context_length_L": 30,
+    "horizon_length_K": 6,
+    "history_minutes": 30.0,
+    "horizon_minutes": 6.0,
+    "min_windows_per_host": 36
+  },
+  "dataset": {
+    "name": "CIC-IDS2017 (TrafficLabelling CSVs + project tshark packet parquet)",
+    "flow_timebase": "utc12h",
+    "feature_regime": "cross_core",
+    "ctu13_internal_cidrs": [
+      "147.32.0.0/16"
+    ],
+    "days": {
+      "monday": {
+        "role": "train",
+        "format": "cicflowmeter",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Monday-WorkingHours.pcap_ISCX.csv",
+          "bytes": 268649908,
+          "mtime": "2017-08-10T17:15:46Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Monday-WorkingHours_packets.parquet",
+          "bytes": 147461456,
+          "mtime": "2026-09-07T11:19:48Z"
+        },
+        "role_annotated_in_config": "benign_baseline",
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/monday__w60__Monday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 8259248,
+          "mtime": "2026-09-19T18:52:53Z"
+        }
+      },
+      "tuesday": {
+        "role": "train",
+        "format": "cicflowmeter",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Tuesday-WorkingHours.pcap_ISCX.csv",
+          "bytes": 174696560,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Tuesday-WorkingHours_packets.parquet",
+          "bytes": 144575051,
+          "mtime": "2026-09-11T05:53:26Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/tuesday__w60__Tuesday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 6761403,
+          "mtime": "2026-09-19T18:54:48Z"
+        }
+      },
+      "wednesday": {
+        "role": "train",
+        "format": "cicflowmeter",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Wednesday-workingHours.pcap_ISCX.csv",
+          "bytes": 285642925,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Wednesday-workingHours_packets.parquet",
+          "bytes": 167783673,
+          "mtime": "2026-09-11T06:00:54Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/wednesday__w60__Wednesday-workingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 6930474,
+          "mtime": "2026-09-19T18:56:55Z"
+        }
+      },
+      "thursday_web": {
+        "role": "holdout",
+        "format": "cicflowmeter",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv",
+          "bytes": 92030223,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Thursday-WorkingHours_packets.parquet",
+          "bytes": 117663088,
+          "mtime": "2026-09-11T06:06:08Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/thursday_web__w60__Thursday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 2526113,
+          "mtime": "2026-09-19T18:58:13Z"
+        }
+      },
+      "thursday_infiltration": {
+        "role": "holdout",
+        "format": "cicflowmeter",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv",
+          "bytes": 108723183,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Thursday-WorkingHours_packets.parquet",
+          "bytes": 117663088,
+          "mtime": "2026-09-11T06:06:08Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/thursday_infiltration__w60__Thursday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 3190235,
+          "mtime": "2026-09-19T18:59:38Z"
+        }
+      },
+      "friday_morning": {
+        "role": "test",
+        "format": "cicflowmeter",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Morning.pcap_ISCX.csv",
+          "bytes": 75386737,
+          "mtime": "2017-08-17T14:16:06Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/friday_morning__w60__Friday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 2676780,
+          "mtime": "2026-09-19T19:00:56Z"
+        }
+      },
+      "friday_portscan": {
+        "role": "test",
+        "format": "cicflowmeter",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv",
+          "bytes": 101874777,
+          "mtime": "2017-08-17T14:16:02Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/friday_portscan__w60__Friday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 1810713,
+          "mtime": "2026-09-19T19:02:06Z"
+        }
+      },
+      "friday_ddos": {
+        "role": "test",
+        "format": "cicflowmeter",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/csv/extracted/TrafficLabelling /Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv",
+          "bytes": 96101069,
+          "mtime": "2018-06-07T16:33:50Z"
+        },
+        "packets_parquet": {
+          "path": "/Users/manteksinghburn/nidra/cicids2017/pcap/parquet/Friday-WorkingHours_packets.parquet",
+          "bytes": 124760533,
+          "mtime": "2026-09-07T11:23:27Z"
+        },
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/friday_ddos__w60__Friday-WorkingHours_packets.parquet__capNone__utc12h__fuse2.parquet",
+          "bytes": 892035,
+          "mtime": "2026-09-19T19:03:04Z"
+        }
+      }
+    }
+  },
+  "seed": null,
+  "ensemble_seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "split": null,
+  "threshold": 0.75,
+  "pooling": null,
+  "calibration": null,
+  "checkpoints": {
+    "weights": {
+      "seed_0": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/cic_core_decomp__prep/artifacts/weights/model_seed_0.pt",
+        "sha256": "0d82c2078d13c25218bfe1cd7374b08f619fef903089c36f8f89a7e1ab60a208"
+      },
+      "seed_1": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/cic_core_decomp__prep/artifacts/weights/model_seed_1.pt",
+        "sha256": null
+      },
+      "seed_2": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/cic_core_decomp__prep/artifacts/weights/model_seed_2.pt",
+        "sha256": null
+      },
+      "seed_3": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/cic_core_decomp__prep/artifacts/weights/model_seed_3.pt",
+        "sha256": null
+      },
+      "seed_4": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/cic_core_decomp__prep/artifacts/weights/model_seed_4.pt",
+        "sha256": null
+      }
+    },
+    "scaler": {
+      "robust_scaler.joblib": null,
+      "feature_scaler.json": "1f834b4517af5f440d34a0642053cdd3ab649e5fcc53bf8e9d142f3ce285967e",
+      "scaler_metadata.json": "8c1f19275f5346b236eb97da5089dba1186df3cc01d7bb373e00cacf2f855d18",
+      "shap_background.npy": "6732e73b439e6964974a17d2ef9daea99e86b3272cc1e9715b6c66c2d42a452b"
+    },
+    "calibration": {
+      "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/cic_core_decomp__prep/artifacts/weights/risk_calibration.json",
+      "sha256": null
+    }
+  },
+  "platform": {
+    "python": "3.14.7",
+    "machine": "arm64",
+    "system": "Darwin"
+  },
+  "metrics": null,
+  "label": "cic_core_decomp",
+  "init_from": "cic_core_dyn",
+  "variants": [
+    "state+logvar",
+    "state+delta",
+    "state+delta+logvar",
+    "hidden"
+  ],
+  "seeds": [
+    0
+  ],
+  "context_length": 30,
+  "seconds": 2608.7
+}

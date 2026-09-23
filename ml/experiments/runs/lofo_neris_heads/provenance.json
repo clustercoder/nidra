@@ -1,0 +1,322 @@
+{
+  "stage": "head_ablation",
+  "recorded_at": "2026-09-23T04:22:18Z",
+  "git_commit": "4942d688ec9e5b711bfc75f84f97b9a282987fc6",
+  "config_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/lofo_neris_heads__prep/config.yaml",
+  "config_hash": "de6d639e77c3a3cd",
+  "schema_version": "1.0",
+  "n_features": 45,
+  "geometry": {
+    "window_seconds": 60,
+    "context_length_L": 30,
+    "horizon_length_K": 6,
+    "history_minutes": 30.0,
+    "horizon_minutes": 6.0,
+    "min_windows_per_host": 36
+  },
+  "dataset": {
+    "name": "CTU-13 (Argus binetflow, flow-only)",
+    "flow_timebase": "utc12h",
+    "feature_regime": "cross_core",
+    "ctu13_internal_cidrs": [
+      "147.32.0.0/16"
+    ],
+    "days": {
+      "ctu_1": {
+        "role": "test",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/1/capture20110810.binetflow",
+          "bytes": 386629271,
+          "mtime": "2014-07-18T08:32:58Z"
+        },
+        "packets_parquet": null,
+        "role_annotated_in_config": "train",
+        "family": "neris",
+        "scenario": 1,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_1__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 3913615,
+          "mtime": "2026-09-22T19:29:09Z"
+        }
+      },
+      "ctu_2": {
+        "role": "test",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/2/capture20110811.binetflow",
+          "bytes": 247231783,
+          "mtime": "2014-07-18T08:32:52Z"
+        },
+        "packets_parquet": null,
+        "role_annotated_in_config": "train",
+        "family": "neris",
+        "scenario": 2,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_2__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 2698498,
+          "mtime": "2026-09-22T19:27:33Z"
+        }
+      },
+      "ctu_3": {
+        "role": "train",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/3/capture20110812.binetflow",
+          "bytes": 639643247,
+          "mtime": "2014-07-18T08:34:21Z"
+        },
+        "packets_parquet": null,
+        "family": "rbot",
+        "scenario": 3,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_3__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 16096482,
+          "mtime": "2026-09-22T19:35:51Z"
+        }
+      },
+      "ctu_4": {
+        "role": "train",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/4/capture20110815.binetflow",
+          "bytes": 153789874,
+          "mtime": "2014-07-18T08:33:46Z"
+        },
+        "packets_parquet": null,
+        "role_annotated_in_config": "test",
+        "family": "rbot",
+        "scenario": 4,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_4__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 2647798,
+          "mtime": "2026-09-22T19:28:07Z"
+        }
+      },
+      "ctu_6": {
+        "role": "train",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/6/capture20110816.binetflow",
+          "bytes": 76780048,
+          "mtime": "2014-07-18T13:45:15Z"
+        },
+        "packets_parquet": null,
+        "role_annotated_in_config": "test",
+        "family": "menti",
+        "scenario": 6,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_6__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 1446807,
+          "mtime": "2026-09-22T19:26:52Z"
+        }
+      },
+      "ctu_7": {
+        "role": "unused",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/7/capture20110816-2.binetflow",
+          "bytes": 15630512,
+          "mtime": "2014-07-18T08:34:10Z"
+        },
+        "packets_parquet": null,
+        "role_annotated_in_config": "test",
+        "family": "sogou",
+        "scenario": 7,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_7__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 305721,
+          "mtime": "2026-09-22T19:25:42Z"
+        }
+      },
+      "ctu_8": {
+        "role": "train",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/8/capture20110816-3.binetflow",
+          "bytes": 403955463,
+          "mtime": "2014-07-18T08:35:16Z"
+        },
+        "packets_parquet": null,
+        "role_annotated_in_config": "test",
+        "family": "murlo",
+        "scenario": 8,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_8__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 6587364,
+          "mtime": "2026-09-22T19:32:57Z"
+        }
+      },
+      "ctu_9": {
+        "role": "test",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/9/capture20110817.binetflow",
+          "bytes": 285841002,
+          "mtime": "2014-07-18T08:42:06Z"
+        },
+        "packets_parquet": null,
+        "family": "neris",
+        "scenario": 9,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_9__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 3574796,
+          "mtime": "2026-09-22T19:30:37Z"
+        }
+      },
+      "ctu_10": {
+        "role": "val",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/10/capture20110818.binetflow",
+          "bytes": 179074339,
+          "mtime": "2014-07-18T08:35:09Z"
+        },
+        "packets_parquet": null,
+        "role_annotated_in_config": "test",
+        "family": "rbot",
+        "scenario": 10,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_10__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 3154480,
+          "mtime": "2026-09-22T19:29:47Z"
+        }
+      },
+      "ctu_11": {
+        "role": "unused",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/11/capture20110818-2.binetflow",
+          "bytes": 14596615,
+          "mtime": "2014-07-18T08:35:01Z"
+        },
+        "packets_parquet": null,
+        "role_annotated_in_config": "test",
+        "family": "rbot",
+        "scenario": 11,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_11__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 225488,
+          "mtime": "2026-09-22T19:26:16Z"
+        }
+      },
+      "ctu_5": {
+        "role": "unused",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/5/capture20110815-2.binetflow",
+          "bytes": 17766203,
+          "mtime": "2014-07-18T08:33:42Z"
+        },
+        "packets_parquet": null,
+        "role_annotated_in_config": "holdout",
+        "family": "virut",
+        "scenario": 5,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_5__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 329803,
+          "mtime": "2026-09-22T19:26:23Z"
+        }
+      },
+      "ctu_13": {
+        "role": "train",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/13/capture20110815-3.binetflow",
+          "bytes": 262668288,
+          "mtime": "2014-07-18T08:36:03Z"
+        },
+        "packets_parquet": null,
+        "role_annotated_in_config": "holdout",
+        "family": "virut",
+        "scenario": 13,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_13__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 4485724,
+          "mtime": "2026-09-22T19:31:34Z"
+        }
+      },
+      "ctu_12": {
+        "role": "val",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/12/capture20110819.binetflow",
+          "bytes": 44718958,
+          "mtime": "2014-07-18T08:35:17Z"
+        },
+        "packets_parquet": null,
+        "role_annotated_in_config": "holdout",
+        "family": "nsis_ay",
+        "scenario": 12,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_12__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 829203,
+          "mtime": "2026-09-22T19:26:34Z"
+        }
+      }
+    }
+  },
+  "seed": null,
+  "ensemble_seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "split": null,
+  "threshold": 0.75,
+  "pooling": null,
+  "calibration": null,
+  "checkpoints": {
+    "weights": {
+      "seed_0": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/lofo_neris_heads__prep/artifacts/weights/model_seed_0.pt",
+        "sha256": "5a8ba5e31d78a2ef346400d3cfb8dde1fdc2d618f021f76e6f1999ad040450fc"
+      },
+      "seed_1": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/lofo_neris_heads__prep/artifacts/weights/model_seed_1.pt",
+        "sha256": null
+      },
+      "seed_2": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/lofo_neris_heads__prep/artifacts/weights/model_seed_2.pt",
+        "sha256": null
+      },
+      "seed_3": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/lofo_neris_heads__prep/artifacts/weights/model_seed_3.pt",
+        "sha256": null
+      },
+      "seed_4": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/lofo_neris_heads__prep/artifacts/weights/model_seed_4.pt",
+        "sha256": null
+      }
+    },
+    "scaler": {
+      "robust_scaler.joblib": null,
+      "feature_scaler.json": "62b42742463d76ece7c904051c5e4ecae378c90bae7550530072501592ea95c2",
+      "scaler_metadata.json": "b19573da2a907797c4a9d381f78ec9cc7787d600899bf6df64ce3fab9a382889",
+      "shap_background.npy": "cee806be574be9abc16999b243b52d5121a7c37f544f4e101af319a94afec35b"
+    },
+    "calibration": {
+      "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/lofo_neris_heads__prep/artifacts/weights/risk_calibration.json",
+      "sha256": null
+    }
+  },
+  "platform": {
+    "python": "3.14.7",
+    "machine": "arm64",
+    "system": "Darwin"
+  },
+  "metrics": null,
+  "label": "lofo_neris_heads",
+  "init_from": "lofo_without_neris_dyn",
+  "variants": [
+    "state",
+    "state+hidden"
+  ],
+  "seeds": [
+    0
+  ],
+  "context_length": 30,
+  "seconds": 606.4
+}

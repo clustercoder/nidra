@@ -1,0 +1,66 @@
+{
+  "label": "cic_core_decomp",
+  "init_from": "cic_core_dyn",
+  "variants": {
+    "state+logvar": {
+      "components": [
+        "state",
+        "logvar"
+      ],
+      "run_dir": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/cic_core_decomp__state+logvar",
+      "seeds": {
+        "0": {
+          "val_auc_pr_natural": 0.7754417090891179,
+          "val_auc_pr": 0.7754417090891179,
+          "best_epoch": 13,
+          "input_dim": 90
+        }
+      }
+    },
+    "state+delta": {
+      "components": [
+        "state",
+        "delta"
+      ],
+      "run_dir": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/cic_core_decomp__state+delta",
+      "seeds": {
+        "0": {
+          "val_auc_pr_natural": 0.6606590852996989,
+          "val_auc_pr": 0.6606590852996989,
+          "best_epoch": 2,
+          "input_dim": 90
+        }
+      }
+    },
+    "state+delta+logvar": {
+      "components": [
+        "state",
+        "delta",
+        "logvar"
+      ],
+      "run_dir": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/cic_core_decomp__state+delta+logvar",
+      "seeds": {
+        "0": {
+          "val_auc_pr_natural": 0.7330465241199474,
+          "val_auc_pr": 0.7330465241199474,
+          "best_epoch": 2,
+          "input_dim": 135
+        }
+      }
+    },
+    "hidden": {
+      "components": [
+        "hidden"
+      ],
+      "run_dir": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/cic_core_decomp__hidden",
+      "seeds": {
+        "0": {
+          "val_auc_pr_natural": 0.755331634282565,
+          "val_auc_pr": 0.755331634282565,
+          "best_epoch": 0,
+          "input_dim": 128
+        }
+      }
+    }
+  }
+}
