@@ -54,4 +54,4 @@ warning on CTU (16), the head fusion attempt (23), the Δ=15 direction (23), the
 decomposable-component direction on CTU (23, §3.22), `context_noise` (23), and
 uncertainty as a head input (23).
 
-**Test count:** **787 passing** (`pytest tests/ -q`, full suite), up from Run 8's 704. Refreshed from an actual run rather than quoted from memory — the last +25 are `tests/test_rollout_dropped_features.py`, which pins D145's contract across the rollout, the head-training context and the served path.
+**Test count:** **810 passing** (`pytest tests/ -q`, full suite), up from Run 8's 704. Refreshed from an actual run rather than quoted from memory — the last +48 are `tests/test_rollout_dropped_features.py`, which pins D145's contract across the rollout, the head-training context, the served path and the counterfactual (25); `test_mask_correction.py`, the before/after report for the re-score (12); and `test_projection_probe.py`, §3.41's pre-registered criterion (11).
