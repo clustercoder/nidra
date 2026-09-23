@@ -42,7 +42,7 @@ source file is uncommitted.
 | 25 | hardware / training time | ✅ | log §3.25 — 42 runs, 11.09 h CPU occupancy, all rc=0 |
 | 26 | serving latency | ⚠️ measured 1-member, contended | log §3.21 — the 5-member number is an estimate and must be re-measured on an idle machine. D145's mask adds nothing measurable: masked is slower in 19 of 40 paired calls, ratio of minima 0.982 |
 | 27 | test count | ✅ refreshed below | see footer |
-| 28 | updated model card | ⏳ | §30 defers it until the architecture is selected (item 7) |
+| 28 | updated model card | ✅ drafted, marked research-phase | `ml/MODEL_CARD_RUN9.md`. It deliberately does NOT designate a shipped configuration — item 7 is not final — and marks every CTU/cross-dataset number provisional pending the D145 re-score. `ml/MODEL_CARD.md` (Run 8) is untouched and remains the card for the shipped artifacts |
 | 29 | updated README / results docs | ⏳ | same gate |
 | 30 | final conclusion: demonstrated vs unproven | ⏳ core drafted | `RUN9_FINAL_REPORT_2026-09-23.md` — §2 demonstrated, §3 unproven, §5 names what each pending arm could overturn |
 

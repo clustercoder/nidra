@@ -259,7 +259,7 @@ the hypothesis alive on a partial match.
 
 ---
 
-## 13. "The decomposable head is a dead end" — closed on CTU, wrong in general
+### 13. "The decomposable head is a dead end" — closed on CTU, wrong in general
 
 §3.22 read the CTU component table and concluded that Q13's explainability cost
 was probably intrinsic: `state+logvar` carried a seventh of what the hidden state
@@ -279,7 +279,7 @@ Q13 and Q14 as a general limit. Both are revised.
 What made the difference was running the control on the other dataset. The
 conclusion was already written and would have survived unchallenged. *(§3.38.)*
 
-## 14. A defect, not an intervention: the rollout's phantom features
+### 14. A defect, not an intervention: the rollout's phantom features
 
 Listed here because the rule is that nothing gets hidden, and because it
 invalidates numbers this log has already published rather than an idea it was
@@ -317,7 +317,7 @@ D145.)*
 
 ---
 
-## 15. A fix that was a no-op, and reported itself as a result
+### 15. A fix that was a no-op, and reported itself as a result
 
 Not an experiment — a near-miss, listed because it would have produced a
 published number.
