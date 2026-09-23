@@ -1684,3 +1684,20 @@ have been scored on Thursday's infiltration. Both are queued in a second pass th
 the first, reusing each run's frozen `operating_point.json` so test and holdout only LOAD the
 selection rather than redo it. `q_stage` was re-chained behind both passes (recreated rather
 than edited, since editing a running zsh script corrupts its read position — D124).
+
+**D139 — the transfer arms verifiably carry the source domain's operating point, and the
+pooling rules differ between regimes.** (2026-09-23) §2 requires a transfer evaluation to take
+nothing from the target domain. Checking the threshold actually recorded in each finished
+benchmark rather than trusting the queue: CIC->CIC and CIC->CTU both use 0.501969
+(`mean|q=-|integrated`), CTU->CIC uses 0.181961 (`mean|q=-|max`) which is exactly
+`ctu_heads__state`'s frozen `operating_point.json`, and both combined arms use 0.040888
+(`p_above_half|q=-|max`). Every transfer carries its SOURCE run's validation-selected point
+unchanged; nothing was selected on a target domain or re-selected on test or holdout.
+The check surfaced a caveat for reading the scorecard: the three source runs selected
+DIFFERENT pooling rules on their own validation (CIC integrated, CTU and combined max;
+combined also `p_above_half` rather than `mean` across members). Each choice is legitimate and
+each was made on its own validation, but a row-to-row comparison therefore compares systems
+including their pooling, which is the right unit for "what would you deploy" and the wrong one
+for "does adding CTU help the dynamics" — that needs pooling held fixed and is a separate run
+not in this matrix. It is also the mechanism behind D137's 208 false alarms/hour: a threshold
+chosen against CIC's score distribution means something else against CTU's.

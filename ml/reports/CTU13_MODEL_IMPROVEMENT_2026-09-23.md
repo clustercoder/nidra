@@ -1150,3 +1150,42 @@ One seed, state-only head, and the rest of the matrix is still running, so these
 are not the phase's conclusions. They are reported here because the defect is,
 and because a table that renders a catastrophic false-alarm rate as silence is
 exactly the failure the §33 reporting rules exist to prevent.
+
+### 3.19 Verifying that the transfer arms carry the source domain's operating point
+
+§2 requires a transfer evaluation to be a transfer: the target domain must
+contribute nothing — not weights, not the scaler, not the threshold. That is how
+the queue is written, and it is worth checking rather than trusting, because the
+failure mode is silent and would make every transfer number optimistic.
+
+Reading the threshold and pooling rule actually used out of each finished
+benchmark:
+
+| arm | split | threshold used | pooling |
+|---|---|---|---|
+| CIC → CIC | val, test, holdout | 0.501969 | `mean｜q=-｜integrated` |
+| CIC → CTU | test, holdout | **0.501969** | `mean｜q=-｜integrated` |
+| CTU → CIC | test, holdout | **0.181961** | `mean｜q=-｜max` |
+| CIC+CTU → CIC | val, test | 0.040888 | `p_above_half｜q=-｜max` |
+| CIC+CTU → CTU | test | **0.040888** | `p_above_half｜q=-｜max` |
+
+Every transfer arm carries its **source** run's number unchanged into the target
+domain, and CTU→CIC's 0.181961 is exactly the value in
+`ctu_heads__state/artifacts/weights/operating_point.json`, selected on CTU
+validation before any of this ran. Nothing was selected on a target domain and
+nothing was re-selected on test or holdout. The safeguard holds.
+
+**A caveat this surfaces for reading the scorecard.** The three source runs
+selected *different pooling rules* on their own validation — CIC chose
+`integrated` over the horizon, CTU and the combined run chose `max`, and the
+combined run chose a different member-aggregation (`p_above_half` rather than
+`mean`). Each choice is legitimate and each was made on that run's own
+validation, which is the rule. But it means a row-to-row comparison in the
+scorecard compares *systems*, pooling rule included, not just training sets. That
+is the right unit for "which configuration would you deploy" and the wrong unit
+for "does adding CTU help the dynamics" — the latter needs the pooling held
+fixed, which is a separate, cheaper run and is not in this matrix.
+
+This is also the mechanism behind §3.18's 208 false alarms an hour: a threshold
+of 0.501969 chosen against CIC's score distribution means something entirely
+different against CTU's.
