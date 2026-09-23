@@ -18,7 +18,9 @@ def _record(ap=0.5, system="world_model_calibrated", host_identity=True, n_hosts
             "n_rows": 1000, "prevalence_natural": 0.003,
             "systems": {system: {"auc_pr": ap, "roc_auc": 0.8,
                                  "at_threshold": {"precision": 0.4, "recall": 0.6, "f1": 0.48},
-                                 "active_benign_false_alarm_rate": 1.5,
+                                 "false_alarms_per_hour": 1.32,
+                                 "alerts_per_hour": 5.16,
+                                 "active_benign_false_alarm_rate": 0.000365,
                                  "auc_pr_bootstrap": {"ci_low": 0.4, "ci_high": 0.6, "n_positive_clusters": 7}},
                         "persistence": {"auc_pr": 0.3},
                         "gru_classifier": {"auc_pr": 0.45},
@@ -106,3 +108,50 @@ def test_scorecard_end_to_end_marks_single_host_rows(tmp_path, monkeypatch, caps
     # the JSON sidecar carries the same fields for downstream use
     side = json.loads((out.parent / "scorecard.json").read_text())
     assert side["ctu/test"]["within_host_roc"] == pytest.approx(0.66)
+
+
+def test_false_alarms_per_hour_is_the_per_hour_field_not_the_per_row_one():
+    """The scorecard read `active_benign_false_alarm_rate` — a fraction of
+    active-benign ROWS — and printed it under an FA/h heading, where it rounded
+    to 0.00 and made every regime look silent. The real rate was 1.32/h."""
+    r = row_for(_record())
+    assert r["false_alarms_per_hour"] == pytest.approx(1.32)
+    assert r["active_benign_fa_rate"] == pytest.approx(0.000365)
+    assert r["alerts_per_hour"] == pytest.approx(5.16)
+
+
+def test_both_false_alarm_columns_reach_the_table(tmp_path, monkeypatch):
+    import sys
+
+    from nidra.scripts import cross_dataset_scorecard as mod
+
+    d = tmp_path / "r" / "artifacts" / "metrics" / "test"
+    d.mkdir(parents=True)
+    (d / "benchmark.json").write_text(json.dumps(_record()))
+    out = tmp_path / "s.md"
+    monkeypatch.setattr(sys, "argv", ["x", "--runs", str(tmp_path), "--splits", "test",
+                                      "--map", "A:B:r", "--out", str(out)])
+    mod.main()
+    text = out.read_text()
+    assert "FA/h" in text and "FA rate on active benign" in text
+    assert "1.32" in text and "0.00036" in text
+
+
+def test_a_not_run_row_has_the_same_column_count_as_a_real_one(tmp_path, monkeypatch):
+    """A short filler row silently shifts every column after it."""
+    import sys
+
+    from nidra.scripts import cross_dataset_scorecard as mod
+
+    d = tmp_path / "r" / "artifacts" / "metrics" / "test"
+    d.mkdir(parents=True)
+    (d / "benchmark.json").write_text(json.dumps(_record()))
+    out = tmp_path / "s.md"
+    monkeypatch.setattr(sys, "argv", ["x", "--runs", str(tmp_path), "--splits", "test",
+                                      "--map", "A:B:r", "--map", "A:B:missing", "--out", str(out)])
+    mod.main()
+    rows = [l for l in out.read_text().splitlines() if l.startswith("| A |")]
+    assert len(rows) == 2
+    assert rows[0].count("|") == rows[1].count("|")
+    header = next(l for l in out.read_text().splitlines() if l.startswith("| Training"))
+    assert header.count("|") == rows[0].count("|")

@@ -82,7 +82,13 @@ def row_for(record: dict, system: str = "world_model_calibrated") -> dict:
         "precision": at.get("precision"),
         "recall": at.get("recall"),
         "f1": at.get("f1"),
-        "false_alarms_per_hour": sysrow.get("active_benign_false_alarm_rate"),
+        # These are two different quantities and the scorecard was reporting the
+        # second under the first's name: `active_benign_false_alarm_rate` is a
+        # fraction of active-benign ROWS, which rounds to 0.00 at two decimals
+        # and made every regime look silent. §33 asks for false alarms per hour.
+        "false_alarms_per_hour": sysrow.get("false_alarms_per_hour"),
+        "alerts_per_hour": sysrow.get("alerts_per_hour"),
+        "active_benign_fa_rate": sysrow.get("active_benign_false_alarm_rate"),
         "oracle_ap": pub["systems"].get("oracle_true_future", {}).get("auc_pr"),
         "persistence_ap": pub["systems"].get("persistence", {}).get("auc_pr"),
         "best_baseline": best_baseline,
@@ -146,16 +152,17 @@ def main() -> None:
 
     lines: list[str] = []
     lines.append("| Training | Evaluated on | split | rows | prevalence | AP [95% CI] | ROC | P | R | F1 | FA/h | "
-                 "best baseline (AP) | oracle AP | state skill vs persistence / ridge | onset AP 5/15 | "
+                 "alerts/h | FA rate on active benign | best baseline (AP) | oracle AP | "
+                 "state skill vs persistence / ridge | onset AP 5/15 | "
                  "episodes warned | positive hosts | within-host ROC |")
-    lines.append("|---|---|---|---:|---:|---|---:|---:|---:|---:|---:|---|---:|---|---|---|---:|---:|")
+    lines.append("|---|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---|---|---|---:|---:|")
     raw: dict[str, Any] = {}
     for train, evalset, label in regimes:
         for split in splits:
             path = runs_dir / label / "artifacts" / "metrics" / split / "benchmark.json"
             record = read_benchmark(path)
             if record is None:
-                lines.append(f"| {train} | {evalset} | {split} | — | — | not run | — | — | — | — | — | — | — | — | — | — | — | — |")
+                lines.append(f"| {train} | {evalset} | {split} | " + " | ".join(["—"] * 17) + " |")
                 continue
             r = row_for(record, args.system)
             raw[f"{label}/{split}"] = r
@@ -163,7 +170,8 @@ def main() -> None:
             lines.append(
                 f"| {train} | {evalset} | {split} | {r['n_rows']:,} | {_f(r['prevalence'], 5)} | "
                 f"{_f(r['ap'])}{r['ap_ci']} | {_f(r['roc'])} | {_f(r['precision'])} | {_f(r['recall'])} | "
-                f"{_f(r['f1'])} | {_f(r['false_alarms_per_hour'], 2)} | "
+                f"{_f(r['f1'])} | {_f(r['false_alarms_per_hour'], 2)} | {_f(r['alerts_per_hour'], 2)} | "
+                f"{_f(r['active_benign_fa_rate'], 5)} | "
                 f"{r['best_baseline'] or '—'} ({_f(r['best_baseline_ap'])}) | {_f(r['oracle_ap'])} | "
                 f"{_f(r['state_skill_vs_persistence'])} / {_f(r['state_skill_vs_ridge'])} | "
                 f"{_f(r['onset_ap_5'])} / {_f(r['onset_ap_15'])} | {warned} | "

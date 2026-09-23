@@ -1113,3 +1113,40 @@ been chasing.
 
 `group_separability`'s docstring now states this, and a test pins the wording so
 the claim cannot quietly reappear.
+
+### 3.18 A scorecard column that reported the wrong quantity, and the number it was hiding
+
+Smoke-testing `cross_dataset_scorecard` against the first completed arm of the
+matrix — rather than waiting to run it once at the end — found it reading
+`active_benign_false_alarm_rate` and printing it under a heading that said
+**FA/h**. Those are different quantities: one is a fraction of active-benign
+*rows*, the other is alarms per *hour*. The fraction rounds to `0.00` at two
+decimals, so every regime in the table appeared to produce no false alarms at
+all. §33 asks specifically for false alarms per hour, and the scorecard was
+answering with something else under that name.
+
+`report_tables.py` and `compare_runs.py` both read the correct field; only the
+scorecard was wrong. It now reports all three — alarms/hour, false alarms/hour,
+and the active-benign rate as its own labelled column — and a test pins the
+distinction.
+
+What the correct column shows on the arms finished so far:
+
+| training → evaluation | split | precision | recall | alerts/h | **FA/h** |
+|---|---|---|---|---|---|
+| CIC → CIC | val | 0.955 | 0.753 | 8.40 | **0.38** |
+| CIC → CIC | test | 0.745 | 0.033 | 5.16 | **1.32** |
+| CIC → CIC | holdout | 0.511 | 0.279 | 8.22 | **4.02** |
+| CIC → CTU | test | 0.011 | 0.019 | 210.32 | **207.97** |
+| CIC → CTU | holdout | 0.002 | 0.005 | 186.46 | **186.18** |
+
+The transfer arms fire roughly 200 alarms an hour, essentially all of them
+false. That is not a marginal degradation, it is an unusable operating point:
+the threshold frozen on CIC validation does not transfer to CTU at all. The
+broken column reported both of those rows as `0.00` — the single most
+operationally important number in the table, inverted into its opposite.
+
+One seed, state-only head, and the rest of the matrix is still running, so these
+are not the phase's conclusions. They are reported here because the defect is,
+and because a table that renders a catastrophic false-alarm rate as silence is
+exactly the failure the §33 reporting rules exist to prevent.

@@ -1657,3 +1657,18 @@ where any host information is available to both. Consequence: NO validation numb
 phase is cross-host. Both test splits contain nine hosts never infected in training and both
 holdouts contain one; those are the only cross-host evaluations available, and the running
 matrix produces them. `group_separability`'s docstring states this and a test pins it.
+
+**D137 — the scorecard's "FA/h" column was a per-row fraction, hiding a 208/hour transfer
+failure.** (2026-09-23) Smoke-testing `cross_dataset_scorecard` against the first completed
+matrix arm, rather than running it once at the end, found `row_for` reading
+`active_benign_false_alarm_rate` — a fraction of active-benign ROWS — and printing it under a
+heading reading FA/h. It rounds to 0.00 at two decimals, so every regime appeared to produce
+no false alarms. `report_tables.py` and `compare_runs.py` read the correct
+`false_alarms_per_hour`; only the scorecard was wrong. It now carries alerts/hour, false
+alarms/hour and the active-benign rate as three separate labelled columns, and tests pin both
+the distinction and that a "not run" filler row has the same column count as a real one.
+The number it was hiding matters: CIC->CTU transfer fires 207.97 false alarms/hour on test and
+186.18 on holdout at precision 0.011 and 0.002, against 0.38-4.02/h for CIC->CIC. The
+operating point frozen on CIC validation does not transfer to CTU at all — an unusable
+operating point reported as silence. One seed, state-only head, matrix incomplete; recorded
+now because the defect is, not as a conclusion.
