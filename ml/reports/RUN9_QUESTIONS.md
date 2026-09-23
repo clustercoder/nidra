@@ -105,8 +105,23 @@ every unit of that is host recognition. *(§3.10, §3.11, §3.12.)*
 
 ## Q7 — Does the world model outperform a strong GRU sequence classifier?
 
-**Pending on the matrix.** The GRU classifier is trained (`ctu_gru`) and is one
-of the systems every benchmark scores, so the comparison lands with the matrix.
+**No, on the one split where the confirmed architecture has been scored.** On
+CTU validation, three-member ensembles, identical rows: the GRU sequence
+classifier reaches AP **0.5093** against `state+hidden`'s **0.4910** and
+`state`'s **0.3660**. *(§3.32.)*
+
+Two caveats, neither of which rescues the world model. The absolute CIs on this
+split are worthless — eight positive episode clusters, intervals spanning
+[0.001, 0.84] — so 0.509 against 0.491 is not a *measured* difference; what is
+measured is that the world model does not clear it. And the GRU is a classifier,
+not a forecaster: it answers "is this host compromised" and cannot roll a state
+forward, produce a horizon or support a counterfactual, so a tie on AP is not a
+tie on what the project claims. That distinction is the project's to make
+honestly, not to hide behind: on the metric both systems are scored by, the
+simpler model is not behind.
+
+The matrix will add the CIC and transfer arms. Answer stands as **no** until one
+of them shows otherwise.
 
 ## Q8 — Does the world model provide additional value over a history classifier?
 
@@ -118,6 +133,22 @@ zero. *(§3.5.)* The first cross-dataset benchmark to land (`cic2cic_state`, val
 puts the world model at AP 0.7911 against persistence at 0.7715, and reproduces
 that ordering within-host (0.8499 against 0.8162), which is the first evidence
 the margin is not host identity. One seed, one split.
+
+**Stage B contradicts that on its own split, for the selected head.** The paired
+episode-cluster bootstrap of world model minus persistence on CTU validation,
+three-member ensembles: `state` **+0.0388 [−0.0104, +0.0923]**, `state+hidden`
+**−0.0100 [−0.0342, +0.0034]**. Both contain zero and the history-aware head's
+point estimate is negative. Persistence removes the transition step while the
+encoder still advances, so the history-aware head keeps its history and only the
+predicted change is taken away — which means the entire +0.125 AP gain over
+`state` is head-side, not forecast-side. *(§3.32.)*
+
+The §3.5 result was `persistence_rollout` on the per-state head at one seed;
+this is the same comparison at three seeds on the head the phase now prefers.
+They do not conflict so much as answer about different heads, and the honest
+composite is: **the transition model's contribution is not distinguishable from
+zero for either head at three seeds, and is a positive point estimate only for
+the head that loses on every other axis.**
 
 ## Q9 — Does the model generalize to completely unseen attack families/scenarios?
 
