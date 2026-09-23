@@ -15,6 +15,31 @@ measured numbers. **For the plain-English version of the scores — no
 jargon, just what they mean — see the "Results" section of the root
 [`../README.md`](../README.md).**
 
+## Run 9 — research phase, in progress (2026-09-23)
+
+Everything in this README, in `MODEL_CARD.md` and in `REAL_DATA_RESULTS.md`
+describes **Run 8**, which is the shipped state and is unchanged. Run 9 is a
+research phase on a separate branch: CTU-13 integration, a cross-dataset
+matrix, a history-aware risk head, and an unseen-attack-family test. It has
+**not** produced a new shipped configuration and does not supersede Run 8.
+
+| | |
+|---|---|
+| `MODEL_CARD_RUN9.md` | what Run 9 has and has not established |
+| `reports/RUN9_FINAL_REPORT_2026-09-23.md` | the conclusion, separating demonstrated from unproven |
+| `reports/RUN9_QUESTIONS.md` | the fourteen questions the phase was set, and their answers so far |
+| `reports/RUN9_NEGATIVE_RESULTS.md` | 15 entries: what was tried and did not work, including three of this log's own explanations |
+| `reports/CTU13_MODEL_IMPROVEMENT_2026-09-23.md` | the full experiment log |
+
+Two things from it that bear on how to read the Run 8 numbers here. First, a
+defect (D145) was found in the rollout, and **Run 8 is not affected by it** — its
+feature regime drops no features, which is the precondition for the defect. Every
+CTU-13 and cross-dataset number in Run 9 is provisional until re-scored; no Run 8
+number is. Second, on the slices where Run 9 could ask the question most sharply,
+**the forecast does not beat a persistence baseline**. That is a finding about
+the approach, not about the Run 8 artifacts, and it is stated plainly in
+`MODEL_CARD_RUN9.md`.
+
 ## Claims discipline (read this before reading any metric below)
 
 This system learns **temporal dynamics** from **observational** data. It

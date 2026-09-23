@@ -43,7 +43,7 @@ source file is uncommitted.
 | 26 | serving latency | ⚠️ measured 1-member, contended | log §3.21 — the 5-member number is an estimate and must be re-measured on an idle machine. D145's mask adds nothing measurable: masked is slower in 19 of 40 paired calls, ratio of minima 0.982 |
 | 27 | test count | ✅ refreshed below | see footer |
 | 28 | updated model card | ✅ drafted, marked research-phase | `ml/MODEL_CARD_RUN9.md`. It deliberately does NOT designate a shipped configuration — item 7 is not final — and marks every CTU/cross-dataset number provisional pending the D145 re-score. `ml/MODEL_CARD.md` (Run 8) is untouched and remains the card for the shipped artifacts |
-| 29 | updated README / results docs | ⏳ | same gate |
+| 29 | updated README / results docs | ✅ | `ml/README.md` gains a Run 9 section: research phase, does not supersede Run 8, and the two things from Run 9 that bear on reading the Run 8 numbers (D145 cannot reach Run 8; the forecast does not beat persistence). Neither README carried a CTU claim to invalidate — checked rather than assumed |
 | 30 | final conclusion: demonstrated vs unproven | ⏳ core drafted | `RUN9_FINAL_REPORT_2026-09-23.md` — §2 demonstrated, §3 unproven, §5 names what each pending arm could overturn |
 
 Legend: ✅ done · ⚠️ done, with a caveat that must travel with it · ⏳ pending.
