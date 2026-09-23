@@ -1831,11 +1831,27 @@ forecasting claim falsifiable, and here it returned a negative. Unfreezing the h
 predicted states would close the gap and would also remove the reason the project is
 defensible — so it is not an option, and the null is reported as the result.
 
-One real effect AP cannot see: the benign composite mean halves under the model rollout
-(0.00412 → 0.00201) while the attack mean is unchanged. A near-uniform rescaling of one class
-does not move a rank metric. NOT to be reported as a false-alarm improvement: the benchmark's
-FA/h column scores every system at the threshold selected for the calibrated one, so those
-numbers compare calibration, not transition models.
+~~One real effect AP cannot see: the benign composite mean halves under the model rollout
+(0.00412 → 0.00201) while the attack mean is unchanged.~~ **Withdrawn 2026-09-23 under
+D145.** Re-measured with the phantom feature slots masked, the benign composite means are
+**0.00672 against 0.00796** — a 19% difference, in the opposite direction, and not a
+halving. The effect was an artifact of untrained values in dropped feature slots, not
+something the transition model does. It had already been flagged here as not reportable as
+a false-alarm improvement; it is now withdrawn as an effect at all.
+
+**Every figure in this entry re-measured under D145's fix (§3.46), on identical rows
+(`ctu_heads__state+hidden`, val, n=1,483). The conclusion is unchanged; two of the numbers
+are not.** Hidden relative divergence 40–62% → **39–54%**, so the phantom was inflating the
+far end. The head's answer on positives 0.28% → **0.36%**; composite correlation 0.9910 →
+**0.9817**. Head-layer gain on the rollout's displacement 0.0909 → **0.0962**, against
+0.0845 → **0.0835** on a random displacement of equal norm, so the ratio is **1.15×** rather
+than 1.08× — a larger margin over the null, and still nowhere near a coupling.
+
+§3.33's pre-registered criterion was 10% divergence, and both the old and the new figures
+clear it by a factor of four, so the pre-registered conclusion is unaffected. It would not
+have been had the criterion been set at 55%. That is an argument for fixing a criterion
+against what would change the answer rather than against what the data happens to look
+like.
 
 ## D145 — 2026-09-23 — The rollout manufactured state in features that carry no gradient
 
