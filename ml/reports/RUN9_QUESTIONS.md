@@ -239,7 +239,26 @@ order they bind:
    *(§3.9, D128.)* The stage-balanced objective is pre-registered and queued.
    *(§3.13, D132.)*
 3. **The label's pre-onset windows are empty on CTU.** See Q1 and Q10.
-4. **The winning head is the least explainable one.** The `state+hidden` head's
+4. **The frozen head and the transition model are barely coupled — measured, not
+   inferred.** The rollout displaces the encoder hidden state by 40–62% over six
+   steps, and the head's answer moves 0.28% on the positives (composite
+   correlation 0.9910). Its first layer responds to that displacement with a
+   gain of 0.0909 against 0.0845 for a *random* displacement of the same norm:
+   **1.08×**. The head is no more sensitive to the transition model than to
+   noise.
+
+   This is structural rather than a tuning failure. The risk head trains on
+   observed states and freezes, so its readout separates observed hidden states
+   and has no mechanism to become sensitive to where a rollout puts them.
+   Invariant 1 exists to make the forecasting claim falsifiable; on this split it
+   returned a negative, which is the invariant doing its job. Unfreezing the head
+   on predicted states would close the gap and destroy the reason the result
+   would mean anything. *(§3.33, §3.34, D144.)*
+
+   This is probably the binding limit on the *model*, where limit 1 is the
+   binding limit on what can be *measured*. They are different kinds of
+   constraint and neither substitutes for the other.
+5. **The winning head is the least explainable one.** The `state+hidden` head's
    score is set by the encoder hidden state, not the origin state: behind a
    byte-identical origin state, swapping in a busier history moves the served
    risk from 0.0000128 to 1.0000000. KernelSHAP over all 45 named features then
@@ -294,6 +313,24 @@ a fourth.**
    does not. That is a real difference between the two corpora and it is cheap to
    settle, so the CIC arms are queued rather than assumed to match CTU. The
    direction stays on this list because a negative on CIC closes it properly.
+
+5. **Train the transition model with the frozen head in the loop.** Directly
+   motivated by Q13's fourth limit and, unusually for this list, it does not
+   violate invariant 1. That invariant constrains *heads*: they train on observed
+   states and freeze. It says nothing about the transition model. A third stage —
+   dynamics, then heads (frozen), then dynamics again under a loss that rewards
+   the frozen head for scoring the *predicted* states well — keeps every head
+   trained on observed data only, introduces no leakage, and is not circular,
+   because the head was never fit to dynamics outputs in the first place.
+
+   It is the one direction the measurement actually points at: if the two halves
+   are coupled through a channel the head does not read, the fix is to move the
+   transition's output into a channel it does, rather than to teach the head to
+   read a new one. Untested, and it would need its own pre-registration —
+   including the obvious failure mode, that the transition collapses onto
+   whatever the head already likes and stops being a state forecaster. §36's
+   state-forecast metrics are the control for that and would have to be reported
+   alongside.
 
 Ruled out by measurement rather than opinion: score fusion of the two frozen
 heads (§3.9), `context_noise` as a fix for the exposure mismatch (§3.6, D126),
