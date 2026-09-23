@@ -1402,3 +1402,30 @@ as an untested suggestion.
 
 Recorded as a correction to this log's own Q14 entry, which was written before
 the CTU table was read against this question.
+
+**Batch memory, checked because the fix looked like it should have cost some.**
+D141 made `forecast_batch` pool the whole `RolloutOutput` instead of just
+`.states` — four extra tensors per member held alive at once, which arithmetic
+puts at 166 MB per member against 28 MB, or 1.66 GB at five members. Measured
+in separate processes, same head, same batch, the only difference being which
+tensors get pooled:
+
+| batch path | peak RSS, 1 member, chunk 128 |
+|---|---|
+| pre-D141, `.states` only | 2795 MB |
+| current, whole output | 2615 MB |
+
+**No regression** — the current path is nominally lower, which is the honest way
+to say the difference is below the noise of the thing that actually dominates.
+What dominates is the rollout's own intermediate activations at `chunk=128`,
+`n_samples_per_member=200`, `K=6`; the pooled tensors are a few hundred MB of a
+2.6 GB peak.
+
+That 2.6 GB is itself worth writing down, and it is **pre-existing, not
+introduced here**. The backend's replay path is `forecast_batch`, the shipped
+ensemble is five seeds, and only the retained outputs accumulate across members
+(the rollouts run sequentially), which puts a five-member call near 4 GB on a
+16 GB machine that is also running inference workers. The lever is `chunk`,
+which is a caller argument defaulting to 128 and scales the peak almost
+linearly. Nothing here needs changing today; it needs to be known before someone
+sets `chunk` from a config file.
