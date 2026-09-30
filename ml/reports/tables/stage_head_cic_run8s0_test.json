@@ -1,0 +1,52 @@
+[
+  {
+    "stage": "recon",
+    "n": 27,
+    "base_rate": 9.018277041470714e-05,
+    "auc_pr": 0.21145306528349228,
+    "roc_auc": 0.8834469998533929,
+    "lift": 2344.7168933835305,
+    "risk_auc_pr": 0.19168280623866335,
+    "risk_roc_auc": 0.8929844714522283
+  },
+  {
+    "stage": "initial_access",
+    "n": 0,
+    "base_rate": 0.0,
+    "auc_pr": NaN,
+    "roc_auc": NaN,
+    "lift": NaN,
+    "risk_auc_pr": NaN,
+    "risk_roc_auc": NaN
+  },
+  {
+    "stage": "lateral",
+    "n": 0,
+    "base_rate": 0.0,
+    "auc_pr": NaN,
+    "roc_auc": NaN,
+    "lift": NaN,
+    "risk_auc_pr": NaN,
+    "risk_roc_auc": NaN
+  },
+  {
+    "stage": "c2",
+    "n": 648,
+    "base_rate": 0.0021643864899529713,
+    "auc_pr": 0.03093244602007393,
+    "roc_auc": 0.43763726707833267,
+    "lift": 14.291553825373418,
+    "risk_auc_pr": 0.016014094852340257,
+    "risk_roc_auc": 0.25317884373854255
+  },
+  {
+    "stage": "exfil",
+    "n": 22,
+    "base_rate": 7.348225737494656e-05,
+    "auc_pr": 0.04863804027326465,
+    "roc_auc": 0.9992060599987245,
+    "lift": 661.901825158784,
+    "risk_auc_pr": 0.8737978655773626,
+    "risk_roc_auc": 0.9999852721017167
+  }
+]

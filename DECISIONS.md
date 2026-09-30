@@ -2114,3 +2114,51 @@ excludes zero on test, +0.025 [+0.005, +0.058], and touches it on holdout, +0.19
 them would alter Run 8 artifacts — and should not be quoted as a comparison. The
 harness-level fix (per-system thresholds inside `_task_table`) belongs in the next
 benchmark revision, not in a retroactive edit.
+
+## D149 — 2026-09-30 — "Predict before compromise completes" is scored per multi-phase campaign
+
+PS 26153 asks for prediction before a compromise completes. The only lead-time metric on
+record, `per_episode_report`, asks for a warning before a host's FIRST attack minute, and
+CIC-IDS2017 cannot support that for any system (3 / 9 / 15 training onsets within
+1 / 3 / 5 min). A narrower question can be answered: when a host's attack comes in phases,
+was it flagged before the phase that completes it?
+
+**Decision.** `ml/nidra/eval/campaign_metrics.py` (21 tests with its script) defines:
+- **Campaign:** one host's merged episodes (the benchmark's 5-window merge), chained while
+  the gap between episodes is ≤ 60 min.
+- **Completing phase:** the first episode of the campaign's most advanced stage in
+  `STAGE_LABELS` order, which is the ATT&CK tactic order; if every episode has the same
+  stage, the last episode.
+- **Flagged before completion:** 2 consecutive minutes at the frozen threshold, starting
+  no earlier than 30 min before the campaign's onset. The minutes must be consecutive in
+  time, not merely adjacent rows, because the evaluation set subsamples benign windows.
+  Single-episode campaigns are counted, not scored.
+
+`ml/nidra/scripts/campaign_lead_time.py` reads the benchmark's score dumps, so no model
+is re-run. Only the published arm is read at a threshold; the other systems are reported
+threshold-free (D148).
+
+**What must travel with every number it produces.** A flag during an earlier phase is
+that phase recognised. It is not a forecast naming the completing phase. On CIC-IDS2017
+the two flagged campaigns (31 and 65 min) are on the attacker's address 172.16.0.1. The
+one compromised host, 192.168.10.8, is not flagged: it peaks at 0.044, and its exploit
+phase scores 0.000 on every system including the oracle.
+`ml/reports/STAGE_AND_PRECOMPLETION_2026-09-30.md` §2.
+
+## D150 — 2026-09-30 — The stage head is not trained on CIC + CTU for CIC stage output
+
+The obvious fix for stage top-1 = 0.00 on Friday and Thursday was to give the stage head
+CTU-13's `recon` and `c2` examples. Scored one-vs-rest on observed CIC states (seed 0),
+Run 9's `combined_heads__state` ranks CIC's recon at ROC 0.016, c2 at 0.213 and lateral
+at 0.008. That is below benign on all three.
+
+The same run drops 13 packet features, so a CIC-only head on those same 32 features
+(`cic_core_heads__state`) was scored too: 0.743 / 0.596 / 0.222. Run 8 on all 45
+features: 0.883 / 0.438 / 0.313. The collapse comes from adding CTU, not from the
+feature set.
+
+**Decision.** Stage output served for CIC comes from CIC-trained heads only. A stage
+label shared across corpora is not assumed to mean the same traffic. Unseen stages are
+to be surfaced as "attack-like, stage not seen in training", not as a nearest-bucket
+tactic. `ml/reports/STAGE_AND_PRECOMPLETION_2026-09-30.md` §1, with tables in
+`ml/reports/tables/stage_head_cic_*`.

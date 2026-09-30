@@ -1,0 +1,52 @@
+[
+  {
+    "stage": "recon",
+    "n": 0,
+    "base_rate": 0.0,
+    "auc_pr": NaN,
+    "roc_auc": NaN,
+    "lift": NaN,
+    "risk_auc_pr": NaN,
+    "risk_roc_auc": NaN
+  },
+  {
+    "stage": "initial_access",
+    "n": 68,
+    "base_rate": 0.00015094942750209776,
+    "auc_pr": 0.7176893440843675,
+    "roc_auc": 0.9999213795203837,
+    "lift": 4754.501927967853,
+    "risk_auc_pr": 0.546768945720056,
+    "risk_roc_auc": 0.9973665404298633
+  },
+  {
+    "stage": "lateral",
+    "n": 28,
+    "base_rate": 6.215564661851084e-05,
+    "auc_pr": 0.0001137173006738929,
+    "roc_auc": 0.3129330155164093,
+    "lift": 1.8295570372205936,
+    "risk_auc_pr": 0.04311375439278293,
+    "risk_roc_auc": 0.2910271795629679
+  },
+  {
+    "stage": "c2",
+    "n": 0,
+    "base_rate": 0.0,
+    "auc_pr": NaN,
+    "roc_auc": NaN,
+    "lift": NaN,
+    "risk_auc_pr": NaN,
+    "risk_roc_auc": NaN
+  },
+  {
+    "stage": "exfil",
+    "n": 0,
+    "base_rate": 0.0,
+    "auc_pr": NaN,
+    "roc_auc": NaN,
+    "lift": NaN,
+    "risk_auc_pr": NaN,
+    "risk_roc_auc": NaN
+  }
+]

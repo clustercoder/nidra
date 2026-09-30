@@ -1,0 +1,257 @@
+{
+  "val": {
+    "threshold": 0.7177971005439758,
+    "m_consecutive": 2,
+    "max_gap_minutes": 60,
+    "pre_onset_minutes": 30,
+    "n_campaigns_scored": 0,
+    "n_single_episode_campaigns": 2,
+    "n_flagged_before_completion": 0,
+    "stage_transition_lead_s": [],
+    "campaigns": [],
+    "system": "world_model_calibrated",
+    "max_score_before_completion_by_system": {
+      "gbdt_current_state": [],
+      "gru_classifier": [],
+      "isotropic_noise_persistence": [],
+      "lr_current_state": [],
+      "lr_flattened_history": [],
+      "noised_persistence": [],
+      "oracle_true_future": [],
+      "persistence": [],
+      "ridge_two_lag": [],
+      "world_model": [],
+      "world_model_calibrated": [],
+      "world_model_deterministic": []
+    }
+  },
+  "test": {
+    "threshold": 0.7177971005439758,
+    "m_consecutive": 2,
+    "max_gap_minutes": 60,
+    "pre_onset_minutes": 30,
+    "n_campaigns_scored": 1,
+    "n_single_episode_campaigns": 9,
+    "n_flagged_before_completion": 1,
+    "stage_transition_lead_s": [
+      3900.0
+    ],
+    "campaigns": [
+      {
+        "host": "172.16.0.1",
+        "campaign_onset_ts": 1499443500,
+        "phases": [
+          {
+            "onset_ts": 1499443500,
+            "end_ts": 1499443560,
+            "stage": "recon"
+          },
+          {
+            "onset_ts": 1499446320,
+            "end_ts": 1499446800,
+            "stage": "recon"
+          },
+          {
+            "onset_ts": 1499447640,
+            "end_ts": 1499447760,
+            "stage": "recon"
+          },
+          {
+            "onset_ts": 1499449860,
+            "end_ts": 1499450160,
+            "stage": "recon"
+          },
+          {
+            "onset_ts": 1499450580,
+            "end_ts": 1499451180,
+            "stage": "recon"
+          },
+          {
+            "onset_ts": 1499451660,
+            "end_ts": 1499451780,
+            "stage": "recon"
+          },
+          {
+            "onset_ts": 1499453760,
+            "end_ts": 1499454960,
+            "stage": "exfil"
+          }
+        ],
+        "completing_onset_ts": 1499453760,
+        "completing_stage": "exfil",
+        "expected_windows_before_completion": 201,
+        "scored_windows_before_completion": 121,
+        "max_score_before_completion": 1.0,
+        "flagged_before_completion": true,
+        "flag_ts": 1499449860,
+        "flag_before_campaign_onset": false,
+        "stage_transition_lead_s": 3900.0,
+        "completing_phase_detected": true,
+        "completing_phase_latency_min": 0.0
+      }
+    ],
+    "system": "world_model_calibrated",
+    "max_score_before_completion_by_system": {
+      "gbdt_current_state": [
+        0.9991254806518555
+      ],
+      "gru_classifier": [
+        0.8942922353744507
+      ],
+      "isotropic_noise_persistence": [
+        1.0
+      ],
+      "lr_current_state": [
+        1.0
+      ],
+      "lr_flattened_history": [
+        1.0
+      ],
+      "noised_persistence": [
+        1.0
+      ],
+      "oracle_true_future": [
+        1.0
+      ],
+      "persistence": [
+        1.0
+      ],
+      "ridge_two_lag": [
+        0.9999995231628418
+      ],
+      "world_model": [
+        1.0
+      ],
+      "world_model_calibrated": [
+        1.0
+      ],
+      "world_model_deterministic": [
+        1.0
+      ]
+    }
+  },
+  "holdout": {
+    "threshold": 0.7177971005439758,
+    "m_consecutive": 2,
+    "max_gap_minutes": 60,
+    "pre_onset_minutes": 30,
+    "n_campaigns_scored": 2,
+    "n_single_episode_campaigns": 0,
+    "n_flagged_before_completion": 1,
+    "stage_transition_lead_s": [
+      1860.0
+    ],
+    "campaigns": [
+      {
+        "host": "172.16.0.1",
+        "campaign_onset_ts": 1499343300,
+        "phases": [
+          {
+            "onset_ts": 1499343300,
+            "end_ts": 1499346000,
+            "stage": "initial_access"
+          },
+          {
+            "onset_ts": 1499346900,
+            "end_ts": 1499348520,
+            "stage": "initial_access"
+          }
+        ],
+        "completing_onset_ts": 1499346900,
+        "completing_stage": "initial_access",
+        "expected_windows_before_completion": 90,
+        "scored_windows_before_completion": 30,
+        "max_score_before_completion": 0.9873707294464111,
+        "flagged_before_completion": true,
+        "flag_ts": 1499345040,
+        "flag_before_campaign_onset": false,
+        "stage_transition_lead_s": 1860.0,
+        "completing_phase_detected": true,
+        "completing_phase_latency_min": 1.0
+      },
+      {
+        "host": "192.168.10.8",
+        "campaign_onset_ts": 1499361540,
+        "phases": [
+          {
+            "onset_ts": 1499361540,
+            "end_ts": 1499361540,
+            "stage": "lateral"
+          },
+          {
+            "onset_ts": 1499362080,
+            "end_ts": 1499362920,
+            "stage": "lateral"
+          },
+          {
+            "onset_ts": 1499364240,
+            "end_ts": 1499366700,
+            "stage": "lateral"
+          }
+        ],
+        "completing_onset_ts": 1499364240,
+        "completing_stage": "lateral",
+        "expected_windows_before_completion": 75,
+        "scored_windows_before_completion": 73,
+        "max_score_before_completion": 0.043998777866363525,
+        "flagged_before_completion": false,
+        "flag_ts": null,
+        "flag_before_campaign_onset": false,
+        "stage_transition_lead_s": null,
+        "completing_phase_detected": true,
+        "completing_phase_latency_min": 8.0
+      }
+    ],
+    "system": "world_model_calibrated",
+    "max_score_before_completion_by_system": {
+      "gbdt_current_state": [
+        0.9951257705688477,
+        0.8720257878303528
+      ],
+      "gru_classifier": [
+        0.9231159090995789,
+        0.13103583455085754
+      ],
+      "isotropic_noise_persistence": [
+        0.960693359375,
+        0.08587646484375
+      ],
+      "lr_current_state": [
+        1.0,
+        0.9544659852981567
+      ],
+      "lr_flattened_history": [
+        0.9999998807907104,
+        9.325663071629853e-13
+      ],
+      "noised_persistence": [
+        0.980224609375,
+        0.00905609130859375
+      ],
+      "oracle_true_future": [
+        0.9952680468559265,
+        0.9471534490585327
+      ],
+      "persistence": [
+        0.995428204536438,
+        0.05963165685534477
+      ],
+      "ridge_two_lag": [
+        0.9987525939941406,
+        0.09830794483423233
+      ],
+      "world_model": [
+        0.97705078125,
+        0.081878662109375
+      ],
+      "world_model_calibrated": [
+        0.9873707294464111,
+        0.043998777866363525
+      ],
+      "world_model_deterministic": [
+        0.9937971234321594,
+        0.2507152259349823
+      ]
+    }
+  }
+}
