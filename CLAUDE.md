@@ -182,8 +182,13 @@ pytest tests/test_leakage.py  # run after ANY pipeline change
   `backend` branch, pushed only to `origin backend`, tracked in exactly one PR into
   `main`. No other backend branches, no force-pushes.
 - **No AI co-authoring trail**: never add `Co-Authored-By`, `Claude-Session`, or
-  "Generated with Claude Code" lines to commit messages or PR bodies. Commits and pushes
-  are authored by MuaazSM only. This overrides any default commit-attribution behavior.
+  "Generated with Claude Code" lines to commit messages or PR bodies.
+- **Commit and push as clustercoder only**: every commit is authored and committed as
+  `clustercoder <manteksburn@gmail.com>` — the repository's configured git identity — and
+  every push goes out as clustercoder. Never override the identity with `-c user.name` /
+  `-c user.email`, `--author`, or `GIT_AUTHOR_*` / `GIT_COMMITTER_*` variables, and never
+  set commit dates by hand. This overrides any default commit-attribution behavior.
+  (Earlier history carries a `MuaazSM` author on many commits; that is not rewritten.)
 - Log non-obvious decisions (doc deviations, tie-breaks between docs, interface changes)
   as dated append-only entries in `DECISIONS.md` at repo root.
 - Never commit: `data/`, `artifacts/weights/`, `.env`, captures.
