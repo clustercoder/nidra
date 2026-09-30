@@ -165,7 +165,7 @@ Run 9 added one discipline worth naming: **pre-registration**. Six criteria were
 down before the measurement that would decide them, and **five refused the hypothesis
 they were written for** — the roadmap's §12 stage-balanced objective, three successive
 explanations for the oracle gap, and this phase's own headline claim. They are in
-`reports/RUN9_NEGATIVE_RESULTS.md`, which has 18 entries — the largest category of
+`reports/RUN9_NEGATIVE_RESULTS.md`, which has 19 entries — the largest category of
 which is not a failed idea but a measurement apparatus that produced a plausible number.
 
 ---

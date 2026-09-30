@@ -2078,3 +2078,39 @@ the phase's matrix backed by a paired interval.
 **Why this is written down.** "We report confidence intervals" and "we report confidence
 intervals on what we publish" are different claims, and only the second one is worth
 anything. The gap was invisible because the number it produced looked right.
+
+---
+
+## D148 — 2026-09-30 — The PS's logistic-regression comparison gives each system its own threshold
+
+PS 26153 asks for "benchmark results comparing model performance (F1 score, precision,
+recall, false positive rate) against a logistic regression baseline trained on the same
+features". `benchmark.py` records all four for every system, but `_task_table` reads every
+system at a single threshold: the world model's operating point, 0.718, selected on
+validation for `world_model_calibrated`'s Platt-calibrated score and for nothing else.
+
+Logistic regression trained with class weighting puts its scores near 1.0; its own
+validation-F1-optimal threshold is 0.99999…. Read at 0.718 it alerts on far more than its
+own threshold would, and the recorded comparison reported that mismatch as its
+false-alarm rate: **44.81 false alarms/hour on test and 70.17 on holdout, against 4.80 and
+4.89 at its own threshold** — overstated 9–14×. A draft of this phase's recommendations
+quoted the recorded figures as "80× fewer false alarms than LR" before the threshold was
+checked; it was not published.
+
+**Decision.** The PS benchmark is reported from `nidra/scripts/ps_baseline_benchmark.py`
+(9 tests): every system gets the rule the world model got — the weighted-F1-optimal
+threshold on validation, frozen, applied unchanged to test and holdout — read from the
+score dumps already on disk, so no model is re-run and no Run 8 artifact changes. AP is
+reported alongside because it needs no threshold, with a paired episode-cluster interval
+on the world model's margin. Output: `ml/reports/PS_BASELINE_BENCHMARK.md`.
+
+**Result, and what it does to the claim.** Against LR on the same features the world model
+still has 10× (test) and 5.7× (holdout) fewer false alarms, roughly double the precision,
+higher F1 on holdout (0.46 vs 0.35) and slightly lower on test (0.06 vs 0.07). Its AP margin
+excludes zero on test, +0.025 [+0.005, +0.058], and touches it on holdout, +0.197 [−0.000,
++0.366]. The claim survives at a tenth of the size the recorded table implied.
+
+`benchmark.json`'s per-baseline `at_threshold` blocks are left as recorded — changing
+them would alter Run 8 artifacts — and should not be quoted as a comparison. The
+harness-level fix (per-system thresholds inside `_task_table`) belongs in the next
+benchmark revision, not in a retroactive edit.

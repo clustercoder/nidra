@@ -5,14 +5,14 @@ list. Every entry names the intervention, the number that killed it, and what
 the phase did differently afterwards — because an experiment that changed
 nothing about the next one was not worth running.
 
-Eighteen entries, classified rather than counted: **four** interventions that did
-not beat their baseline (1–4), **four** conclusions this log drew and then
-withdrew (5, 6, 8, 13), **eight** mistakes in the measurement apparatus that
-produced confident wrong numbers or none at all (7, 9, 11, 12, 14, 15, 17, 18),
-and **two** pre-registered explanations whose own tests refused them (10, 16).
+Nineteen entries, classified rather than counted: **four** interventions that
+did not beat their baseline (1–4), **four** conclusions this log drew and then
+withdrew (5, 6, 8, 13), **nine** mistakes in the measurement apparatus that
+produced confident wrong numbers or none at all (7, 9, 11, 12, 14, 15, 17, 18,
+19), and **two** pre-registered explanations whose own tests refused them (10, 16).
 
 That the apparatus category is the largest is the phase's most transferable
-finding. Six of those eight produced numbers that looked right.
+finding. Seven of those nine produced numbers that looked right.
 
 ---
 
@@ -462,3 +462,24 @@ clearing zero by less than 0.001. It sharpens the existing conclusion rather tha
 reversing it. The finding is the process one: an interval is only evidence about
 the system it was computed on, and "we report confidence intervals" is not the
 same claim as "we report confidence intervals on what we publish." *(§3.50.)*
+
+### 19. The baseline was read at the world model's threshold
+
+Found on 2026-09-30, after Run 9 closed, while preparing the PS deliverables. The
+problem statement's named benchmark is F1, precision, recall and false-positive rate
+against logistic regression. `benchmark.py` reports all four for every system — at one
+threshold, the world model's 0.718, which was selected for the world model's calibrated
+score. Logistic regression's scores sit near 1.0 and its own validation-chosen threshold
+is 0.99999…, so at 0.718 its recorded false-alarm rate (44.81/h test, 70.17/h holdout)
+measured the threshold mismatch, not the baseline. At its own threshold it is 4.80/h and
+4.89/h.
+
+The recorded numbers were quoted, in conversation, as "80× fewer false alarms than LR"
+and recommended as the thing to lead the documentation with. They were checked before
+being written down, which is the only reason this is an entry rather than a published
+claim. Corrected: 10× and 5.7×, still in NIDRA's favour.
+
+It is the same shape as entry 18, one layer further out: 18 was a correct interval on the
+wrong arm, 19 is a correct confusion matrix at the wrong operating point. Both were
+invisible because the number looked plausible and favoured the model. *(D148,
+`reports/PS_BASELINE_BENCHMARK.md`.)*
