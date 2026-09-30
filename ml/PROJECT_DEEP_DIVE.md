@@ -1,5 +1,16 @@
 # NIDRA — Complete Project Deep Dive
 
+> **Status: describes the Δ=30 s system (Runs 1–7, last updated 2026-09-12).** The
+> concepts and code walk-through still apply, but the geometry and every number
+> here are superseded. The system now uses **60-second windows** (Δ=30 produced an
+> artificial all-zero state every other window, because CIC-IDS2017 flow timestamps
+> have minute resolution), and the evaluation numbers quoted below — including the
+> 0.92 pooled AUC-PR — were measured on a balanced subsample with a pooling
+> statistic chosen on the test day and are **withdrawn**. For the current system
+> and what the evidence supports, read [`ARCHITECTURE.md`](ARCHITECTURE.md) and the
+> root [`README.md`](../README.md); for every measured number,
+> [`REAL_DATA_RESULTS.md`](REAL_DATA_RESULTS.md) Run 8 onward.
+
 **Purpose of this document:** you should be able to read this file start to
 finish with *zero* prior machine learning or cybersecurity background and
 come out the other side able to (a) explain what this project does and why

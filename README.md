@@ -7,66 +7,117 @@ behaviour and recursively simulates the next six minutes — producing a
 per-horizon risk curve with an uncertainty band, a projected attack-stage
 sequence mapped to ATT&CK tactics, and the attributions behind the forecast.
 
-## Results
+## What NIDRA demonstrably does
 
-Trained and evaluated end-to-end on the **complete, real CIC-IDS2017
-dataset** (all 8 published day-files, all 5 raw PCAPs extracted with tshark
-for true packet-level features), five independently seeded models voting.
-Every number below is measured **at the natural prevalence of attacks**
-(0.03–0.4 % of host-minutes) with every tunable — how sampled futures are
-pooled, the calibration, the alert threshold — chosen on validation and
-frozen before the test or holdout day was scored. That protocol is new as of
-2026-09-20 (Run 8 in [`ml/REAL_DATA_RESULTS.md`](ml/REAL_DATA_RESULTS.md));
-the earlier headline "AUC-PR 0.96 / F1 0.91" was measured on a balanced
-subsample with a pooling statistic chosen on the test day and is withdrawn
-as a description of the system. It is kept there for provenance.
+Trained and evaluated end-to-end on the **complete, real CIC-IDS2017 dataset**
+(all 8 published day-files, all 5 raw PCAPs extracted with tshark for true
+packet-level features), five independently seeded models voting. Every number
+is measured **at the natural prevalence of attacks** (0.03–0.4 % of
+host-minutes), with every tunable — how sampled futures are pooled, the
+calibration, the alert threshold — chosen on validation and frozen before the
+test day (Friday: Botnet, PortScan, DDoS) or the holdout day (Thursday: Web
+attacks and Infiltration, attack types held out of training entirely) was
+scored.
 
-### Headline numbers
+**1. It learns how a host's network traffic evolves.** This is the world-model
+claim, P(S_t+1 | S_t), and it is measured directly on the forecast states rather
+than inferred from a risk score. On every split, at every horizon from one to six
+minutes, and on active hosts alone, NIDRA's six-minute state forecast has lower
+error than both reference models:
 
-| | **Test day** (Friday: Botnet, PortScan, DDoS) | **Unseen attack type** (Thursday: Web attacks, Infiltration — held out of training entirely) |
+| reduction in squared error vs "nothing changes" | validation | test | holdout |
+|---|:---:|:---:|:---:|
+| **NIDRA world model** | **0.672** | **0.587** | **0.616** |
+| two-lag linear model fit to the same task | 0.653 | 0.565 | 0.595 |
+| NIDRA's margin over the linear model | 5.6 % | 5.2 % | 5.2 % |
+
+Most of the gain over "nothing changes" is available to a linear model; NIDRA's
+own margin over it is modest, and it is consistent. The 90 % forecast band
+contains the true next state 98 % of the time on validation.
+
+**2. Against the logistic-regression baseline the problem statement asks for, it
+raises fewer, more precise alerts.** Each system at its own validation-chosen
+threshold ([`ml/reports/PS_BASELINE_BENCHMARK.md`](ml/reports/PS_BASELINE_BENCHMARK.md)):
+
+| | NIDRA · test | LR · test | NIDRA · holdout | LR · holdout |
+|---|:---:|:---:|:---:|:---:|
+| **AP** (no threshold involved) | **0.058** | 0.033 | **0.438** | 0.241 |
+| **precision** | **0.89** | 0.48 | **0.85** | 0.46 |
+| **recall** | 0.03 | 0.04 | **0.32** | 0.28 |
+| **F1** | 0.06 | **0.07** | **0.46** | 0.35 |
+| **false-positive rate** | **0.000017** | 0.000171 | **0.000019** | 0.000110 |
+| **false alarms per hour** (~2,000–2,600 hosts) | **0.48** | 4.80 | **0.86** | 4.89 |
+
+10× fewer false alarms on the test day and 5.7× fewer on the unseen-attack day,
+at roughly double the precision, with higher recall and F1 on the unseen-attack
+day. NIDRA's AP margin over LR has a paired episode-bootstrap interval that
+excludes zero on test (+0.025 [+0.005, +0.058]) and touches it on holdout
+(+0.197 [−0.000, +0.366]).
+
+**3. Every number reproduces, and every forecast is explained.** Each run writes
+a provenance record (git commit, config hash, dataset digests, seeds, checkpoint
+hashes); 28 recorded evaluation cells re-ran bit-identically. Every forecast
+carries SHAP attributions over 45 named traffic features, temporal saliency, and
+integrated-gradient attributions with a deletion faithfulness check. It runs
+fully offline on a laptop CPU — about 128 ms per five-model forecast on an M1.
+
+## What it does not do
+
+- **No advance warning is demonstrated.** No attack episode on any split
+  crosses the threshold before its first attack-labelled minute (0 of 15 on
+  test, 0 of 5 on holdout; 3 of each are alerted *inside* the episode, 0 to 5
+  minutes after it starts on test and 1 to 29 on holdout). CIC-IDS2017's attacks are launched from an attacker VM with no
+  same-host run-up: there are 3 / 9 / 15 training examples of "an attack begins
+  within 1 / 3 / 5 minutes" among 2.27 million host-minutes, and every system,
+  including one trained directly on that question, sits at the prevalence floor.
+  Earlier versions of this README claimed hours, then "8 of 10 episodes"; both
+  are withdrawn.
+- **The forward simulation does not yet add attack-forecasting skill.** The same
+  risk head applied to the *current* state scores about as well (test AP 0.065
+  against 0.058; holdout 0.295 against 0.439, interval [−0.00, +0.28]). The
+  advantage over LR comes from the state representation and the risk head; it
+  is not demonstrably the rollout's.
+- **History-reading classifiers match it.** Logistic regression on 30 minutes of
+  history is statistically indistinguishable on AP, and a GRU sequence
+  classifier ranks Friday's Botnet traffic far better (ROC-AUC 0.976, AP 0.164).
+  833 of Friday's 946 attack minutes are Botnet command-and-control — an attack
+  stage with zero training examples, which the per-state risk head ranks below
+  silence. The diagnosis is in Run 8 §8.7.
+- **Projected attack stages are unreliable where training had none.**
+  Reconnaissance, C2 and lateral movement never occur in the training days, so
+  stage accuracy on test and holdout is 0.00. The ATT&CK mapping is a curated
+  presentation layer, not technique-level inference.
+- **It learns correlation, not causation.** The data is observational. A
+  simulated trajectory is the model's projection of what the traffic will look
+  like, not an account of why; counterfactual outputs are labelled
+  "model-internal what-if".
+
+**Run 9** (research phase, 2026-09-23) added CTU-13 as a second corpus and a
+cross-dataset matrix. It tested a history-aware risk head, which won its training
+objective and failed a pre-registered test on the forecast benchmark, so the
+per-state head above was kept (DECISIONS.md D146). Of 28 cross-dataset cells, one
+margin over the strongest baseline survives a paired interval: CIC+CTU training
+evaluated on CIC, +0.066 [+0.024, +0.130]. Full account:
+[`ml/reports/RUN9_FINAL_REPORT_2026-09-23.md`](ml/reports/RUN9_FINAL_REPORT_2026-09-23.md).
+
+### Full scorecard (Run 8, the shipped model)
+
+| | **Test day** (Friday) | **Unseen attack type** (Thursday) |
 |---|:---:|:---:|
 | **AP** (average precision at natural prevalence) | **0.058** [0.018, 0.199] | **0.439** [0.000, 0.768] |
 | the same risk head on the *current* state only ("assume nothing changes") | 0.065 | 0.295 |
-| strongest non-forecasting baseline | 0.164 (GRU sequence classifier) | 0.443 (logistic regression on 30 min of history) |
+| strongest baseline | 0.164 (GRU sequence classifier) | 0.443 (logistic regression on 30 min of history) |
 | **Precision / recall / F1** at the alert threshold | 0.89 / 0.03 / 0.06 | 0.85 / 0.32 / 0.46 |
-| false alarms per hour across ~2,000–2,600 monitored hosts | 0.48 | 0.86 |
+| false alarms per hour | 0.48 | 0.86 |
 | attack episodes alerted (before onset / inside the episode) | 0 / 3 of 15 | 0 / 3 of 5 |
 | **next-state forecast: MSE reduction vs "nothing changes"** (linear reference) | **0.587** (0.565) | **0.616** (0.595) |
 
-Brackets are 95 % intervals from resampling whole attack episodes. Higher is
-better everywhere; AP is the fairest single score because it does not depend
-on one threshold. The threshold is the validation-chosen 0.718; the mandated
-0.75 gives the same recall.
-
-### What these numbers mean
-
-- **The model learns how a host's traffic evolves.** On every split its
-  six-minute state forecast has 59–67 % lower squared error than assuming
-  nothing changes, and 5–6 % lower than a linear model fit to the same task.
-  This is the part of the "world model" claim the data supports, and it is
-  measured directly rather than inferred from a risk score.
-- **On an attack type it never saw (Thursday), forecasting from those
-  dynamics helps.** AP 0.439 against 0.295 for the identical risk head
-  applied to the current state only — +0.14, interval [−0.00, +0.28] over
-  five episodes[^1] — matching the best history-reading classifier. Three of
-  five episodes are alerted, 1 to 29 minutes after they start.[^2]
-- **On Friday it fails, and so does every baseline.** 833 of Friday's 946
-  attack minutes are Botnet command-and-control traffic on five workstations
-  — an attack stage with zero training examples, and traffic that looks like
-  a quiet workstation to a risk head reading one minute of state. That head
-  ranks those minutes *below* silence. A sequence classifier over the full
-  30-minute history does rank them (ROC-AUC 0.976) but is still only 0.164 AP
-  at natural prevalence; the world model is at 0.058, the same as its own
-  head on the current state. The diagnosis, and the architectural change it
-  points to, are in Run 8 §8.7.
-- **No advance warning is demonstrated.** No episode on any split crosses
-  the threshold before its first attack-labelled minute. CIC-IDS2017's
-  attacks are launched from an attacker VM with no same-host run-up — there
-  are 3 / 9 / 15 training examples of "an attack begins within 1 / 3 / 5
-  minutes" among 2.27 million host-minutes — and every system, including one
-  trained directly on that question, sits at the prevalence floor there.
-  Earlier versions of this README claimed hours, then "8 of 10 episodes";
-  both are withdrawn.
+Brackets are 95 % intervals from resampling whole attack episodes. The threshold
+is the validation-chosen 0.718; the mandated 0.75 gives the same recall. The
+earlier headline "AUC-PR 0.96 / F1 0.91" was measured on a balanced subsample with
+a pooling statistic chosen on the test day and is withdrawn as a description of
+the system; it is kept in [`ml/REAL_DATA_RESULTS.md`](ml/REAL_DATA_RESULTS.md) for
+provenance.
 
 ### What was done to get here (all recorded, all reproducible)
 
@@ -131,9 +182,10 @@ ml/                     the ML subsystem — data pipeline, world model,
   config/                default.yaml (production) / mvp_2017.yaml (fast iteration)
   artifacts/             the shipped model: weights, scaler, windowed data,
                           metrics, provenance — everything needed to run
-  tests/                 235 tests, synthetic fixtures, runs in seconds
+  tests/                 848 tests, synthetic fixtures, a few minutes
   README.md              full technical documentation, start here for details
-  ARCHITECTURE.md        how the ML subsystem is built and why (2-page overview)
+  ARCHITECTURE.md        the two-page architecture document (PS deliverable)
+  ARCHITECTURE_DETAIL.md the same, at engineering depth
   MODEL_CARD.md          compact model card: claims, deviations, limitations
   REAL_DATA_RESULTS.md   single source of truth for every measured number
   PRODUCTION_RUN_GUIDE.md  retraining from the raw dataset, start to finish
@@ -151,17 +203,17 @@ a CPU.
 cd ml
 pip install -e .                 # Python 3.11+; CPU-only is fine
 
-pytest tests/ -q                 # 235 tests, synthetic fixtures — seconds
+pytest tests/ -q                 # 848 tests, synthetic fixtures — a few minutes
 
 # 1. Forecast a real CIC-IDS2017 window with the shipped ensemble
 python -m nidra.scripts.demo_forecast                 # a window preceding a real attack
 python -m nidra.scripts.demo_forecast --want-risk 0   # a benign window, for contrast
 
-# 2. Reproduce the published evaluation numbers (~tens of minutes per split)
-python -m nidra.eval.run_eval --config config/default.yaml --seed 0 \
-    --split test    --n-samples 200 --max-eval-samples 4000 --use-ensemble
-python -m nidra.eval.run_eval --config config/default.yaml --seed 0 \
-    --split holdout --n-samples 200 --max-eval-samples 4000 --use-ensemble
+# 2. Reproduce the published evaluation numbers (~6 min per split).
+#    Validation selects and freezes the operating point; test/holdout only read it.
+python -m nidra.eval.benchmark --split test    --n-samples 60 --n-resamples 300
+python -m nidra.eval.benchmark --split holdout --n-samples 60 --n-resamples 300
+python -m nidra.scripts.ps_baseline_benchmark --out reports/PS_BASELINE_BENCHMARK.md
 
 # 3. Measure serving latency on your own machine
 python -m nidra.serve.benchmark --weights-dir artifacts/weights \

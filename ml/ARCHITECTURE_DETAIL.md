@@ -1,6 +1,8 @@
-# NIDRA ML — Architecture
+# NIDRA ML — Architecture, in detail
 
-How the ML subsystem is put together and why. For measured results see
+How the ML subsystem is put together and why, at engineering depth. The
+two-page overview — what the evidence supports, what it does not, and the
+pipeline — is [`ARCHITECTURE.md`](ARCHITECTURE.md). For measured results see
 `REAL_DATA_RESULTS.md`; for claims and limitations see `MODEL_CARD.md`; for
 the evaluation harness see `EVALUATION.md`.
 
@@ -20,7 +22,7 @@ has nothing to say about a window that has not arrived.
 
 ## The state vector
 
-One host, one 30-second window, 45 floats — `nidra/data/schema.py`'s
+One host, one 60-second window, 45 floats — `nidra/data/schema.py`'s
 `FEATURE_ORDER` is the single source of truth, and every module imports it
 rather than reconstructing order from a dict.
 
@@ -81,9 +83,11 @@ windows are used **only** to construct target columns, never model input.
 
 Splits are temporal by day, never random: train = Mon/Tue/Wed, test =
 Friday ×3, holdout = Thursday ×2 (an attack type held out of training
-entirely). Validation is the contiguous trailing 15% time-block of the
-train days, not a random sample — a random split would leak a host's future
-into its own training history. `assert_no_temporal_overlap` and
+entirely). Validation is a contiguous trailing 30 % time-block of *each*
+training day, nudged earlier so no attack episode straddles the cut, never a
+random sample — a random split would leak a host's future into its own
+training history, and a single block off the end of Wednesday held one
+attack episode on one host. `assert_no_temporal_overlap` and
 `assert_no_episode_leakage` run on every build.
 
 Windowed tensors are built by `build_windowed_arrays`, which applies its
@@ -127,23 +131,28 @@ features.
 
 ## Training: two stages, strictly ordered
 
-**Stage 1 — dynamics.** Encoder + transition trained on multi-step unrolled
-Gaussian NLL with horizon discounting (`0.85^k`, so distant and inherently
-more uncertain steps do not dominate the gradient) and scheduled sampling
-(teacher forcing annealed 1.0 → 0.3 over the first 60% of epochs). Without
-the annealing you get a model that looks fine at k=1 and diverges by k=6.
-AdamW, lr 3e-4, 60 epochs, cosine schedule, early stopping on
-`val_multistep_nll`.
+**Stage 1 — dynamics.** Encoder + transition trained on a multi-step unrolled
+β-NLL loss (β = 0.5, chosen among seven variants on validation — D113) with
+horizon discounting (`0.85^k`, so distant and inherently more uncertain steps
+do not dominate the gradient) and scheduled sampling (teacher forcing
+annealed 1.0 → 0.3 over the first 60 % of epochs). Without the annealing you
+get a model that looks fine at k=1 and diverges by k=6. AdamW, lr 3e-4,
+cosine schedule; the checkpoint is selected on **free-running** validation
+NLL — the model rolled out on its own predictions, the way it is used — not
+on teacher-forced loss. The Run 8 production run trained 24 epochs per seed.
 
 **Stage 2 — heads.** Dynamics are **frozen**, then the risk and stage heads
-are trained on *observed states only*. Training heads on simulated states
-would let head error and dynamics error fit each other, and the resulting
-risk score would no longer be a statement about a state. AdamW, lr 1e-3, 30
-epochs, `pos_weight ≈ 1741` for the risk head against a ~0.06% positive
-rate. Selection is on weighted validation loss; selecting on validation
-AUC-PR was implemented, measured, and rejected — it improves the validation
-metric and makes holdout F1 worse (0.727 → 0.486), because the validation
-block carries a 6× different positive rate.
+are trained on *observed states only* — every observed row of the split, one
+sample each, rather than the windowed subsample the dynamics use (D114).
+Training heads on simulated states would let head error and dynamics error
+fit each other, and the resulting risk score would no longer be a statement
+about a state. The risk head uses imbalanced BCE (positives repeated 20×,
+10 negatives per positive, half of them hard negatives) with Gaussian input
+noise σ = 0.3 in scaled space, because at inference it must rank *predicted*
+states that carry rollout error the observed ones do not. It is selected on
+validation natural-prevalence AP; the stage head separately on validation
+macro-F1 (D108). AdamW, lr 1e-3, up to 30 epochs with patience 6 — with ~150
+training positives every recipe peaks within the first few epochs.
 
 Nothing is trained after stage 2. `freeze_all()` is the end state.
 

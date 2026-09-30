@@ -9,13 +9,70 @@ evaluation, explainability, and the `NidraPredictor` serving interface. See
 `docs/IMPLEMENTATION-ML.md` for the full build spec this implements, and
 `docs/HORIZON_PRD.pdf` (original problem-statement PRD, kept under its
 original filename) for product framing. This file is the top-level entry
-point; `ARCHITECTURE.md` is a two-page overview of how the subsystem is
-built and why, and `MODEL_CARD.md` / `TRAINING.md` / `EVALUATION.md` cover
+point; `ARCHITECTURE.md` is the two-page architecture document (with
+`ARCHITECTURE_DETAIL.md` at engineering depth), and `MODEL_CARD.md` / `TRAINING.md` / `EVALUATION.md` cover
 architecture-vs-spec deviations, the training procedure, and the eval
 harness in more depth, and `REAL_DATA_RESULTS.md` is the single source of truth for actual
 measured numbers. **For the plain-English version of the scores — no
 jargon, just what they mean — see the "Results" section of the root
 [`README.md`](README.md).**
+
+## What the evidence supports — read first
+
+Three results are solid; the rest of this README is how they were produced and
+what limits them. The two-page version is [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+1. **The world model learns state-transition dynamics.** Six-minute state
+   forecasts reduce squared error vs persistence by 0.672 / 0.587 / 0.616
+   (val / test / holdout) against a two-lag linear model's 0.653 / 0.565 / 0.595 —
+   a 5–6 % margin, on every split, at every horizon k = 1…6, and on active hosts
+   alone. The 90 % band covers the true state 98 % of the time on validation.
+2. **Against the PS's logistic-regression baseline it raises fewer, more
+   precise alerts**, each system at its own validation-chosen threshold
+   (`reports/PS_BASELINE_BENCHMARK.md`): false alarms/hour 0.48 vs 4.80 (test)
+   and 0.86 vs 4.89 (holdout), precision 0.89 vs 0.48 and 0.85 vs 0.46, F1 0.46 vs
+   0.35 on holdout and 0.06 vs 0.07 on test. AP margin +0.025 [+0.005, +0.058] on
+   test; +0.197 [−0.000, +0.366] on holdout.
+3. **Every number reproduces and every forecast is explained** — provenance
+   records on every run, 28 cells re-run bit-identically, SHAP / saliency /
+   integrated-gradient attributions with a faithfulness check on every forecast.
+
+What it does not do: no episode is warned before onset on any split; the same
+risk head on the *current* state scores about as well as on the rollout, so
+advantage 2 is not demonstrably the simulation's; history-reading classifiers
+(LR on 30 min of history, a GRU) match or beat it on AP; projected stages are
+0.00 accurate where training had none; and the model learns correlation, not
+causation. The numbers behind each are in `REAL_DATA_RESULTS.md` (Run 8) and
+the Run 9 reports below.
+
+## Run 9 — research phase, concluded (2026-09-24)
+
+Everything in this README, in `MODEL_CARD.md` and in `REAL_DATA_RESULTS.md`
+describes **Run 8**, which is the shipped state and is unchanged. Run 9 was a
+research phase: CTU-13 integration, a cross-dataset matrix, a history-aware
+risk head, and an unseen-attack-family test. It concluded that the Run 8
+per-state head should stay (DECISIONS.md D146) and produced **no** new shipped
+configuration.
+
+| | |
+|---|---|
+| `MODEL_CARD_RUN9.md` | what Run 9 has and has not established |
+| `reports/RUN9_FINAL_REPORT_2026-09-23.md` | the conclusion, separating demonstrated from unproven |
+| `reports/RUN9_QUESTIONS.md` | the fourteen questions the phase was set, and their answers |
+| `reports/RUN9_NEGATIVE_RESULTS.md` | 19 entries: what was tried and did not work, including four conclusions this log withdrew |
+| `reports/run9/` | the generated tables — corrected scorecard, D145 correction, reproduction check, paired margin intervals |
+| `reports/CTU13_MODEL_IMPROVEMENT_2026-09-23.md` | the full experiment log |
+
+Two things from it that bear on how to read the Run 8 numbers here. First, a
+defect (D145) was found in the rollout, and **Run 8 is not affected by it** — its
+feature regime drops no features, which is the precondition for the defect. Every
+CTU-13 and cross-dataset number in Run 9 was re-scored under the fix (21 up, 7 down,
+no direction flipped); no Run 8 number needed it. Second, on the slices where Run 9
+could ask the question most sharply, **the forecast does not beat a persistence
+baseline** — across 28 cells exactly one margin over the strongest baseline in its
+cell survives a paired episode-cluster interval with room to spare. That is a finding
+about the approach, not about the Run 8 artifacts, and it is stated plainly in
+`MODEL_CARD_RUN9.md`.
 
 ## Claims discipline (read this before reading any metric below)
 

@@ -31,3 +31,38 @@ supports outright; row 4's world-model margin over persistence is positive only 
 holdout day and not resolved from zero; rows 4 (Task B) and 16 are limited by the
 dataset's lack of same-host precursors. See `REAL_DATA_RESULTS.md` Run 8 and
 `MODEL_CARD.md` for what the numbers do and do not support.
+
+---
+
+## Addendum — 2026-09-30
+
+Two rows change in what they can claim; nothing above is edited.
+
+**Row 11, logistic-regression benchmark.** The rows above point at `benchmark.json`,
+whose per-system precision, recall, F1 and FPR are all read at the world model's
+threshold (0.718). That threshold was chosen for the world model's calibrated score, so
+the baselines' confusion matrices there are not a fair comparison (DECISIONS.md D148).
+The PS benchmark is `reports/PS_BASELINE_BENCHMARK.md`, where each system uses its own
+validation-chosen threshold:
+
+| | world model test | LR test | world model holdout | LR holdout |
+|---|---:|---:|---:|---:|
+| AP | **0.058** | 0.033 | **0.438** | 0.241 |
+| precision | **0.886** | 0.482 | **0.848** | 0.462 |
+| recall | 0.032 | **0.038** | **0.320** | 0.279 |
+| F1 | 0.061 | **0.071** | **0.464** | 0.348 |
+| FPR | **0.000017** | 0.000171 | **0.000019** | 0.000110 |
+| false alarms/h | **0.48** | 4.80 | **0.86** | 4.89 |
+
+Status: **measured** — fewer false alarms and higher precision on both splits, higher F1
+on holdout, lower F1 on test. The advantage is not attributable to the rollout: the same
+risk head on the current state reaches comparable AP (row 4).
+
+**Row 12, unseen-attack generalisation.** Run 9 added CTU-13 and withheld its largest
+botnet family (Neris) from training entirely: AP 0.717 [0.485, 0.860], within-host ROC
+0.949 across ten infected hosts — and persistence reaches 0.772. The model transfers to
+an unseen family; it does not transfer better than persistence
+(`reports/RUN9_FINAL_REPORT_2026-09-23.md`).
+
+The architecture document the PS asks for (max 2 pages) is `ARCHITECTURE.md`; the
+previous long-form version is `ARCHITECTURE_DETAIL.md`.

@@ -4,147 +4,127 @@
 
 ## The problem
 
-Today's intrusion detection looks at a snapshot of network traffic and
-asks: *"is this malicious, right now?"* By the time it says yes, the
-attack is already happening. There's no warning — only an alarm after
-the fact.
+Intrusion detection today looks at a snapshot of traffic and asks *"is this
+malicious, right now?"* It treats each flow in isolation and throws away the
+thing that makes an attack an attack: it unfolds over time.
 
 ## The idea
 
-**Don't just detect attacks. Forecast them.**
+**Model how the network behaves, then simulate forward.**
 
-NIDRA watches how a host's network behavior evolves over the last 15
-minutes, then **imagines forward a few minutes into the future** —
-simulating what the traffic is likely to look like next — and flags
-danger in that imagined future before it becomes the present. It's the
-difference between a smoke detector and a weather forecast.
-
-## How it works (30 seconds)
+NIDRA reads the last 30 minutes of each host's traffic, learns how that host's
+behaviour tends to change from one minute to the next, and projects the next six
+minutes step by step. It then scores the projected future for attack risk, maps it
+to MITRE ATT&CK stages, and shows which traffic features drove the call.
 
 ```
-15 minutes of real traffic history
+30 minutes of real traffic per host (flow + packet features, every 60 s)
         ↓
-   learns the PATTERN of how this host normally behaves
+   a learned model of how that traffic changes minute to minute
         ↓
-   imagines several minutes ahead, step by step
+   six minutes simulated forward, 1,000 sampled futures, 5 models
         ↓
-   5 independently-trained models vote on how dangerous that
-   imagined future looks
-        ↓
-   a risk score + early warning, before the attack fully unfolds
+   a risk curve with an uncertainty band, projected attack stages,
+   and the features behind the forecast — offline, on a laptop CPU
 ```
 
-Trained and tested on the **complete, real CIC-IDS2017** dataset — every
-published attack day, every raw packet capture — not a toy sample.
+Trained and tested on the **complete, real CIC-IDS2017** dataset — every attack
+day, every raw packet capture — and, in the latest research phase, on **CTU-13**
+as a second corpus.
 
-## The result that matters most
+## What it demonstrably does
 
-We held an entire attack type out of training — Thursday's Infiltration —
-and then asked the system to forecast it cold.
+**1. It learns how network traffic evolves.** Its six-minute forecasts of a
+host's next state have **59–67 % lower error than assuming nothing changes**,
+and **5–6 % lower than a linear model** fit to the same task — on every data
+split, at every horizon from one to six minutes. The linear model gets most of
+the way; NIDRA's edge over it is modest and it never goes away. This is the
+"world model" claim, measured directly.
 
-**NIDRA scored 0.70 out of 1.00** at separating that never-before-seen
-attack from normal traffic, catching **75%** of it at the strict mandated
-confidence bar. That is the equivalent of a student acing a question on a
-topic that was never covered in class, and it is the strongest evidence
-that the system learned real attack *dynamics* rather than memorizing
-examples.
+**2. It raises fewer, more precise alarms than the logistic-regression baseline
+the problem statement asks for.** Both at their own best threshold, chosen before
+the test data was seen:
 
-## The scoreboard
-
-Every score is out of 1.00 — higher is better, and **AUC-PR** is the
-fairest number to judge by, since it measures ranking quality across every
-possible alert sensitivity rather than one fixed cutoff.
-
-| | Friday's attacks | Never-seen-before attack type |
+| | NIDRA | Logistic regression |
 |---|:---:|:---:|
-| **AUC-PR** | 🟢 **0.96** | 🟡 **0.68** |
-| **F1** | 🟢 **0.91** | 🟢 **0.76** |
-| **Precision** | 🟢 **0.96** | 0.73 |
-| **Recall** | 🟢 **0.86** | 🟢 **0.80** |
-| **Episodes caught before they unfolded** | 🟢 **8 of 10** | 🟡 **1 of 2** |
+| false alarms per hour, Friday's attacks | **0.48** | 4.80 |
+| false alarms per hour, never-seen attack type | **0.86** | 4.89 |
+| precision, never-seen attack type | **0.85** | 0.46 |
+| F1, never-seen attack type | **0.46** | 0.35 |
+| average precision, Friday / never-seen | **0.058 / 0.438** | 0.033 / 0.241 |
 
-- **Early warning — the thing only forecasting can do.** 8 of 10 test
-  attack episodes raised a sustained warning *before* their first
-  attack-labelled window. A system that only judges the present moment
-  cannot do this at all. We previously put a number of hours on that
-  warning; it has been withdrawn, because the metric turned out to measure
-  how much history each capture contained rather than how far ahead the
-  model saw. The full working is in `ml/REAL_DATA_RESULTS.md`.
-- **Speed:** ~115ms per forecast on an ordinary CPU — comfortably fast
-  enough to run live.
-- **Reliability:** 507 automated tests, all passing, covering the full
-  pipeline end to end.
+**10× fewer false alarms** on the test day and **5.7× fewer** on an attack type
+held out of training entirely. A security team that stops trusting its alerts
+stops reading them; this is the property that keeps them read. (On Friday's F1
+alone, logistic regression is slightly ahead, 0.07 to 0.06.)
 
-## The constraints these numbers were achieved under
+**3. Nothing is hidden and everything reproduces.** Every forecast comes with
+the traffic features driving it. Every result is re-runnable from a recorded
+configuration — 28 evaluation runs were repeated and matched to the last digit.
+It runs fully offline in about 128 ms per forecast on a MacBook Air.
 
-Worth knowing before judging them, because two of the three are hard limits
-rather than tuning choices:
+## What it does not do — yet
 
-- **Trained entirely on a MacBook Air (Apple M1, 16 GB RAM).** No GPU, no
-  cluster, no cloud budget. The full candidate training set needs ~35 GB to
-  hold in memory, so the model is trained on **500,000 windows out of a
-  ~6.9M pool — about 7%**. The sampling keeps every single attack-positive
-  window, so no attack signal was discarded; the benign context is what got
-  thinned.
-- **Attack data is vanishingly rare in the source dataset.** Across all 8
-  published CIC-IDS2017 day-files there are about **1,006 attack-labelled
-  windows in 11.4 million — 0.009%**. The risk model learns from a few
-  hundred positive examples.
-- **Three of the five attack stages appear only in the evaluation days.**
-  The model is asked to forecast categories of attack for which it has, by
-  construction, zero training examples.
+We say this before anyone asks, because a result that survives the hard
+questions is worth more than a bigger number that doesn't.
 
-So the unseen-attack result — 0.70 AUC-PR, 76% recall, 4 hours of advance
-warning — comes from a model trained on a few hundred attack examples, on 7%
-of the available data, on a laptop. More compute and more attack-labelled
-telemetry are the two clear levers, and neither has been pulled.
+- **It does not give advance warning on this data.** No attack in the test or
+  held-out days was flagged before it began. CIC-IDS2017's attacks start from an
+  outside machine with almost no warning signs on the victim beforehand — the
+  training data holds 15 examples of "an attack begins within five minutes" in
+  2.27 million host-minutes. Earlier drafts of this document claimed hours of
+  warning, then 8 of 10 attacks caught early; both are withdrawn.
+- **The simulation does not yet beat a simpler reading.** Scoring the current
+  state with the same risk model does about as well as scoring the simulated
+  future. The learned dynamics are real (point 1); turning them into better
+  attack forecasts is the open problem.
+- **Sequence classifiers are competitive.** A classifier reading the full
+  30-minute history matches NIDRA on average precision, and ranks Friday's
+  botnet traffic better.
+- **It learns correlation, not cause.** The data is observational. NIDRA
+  projects what traffic will probably look like, not why; its what-if tool is
+  labelled "model-internal what-if" everywhere.
 
-## What we tried, including what failed
+## Constraints
 
-Seven experiments, measured and recorded with full numbers:
+- **One MacBook Air** (Apple M1, 16 GB), no GPU, no cloud. A five-model training
+  run takes about five hours.
+- **Attacks are rare in the data.** The risk model learns from roughly 150
+  attack-labelled training states; attacks are 0.03–0.4 % of host-minutes on the
+  evaluation days, and every score here is measured at that real rate rather than
+  on a rebalanced sample.
+- **Three attack stages never appear in training.** Reconnaissance, command and
+  control and lateral movement occur only on the evaluation days.
 
-| Experiment | Outcome |
+## How we worked
+
+Every design choice was measured on validation data and frozen before the test
+data was scored. Much of the work was finding where our own numbers were wrong:
+
+| What we found | What changed |
 |---|---|
-| **Pooling the riskier tail of simulated futures** | **Adopted** — F1 0.01 → **0.91**, and the difference between never crossing the alert bar and warning on 8 of 10 episodes. The biggest win in the project. |
-| 5-model ensemble voting | **Adopted** — beats any single model. |
-| Post-hoc probability calibration | **Rejected** — undid the pooling gain. |
-| Tightening rollout noise, retrained from scratch | **Rejected** — small-scale gain vanished at full scale. |
-| Selecting heads on validation ranking | **Rejected** — improved the validation score, hurt real performance. |
-| Pooling setting tuned at reduced scale | **Rejected on re-measurement** — the small-scale winner was the worst setting at full scale. |
-| Ensemble vote ordering | **Measured as a no-op** — members agree too closely to matter. |
+| The flow and packet records were joined on clocks 3 and 12 hours apart, so 11 of 45 features were always zero | Fixed, retrained |
+| Our old headline (F1 0.91) used a scoring rule picked by looking at the test day, on a rebalanced sample | Withdrawn; every setting is now chosen on validation, at the real attack rate |
+| The simulation wrote untrained values into feature slots a dataset doesn't have, and they compounded | Fixed across every code path (D145) |
+| A more complex risk model won on its training objective | Tested before adopting; it failed a pass/fail bar set in advance, so it was not adopted (D146) |
+| The benchmark scored logistic regression at *our* model's threshold, overstating its false alarms 9–14× | Corrected: each system gets its own threshold (D148) |
 
-Four of seven were rejected on the evidence, and that is the point: each one
-was built, measured against held-out data, and dropped when the numbers said
-so. Three genuine correctness bugs were also found and fixed along the way. The
-largest was found last: the dataset's flow records are stamped in local time
-on a 12-hour clock with no AM/PM marker, while its packet captures carry true
-UTC, so the join between them was matching almost nothing and eleven of the
-forty-five features were arriving as zeros. Correcting it and retraining is
-what produced the numbers above.
-
-### The one that mattered most, in detail
-
-The system's alerting was once far too quiet — it ranked danger well but
-almost never crossed the confidence bar. Rather than lower the bar, we
-instrumented the model and found the actual mechanism: the risk scores of a
-thousand simulated futures were being averaged together, drowning out the
-dangerous minority. Scoring the riskier *tail* of those futures instead is
-the change behind F1 0.01 → **0.91** and the difference between never
-crossing the alert bar and warning on 8 of 10 episodes. Diagnosis, then a
-targeted fix — not a knob turned at random.
+Nineteen failed or corrected experiments are written up in
+[`ml/reports/RUN9_NEGATIVE_RESULTS.md`](ml/reports/RUN9_NEGATIVE_RESULTS.md).
 
 ## Where it's headed next
 
-NIDRA is tuned to be confident before it speaks — precision 0.95 on the
-test day. The two clearest levers from here are the ones the constraints
-section names: **more compute** (the model currently sees 7% of the
-available training windows) and **more attack-labelled telemetry** (it
-learns from a few hundred positive examples). Both are resource limits
-rather than design problems, which is the good kind of bottleneck to have.
+The model learns network dynamics; the risk layer reading those dynamics is the
+bottleneck. The next step is a risk model that makes better use of the simulated
+trajectory without being trained on it, which keeps the forecast honest. Better
+data for advance warning — attacks with a visible run-up on the same host —
+matters more than a bigger model.
 
 ## Learn more
 
-- [`README.md`](README.md) — full plain-English scorecard, every metric
-- [`ml/MODEL_CARD.md`](ml/MODEL_CARD.md) — compact technical model card
-- [`ml/REAL_DATA_RESULTS.md`](ml/REAL_DATA_RESULTS.md) — every number,
-  every experiment, full provenance — nothing hidden, nothing smoothed over
+- [`README.md`](README.md) — results, limits and quickstart
+- [`ml/ARCHITECTURE.md`](ml/ARCHITECTURE.md) — the two-page architecture document
+- [`ml/reports/PS_BASELINE_BENCHMARK.md`](ml/reports/PS_BASELINE_BENCHMARK.md) — the
+  logistic-regression comparison, with each system at its own threshold
+- [`ml/REAL_DATA_RESULTS.md`](ml/REAL_DATA_RESULTS.md) — every number and every
+  experiment, with provenance
