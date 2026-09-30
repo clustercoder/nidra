@@ -1,0 +1,24 @@
+{
+  "split": "holdout",
+  "seed": 0,
+  "raw": {
+    "median_lead_time_s": 15750.0,
+    "lead_time_distribution_s": [
+      27750.0,
+      3750.0
+    ],
+    "n_episodes": 2,
+    "n_no_warning": 0,
+    "fraction_no_warning": 0.0
+  },
+  "calibrated": {
+    "median_lead_time_s": 15810.0,
+    "lead_time_distribution_s": [
+      27990.0,
+      3630.0
+    ],
+    "n_episodes": 2,
+    "n_no_warning": 0,
+    "fraction_no_warning": 0.0
+  }
+}

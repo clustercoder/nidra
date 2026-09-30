@@ -1110,3 +1110,1007 @@ an attribute React did not render, which is a real hydration mismatch; `<html>` 
 `suppressHydrationWarning`, which is what every theme implementation does and what the
 attribute being deliberately out-of-band requires. Verified zero hydration warnings after.
 Extends: D100.
+
+---
+
+## 2026-09-20
+
+**D102 — Δ = 60 s is the canonical window; the Δ=30 artifacts are frozen under a tag, not
+kept live.** The CIC-IDS2017 TrafficLabelling CSVs print minute-resolution timestamps (no
+seconds field), so a 30 s window could only ever be populated at the :00 offset: every :30
+window was an artificial all-zero state, half of all risk positives were those empty
+windows, and persistence error oscillated with parity (ml/reports/NIDRA_REEVALUATION_2026-09-19.md
+§4.1, §18). `windowing.window_seconds: 60`, `schema.WINDOW_SECONDS = 60`. Per CLAUDE.md a Δ
+change invalidates every trained artifact and recorded metric: the published Δ=30 Run 7
+state is tagged `baseline-delta30-run7` with a digest manifest
+(ml/experiments/BASELINE_MANIFEST_delta30_run7.json); its processed tables are removed from
+the working tree (recoverable with `git checkout baseline-delta30-run7 -- ml/artifacts/processed/`)
+because the loader's cache key changed and dead files that no code can read are worse than
+none. Overrides: `window_delta: 30` everywhere it was written down (CLAUDE.md key
+parameters, ML_README, config).
+
+**D103 — Flow/packet fusion is an outer join over flow-source hosts within the day file's
+flow time range.** A CICFlowMeter flow is stamped at its start, so a host with one long-lived
+connection starts a flow in one minute and sends packets for many minutes with no new flow
+start; the old left join emitted every such minute as an all-zero `is_active=0` row — on
+Tuesday 24,377 host-minutes, 39% of the minutes a host was actually transmitting. Those
+minutes now carry their packet aggregates (flow-start aggregates legitimately 0,
+`active_flow_count` counts flow STARTS). Two restrictions keep the population and extent
+defined by the flow records: hosts must appear as a flow source in the day file (labels are
+keyed on the flow source), and windows must fall inside the file's own flow time range (three
+Friday day files share one full-day PCAP). Measured after the change: on active rows packet
+features are populated 99.5–99.7% of the time, flow-start features 51–53%. Cache key gains
+`__fuse2`. Extends: IMPLEMENTATION-ML.md §2.4.
+
+**D104 — One cached table per day serves every history/horizon geometry.** The cache key no
+longer carries `min_windows_per_host`; the table is the unfiltered state table with the
+K-independent `stage_label`, and `risk_label` is re-derived for the configured K while hosts
+are filtered to ≥ L+K windows when a split is assembled (`train.pipeline.build_all_splits`).
+`labels.risk_threshold_windows` must equal `windowing.horizon_length` (checked). Needed for
+the L=15/K=3 vs L=30/K=6 comparison without re-windowing 8 day files per candidate.
+
+**D105 — Validation is a trailing 30% block of EACH training day, and labels are recomputed
+inside each split after the cut.** The training days are consecutive, so one trailing block
+off the concatenated timeline was just the end of Wednesday: validation held one Heartbleed
+episode on one host (54 positives at Δ=30) and every checkpoint, pooling, threshold and
+calibration decision rested on it. Per day at 30% (episode-nudged) validation holds Tuesday's
+SSH brute force (63 windows) and Wednesday's Heartbleed (21) — two episodes, two families —
+and training keeps FTP-Patator and the Wednesday DoS block (139 attack windows). 25% gives the
+same split; 20% would drop SSH-Patator back into train and leave validation with Heartbleed
+alone. Recomputing `risk_label` per split removes the ≤K train positives that were derived
+from validation-block windows. Test (Friday) and holdout (Thursday) are untouched.
+Overrides: `val_fraction_of_train_time: 0.15` on the concatenated timeline.
+
+**D106 — The scaler is feature-specific transforms + z-scoring on ACTIVE training rows;
+constant and duplicate features are dropped at fit time; FEATURE_ORDER stays 45 wide.** The
+shipped RobustScaler was the identity (98% silent rows put both quartiles at 0, sklearn
+substituted scale 1) and twelve heavy-tailed features saturated the ±10 clip on 45–90% of
+active rows. `schema.FEATURE_TRANSFORMS` declares log1p / asinh / zscore / unit per feature;
+statistics are fit on active rows so an all-zero window maps to a distinct fixed point; a
+feature constant on active rows (other than `is_active`) or duplicating an earlier one
+(|corr| > 0.999) is dropped — output forced to 0, excluded from the dynamics loss and the
+state-forecast metrics via `FeatureScaler.model_mask` — and the reason is recorded. The
+45-wide schema is a cross-service contract (backend, frontend types, SHAP), so dropping means
+"the model never reads it", not "the column disappears". The artifact is plain JSON
+(`feature_scaler.json`), no pickled sklearn object, and every fit writes
+`preprocessing_audit.{json,md}` next to it. Overrides: IMPLEMENTATION-ML.md §2.5 RobustScaler.
+
+**D107 — Dynamics checkpoints are selected on FREE-RUNNING validation NLL.** The original
+criterion was teacher-forced multi-step NLL, which scores a model that is fed the true
+future at every step — not the model that is deployed. `train_dynamics.selection_metric:
+val_free_running_nll` scores the deterministic K-step rollout (own predictions fed back)
+against the true future; free-running MSE, persistence MSE, skill and 90% band coverage per
+horizon are logged every epoch. `val_multistep_nll` remains available for reproducing the
+Δ=30 artifacts. Loss options `beta_nll`, `mse_aux_weight`, `nonsilent_sample_weight` are
+off by default and only turned on by a recorded experiment.
+
+**D108 — Risk head: imbalanced BCE with pos_weight, Gaussian input noise σ=0.3 in scaled
+space, selected on validation natural-prevalence AP; stage head selected separately on
+validation macro-F1; independent optimizers.** Five recipes were trained on one dynamics
+checkpoint (geomA_L15K3, seed 0) and benchmarked on the Δ=60 validation set (head on
+observed states at natural prevalence / world-model path): imbalanced+noise 0.655/0.660,
+balanced no noise 0.599/0.638, balanced+noise 0.378/0.505, balanced with pos_repeat 5 and
+lr 3e-4 0.566/0.601, the Δ=30 recipe 0.630/0.686. With 147 training positives every recipe
+peaks within the first epochs; balanced sampling (each positive 20×/epoch) overfits fastest.
+The recipe was chosen on the head's own validation statistic, not on the world-model path,
+so the head decision does not lean on the dynamics. Validation holds two episodes, so these
+are one-seed numbers without a usable cluster interval; that is stated wherever they are
+cited. `risk_sampling: balanced` stays available for reproduction.
+
+**D109 — Onset targets are explicit and shared: P(an episode BEGINS within h min | S_t) for
+h ∈ {1,3,5,10,15,30}, defined only at origins outside any episode.** `nidra/data/onset.py`
+computes episode geometry once for the training arrays and the evaluation set (Task B), so
+the two cannot disagree about "onset". A frozen `OnsetHead` (own artifact) is trained on
+observed states as the explicit supervised baseline for Task B and reported as
+`onset_head_direct`. On CIC-IDS2017 it has 69 pre-onset training windows within 30 min and
+reaches validation AP at the prevalence level (≈3e-5 at 5 min): from the current state alone
+an onset is not predictable on this data. That is reported as a finding, not tuned away.
+Rows inside an episode are never onset positives (an ongoing attack is not a forecast).
+
+**D110 — ATT&CK mapping is a curated table, generated into docs, never learned.**
+`nidra/data/attack_mapping.py`: stage bucket → tactic(s) with a per-bucket note on what
+network telemetry can resolve; CIC-IDS2017 label → technique(s) of the tool the dataset
+authors ran. `docs/ATTACK_MAPPING.md` is generated from it and a test keeps them equal.
+The `exfil` bucket contains only DoS/DDoS in this dataset and the table says so; a predicted
+stage sequence is emitted as "projected stage sequence (model-internal)".
+
+**D111 — Serving applies the operating point frozen on validation.** `operating_point.json`
+(pooling statistic, per-horizon Platt calibration, F1-optimal threshold, all chosen by
+`nidra.eval.benchmark --split val --select-operating-point`) overrides the config's pooling
+and the legacy `risk_calibration.json` when present. The trajectory pooling is one numpy
+implementation shared by the benchmark and the predictor, so the served number is the
+measured one. The Δ=30 config's `risk_pooling_quantile: 0.85` was chosen by looking at
+test and holdout F1; that path is no longer how a threshold or pooling is chosen.
+
+**D112 — Geometry: L=30 windows (30 min) of history, K=6 windows (6 min) of horizon at
+Δ=60 s.** Controlled comparison on the Δ=60 validation benchmark, seed 0, one head recipe
+(D108), same evaluation set: L=15/K=3 gave published-label AP 0.682 against 0.686 for
+persistence (risk head on S_t) and 0.687 for persistence + learned noise — no world-model
+contribution at the risk level; state skill vs persistence 0.47 (ridge two-lag 0.64).
+L=30/K=6 gave 0.761 against 0.713 / 0.751, ΔAP over persistence +0.048 [−0.03, +0.28]
+(two validation episodes, so the interval is wide), state skill 0.50 (ridge 0.65), and the
+same per-horizon risk AP at k ≤ 3 (0.79/0.92/0.78 vs 0.81/0.80/0.78). The longer context
+is where the learned mean shows any effect, and the six-minute horizon is the one the
+problem statement's lead-time claim needs; the cost is 2× training time and a stage
+forecast that decays from 0.66 top-1 at k=1 to 0.01 at k=6 on attack futures (reported).
+The Stage-5 loss variants are screened at L=15/K=3 (half the cost per run) and the chosen
+variant is then trained at L=30/K=6 for production — the assumption that a loss change
+transfers across the two geometries is stated here, not hidden. Also fixed on the same
+evidence: quantile pooling at q ≥ 0.85 (the Δ=30 shipped statistic) scores 0.13–0.16
+natural-prevalence AP on validation against 0.68–0.76 for mean / P(trajectory > 0.5)
+pooling — the tail statistic is dominated by silent hosts under natural prevalence.
+
+**D113 — Dynamics loss: β-NLL with β = 0.5 is kept; the two-lag linear skip, the MSE
+auxiliary term and non-silent sample weighting are not.** Screened at L=15/K=3, 20 epochs,
+seed 0, one head recipe trained on every split row (D114), identical validation set
+(caps 15000 active / 5000 silent). Natural-prevalence AP on the published label for the
+world model vs persistence (risk head on S_t) vs persistence + learned noise, and
+state-forecast skill vs persistence (ridge two-lag: 0.638):
+
+| variant | world model | persistence | + learned noise | state skill |
+|---|---|---|---|---|
+| plain NLL | 0.728 | 0.730 | 0.713 | 0.399 |
+| β-NLL 0.5 | **0.806** | 0.730 | 0.750 | **0.629** |
+| MSE aux 1.0 | 0.793 | 0.730 | 0.752 | 0.593 |
+| non-silent weight 3 | 0.813 | 0.730 | 0.756 | 0.519 |
+| linear skip | 0.751 | 0.713 | 0.712 | 0.625 |
+| linear skip + β-NLL | 0.750 | 0.713 | 0.722 | 0.662 |
+| β-NLL + non-silent | 0.749 | 0.730 | 0.741 | 0.649 |
+
+Under the plain NLL the learned mean adds nothing at the risk level (−0.002 vs
+persistence) and the state forecast is far below a linear two-lag fit; the failure is the
+known heteroscedastic-NLL pathology (the loss lets the model explain the active rows away
+with variance instead of fitting their mean). β-NLL fixes the mean (skill 0.63 ≈ ridge) and
+is the only variant that improves both axes; the paired episode bootstrap of AP(world
+model) − AP(persistence) is +0.077 [+0.005, +0.309] — two validation episodes, so the
+interval is what it is. The linear skip matches β-NLL on state skill but not on risk AP;
+its combination with β-NLL has the best state skill (0.662) and a lower risk AP (0.750),
+so it is left available (`model.transition.linear_skip`) but off. The screen is one seed
+per variant; the production run at L=30/K=6 with five seeds is the confirmation.
+
+**D114 — Heads are trained and selected on every observed state of the split.** The
+windowed subsample the dynamics need (500k of 2.3M training rows, 50k of 900k validation
+rows) is the wrong sample for a function of one state: on the same head, the selection
+statistic computed on the 50k weighted validation subsample was 0.72 while the benchmark
+set gave 0.42, the gap being three external hosts one sample happened to contain.
+`train/head_data.py` makes every row one sample; validation selection is then the exact
+natural prevalence with no weights. Effect on the validation benchmark (same dynamics):
+head on S_t 0.42 → 0.73 AP, and the head no longer changes by ±0.3 between otherwise
+identical runs. The benchmark's active/silent negative caps were raised to 15000 / 5000
+for the locked runs for the same reason (a 2000-row silent sample gives one false alarm the
+weight of 340 positives).
+
+**D115 — Run 8 production result: the Δ=60 five-seed ensemble ships as-is, with the
+natural-prevalence numbers as the only published ones, and the risk-level world-model
+claim scoped to what the benchmark supports.** `experiments/runs/production` (24 epochs,
+β-NLL, heads on every split row), operating point frozen on validation (median pooling,
+threshold 0.718). Test AP 0.058 [0.018, 0.199] against persistence 0.065 (ΔAP −0.007
+[−0.026, +0.011]); holdout AP 0.439 [0.000, 0.768] against 0.295 (+0.143 [−0.000,
++0.283]); state-forecast skill vs persistence 0.587 / 0.616 (ridge 0.565 / 0.595). Three
+things were decided on that evidence. (1) Nothing is re-tuned: the test result is the
+first look at Friday under this protocol and stays the published one; the Bot-C2
+breakdown (833 of 946 positives on five workstations, head ROC-AUC 0.37) is reported as
+diagnosis beside the headline, never instead of it. (2) The stochastic rollout stays the
+served path although the deterministic one scores +0.023 [+0.003, +0.048] higher on test
+— the band and P(attack within horizon) need sampled trajectories, and on holdout the
+sign reverses (−0.058 [−0.169, +0.014]). (3) The history-aware risk head (a head on the
+encoder state at each rollout step, trained on observed pairs and frozen) is recorded as
+the next change, not made now: the validation split shares families with training and
+cannot select for family transfer, so adopting it would mean choosing it on test. The
+published claim becomes: learned dynamics that beat a linear reference at the state level
+on every split; risk-level forecasting that helps on Thursday's unseen families and not
+on Friday's; no demonstrated advance warning on this dataset. Runs 1–7's scorecard is
+withdrawn as a description of the system and kept for provenance.
+
+**D116 — Leave-one-day-out is the family-transfer split; its two runs are recorded, not
+averaged, and neither changes the shipped artifacts.** `experiments/runs/lodo_without_wednesday`
+(scored on DoS/Heartbleed: world model 0.451, +0.189 [+0.000, +0.249] over persistence, best
+system) and `lodo_without_tuesday` (scored on Patator: 0.167 vs 0.155, +0.012 [−0.053,
++0.348]; GBDT 0.768 and ridge 0.652 rank better because the DoS-trained head fires on
+Tuesday's benign traffic, and the run's one-episode Heartbleed validation could not select
+a head or a threshold — 0.102). The second run is a property of the dataset's day
+structure (two attack days in training, one validation episode each way), so LODO can
+select a future head architecture only on the day whose validation block the head can
+see, and any such selection must be reported with that caveat. Leave-one-episode-out was
+not run (five retrains at ~1 h each, and the two LODO runs already cover both training
+attack days).
+
+**D117 — CTU-13 enters as a flow-only dataset, and the features it cannot produce are
+declared drops rather than zeros.** (2026-09-23) The 13 Argus `.binetflow` captures
+(19,976,700 flows, 2.73 GB, CVUT, August 2011) are read through `nidra/data/ctu_load.py`
+into the same windowing, labelling and split machinery as CIC-IDS2017. The PCAPs shipped
+alongside them are **not** used: the public ones contain only the botnet's own traffic —
+the full captures were withheld for privacy — so any packet feature derived from them
+would be a perfect label, since only infected hosts would have one. The eleven packet
+aggregates are therefore unavailable rather than missing, and with them `iat_max` (Argus
+records no per-packet timing) and `d_retrans_rate`. `FEATURE_ORDER` stays 45 wide because
+it is a cross-service contract; the exclusions are a named **regime**
+(`schema.FEATURE_REGIMES`) applied through the scaler's existing `drop` kind, so an
+excluded column is forced to zero in scaled space, left out of `model_mask`, and travels
+with the artifact instead of being reconstructed at each call site. `cross_core` (32
+features) keeps the six TCP flag ratios and measures the estimator shift
+(`data/dataset_shift.py`) rather than assuming it away; `cross_strict` (24) drops all
+eight flag-derived columns. Argus `State` is parsed as flags only for TCP rows containing
+`_` — `CON`, `INT`, `URP`, `RED` and the other word states are not flag letters and must
+never be read as any. The internal-CIDR host filter (147.32.0.0/16) drops 88 of 444,699
+botnet flows, 0.02%.
+
+**D118 — CTU's validation split is held-out captures, not a temporal carve out of
+training.** (2026-09-23) The default carve put 88% of scenario 1 into validation and left
+training with 192 positives against validation's 1225 — a validation block larger in
+attack content than the training set, which cannot select anything. Captures 4 and 6 are
+held out instead (train 1,2,3; test 8,9,10; holdout 5,13,12; 7 and 11 are too short to
+window at Δ=60 and are excluded). Measured before and after: 161/1197 positives becomes
+1358/213. The cost is that validation shares families with training, exactly as on
+CIC — which is why family transfer is measured by the leave-one-family-out configs
+(`config/lofo/`), never by the validation split.
+
+**D119 — The history-aware risk head is a declared component set over the rollout, and
+the frozen-head discipline is unchanged.** (2026-09-23) `TrajectoryRiskHead` reads any
+subset of {`state`, `hidden`, `delta`, `logvar`} — the predicted state, the encoder's
+recurrent summary after ingesting it, the realized backward difference of the trajectory,
+and the transition's predicted log-variance. Training pairs still come from **observed**
+states only (`train/head_context.py` builds the identical quantities from observed
+history, and a test asserts head training never calls `rollout`), so every unit of
+forward-looking capability still originates in the transition model. Three consequences
+were decided rather than discovered later. (1) There is deliberately no `horizon`
+component: under the frozen-head discipline a head only ever sees observed states, where
+"how many ingested windows were predictions" is identically zero, so a horizon input
+would be constant in training and out of distribution at inference; horizon dependence
+enters through `logvar` and the per-horizon Platt calibration. (2) The head reads
+`RolloutOutput.realized_deltas()`, the trajectory's own backward difference, not `mus` —
+under a stochastic rollout the realized change is mu plus noise, and the training pairs
+are observed backward differences. (3) `components=[state]` builds the plain Run 8
+`RiskHead`, so the ablation's control is that architecture exactly, not a reimplementation
+of it. Variants share one stage-1 checkpoint: `train_heads` loads only the `encoder.*` and
+`transition.*` keys and asserts none are missing, which both enables the sharing and makes
+a shape mismatch loud.
+
+**D120 — `persistence_rollout` is the strict transition ablation.** (2026-09-23) The
+existing `persistence` system is the risk head on S_t, which for a history-aware head is
+not the same system minus the transition — it is a different wiring. `state_source` on
+`WorldModel.rollout` now selects where the next state comes from (`model` / `persist` /
+`truth`), so persistence and the oracle are the *same* forward simulation with only that
+one thing swapped: the encoder still advances, the head still gets its history, and the
+only thing removed is the predicted change. A test asserts `persistence_rollout`
+coincides exactly with `persistence` for a per-state head, so the new system cannot
+quietly change Run 8's comparisons.
+
+**D121 — The onset head gains a discrete-time hazard parameterisation, as a controlled
+alternative and not a replacement.** (2026-09-23) Run 8's independent per-horizon BCE
+could and did report P(onset within 1 min) above P(onset within 30 min). The hazard form
+fits bucket j only on rows still at risk in it and reads out
+P(within h_m) = 1 − Π(1 − p_j), which is monotone by construction and can use censored
+rows ("no onset within 30 minutes" is what was observed, not "no onset ever"). The
+architecture is byte-for-byte the same either way — only the loss and the readout differ —
+which is what makes the comparison an ablation rather than two models. `independent`
+remains the default until the comparison is run.
+
+**D122 — Observation time is distinct windows times Δ, not the range from first to last
+timestamp.** (2026-09-23) `false_alarms_per_hour` divides by this, so a span that is too
+large flatters the model. `max(ts) − min(ts)` is the observation time only of a split that
+is one continuous capture. CIC-IDS2017's splits are single working days and the two
+definitions agree to within 0.25% (test 8.05 → 8.07 h, holdout 4.00 → 4.02 h, so Run 8's
+false-alarm rates stand). CTU-13's splits are separate captures made on different days of
+August 2011, and the idle nights between them are not time anything was watching: the
+naive range overstates the test split by 1.66× and the **holdout by 5.02×** (91.03 h of
+range over 18.13 h of capture), which would have divided the CTU false-alarm rate by five.
+Counting distinct window timestamps assumes nothing about contiguity, cannot double-count
+overlapping captures, and does not move with the number of hosts in a window.
+
+**D123 — The risk head reads the encoder's hidden state as well as the state, selected on
+CTU-13 validation, and the log-variance is rejected.** (2026-09-23) Six head variants on
+one frozen dynamics run, identical scaler and identical rows (`experiments/runs/ctu_heads__*`,
+`reports/tables/ctu_head_ablation_val.md`). `state+hidden` is adopted at AP 0.473 against
+the Run 8 head's 0.412, and the reason is not the 0.061: with 283 positives and 8 episodes
+that is noise. It is the only variant whose margin over `persistence_rollout` — the same
+head, the same encoder advance, only the predicted change removed — excludes zero
+(+0.033 [+0.0002, +0.055]), the first such interval in the project; its per-horizon AP goes
+0.631 → 0.574 where the Run 8 head's goes 0.560 → 0.209 against a flat oracle; its oracle
+sits ABOVE it at every horizon (+0.034 pooled) where Run 8's sat below (−0.031), which is
+the difference between a head that can use a better state forecast and one that cannot;
+and its served operating point is F1 0.60 at 5.7 false alarms per hour against 0.53 at
+10.2. `logvar` is rejected on measurement: it raised the observed-state screening metric
+(0.373 vs 0.353) and lowered the forecast benchmark (0.396 vs 0.412), and cost 0.037 on top
+of `state+hidden`. `delta` cost a further 0.006. Everything here is one dynamics seed and
+is reported as screening; three-seed confirmation and the test/holdout read follow, and the
+selection is not revisited on them.
+
+**D124 — Pooled AP is not the metric the history-aware head wins on, and that is said
+rather than worked around.** (2026-09-23) `state+hidden` scores 0.473 against 0.481 for the
+same head applied to the observed origin — a forward simulation that loses to looking at
+the present. With the transition disabled the rollout loses as much again, so the cost is
+the encoder ingesting synthetic windows at all, not what the transition predicts: the head
+is fit on hidden states reached over real observations and asked at inference about hidden
+states reached over six of its own. Two consequences. (1) The published composite is a max
+over six correlated horizons while the present-state baseline is one clean score, so the
+per-horizon Task C table — where the head wins at every k and by 2.7× at k=6 — is the
+honest place to read the forecasting claim, and both are reported. (2) The mismatch is a
+measurement, so it gets an experiment rather than a caveat: `train_heads.context_noise`
+applies the regularizer the state component already carries to the context components,
+scaled per component by its own batch standard deviation. It stays inside the frozen-head
+discipline — observed inputs, perturbed — and defaults to 0.0.
+
+**D125 — The discrete-time hazard onset parameterisation is not adopted; the onset head
+does read the encoder's hidden state.** (2026-09-23) A 2×2 on identical frozen dynamics —
+what the head reads × how its horizons are parameterised
+(`experiments/runs/ctu_onset_*`). Hazard is identical to independent per-horizon BCE for
+the state-only head and slightly worse for the history-aware one (validation AP 0.0007 vs
+0.0010 at 3 minutes). Its argument was coherence, which it delivers by construction, but it
+fits each bucket only on the rows still at risk in it and the buckets hold 10 / 20 / 20 /
+50 / 43 / 120 events: splitting 263 events six ways costs more variance than the
+monotonicity is worth. It stays behind `onset.parameterisation` because the argument
+returns with a denser dataset. The hidden state is adopted for the onset head on the same
+evidence as for the risk head: lift over the base rate goes from 2.1× to 4.1× at 3 minutes
+and 2.0× to 3.4× at 5. Both numbers rest on 24 and 40 positive validation origins and none
+of it produces a usable warning — 0 of 8 episodes warned before onset under every
+configuration — so the published claim is unchanged: **NIDRA has not demonstrated advance
+warning.** What CTU-13 establishes is that the ceiling is a data property (10 positive
+training origins at one minute out of 1,417,909 eligible) rather than obviously a model
+property.
+
+**D126 — Context noise is not adopted: it closes the exposure gap by removing the
+transition model's contribution.** (2026-09-23) `train_heads.context_noise` was written
+from the measurement in D124 and does exactly what it was designed to do. At σ=0.1 the
+`state+hidden` rollout's validation AP rises 0.473 → 0.480, the oracle 0.506 → 0.536 and
+the k=6 tail 0.574 → 0.585. It also lifts `persistence_rollout` from 0.440 to 0.490, which
+takes the transition ablation margin from +0.033 [+0.0002, +0.055] to −0.010 [−0.075,
++0.020]. The two effects are one effect: a head made robust to a perturbed hidden state is
+robust to *which* windows the encoder ingested, so it neither suffers from feeding the
+encoder its own predictions nor benefits from those predictions being good. +0.007 AP,
+inside the noise of 283 positives, does not buy the only statistically supported transition
+signal the project has. σ=0.3 is worse on every column. The knob stays, defaulting to 0.0,
+because the diagnosis behind it is correct and a mechanism that closes the gap without
+flattening the head's sensitivity to its input is the obvious next thing to try.
+
+**D127 — `ctu_4:c2` and `ctu_4:recon` fail for opposite reasons, and a supervised probe is
+how we know.** (2026-09-23) `nidra/scripts/group_separability.py` fits a gradient-boosted
+probe on the training captures' rows for an attack STAGE and scores a validation group —
+cross-host and cross-capture, so it cannot answer with host identity. Rbot C2 (23 windows)
+comes back at ROC **0.443**, below chance: capture 4's C2 does not resemble captures 1–3's
+C2 in 32 flow features at Δ=60, and no head architecture reaches it. Rbot recon (17
+windows) comes back at ROC **0.970** where NIDRA scores chance — the signal transfers
+across hosts and the model is not finding it, on a stage early enough in the kill chain to
+be where advance warning would come from. That is the phase's most actionable gap.
+Two methodological notes travel with the probe. Its first version scored rows that no fold
+could score at a default 0.0, which put every positive at the bottom and produced a
+confident ROC of 0.100 for all four groups — a bug that read as a finding; rows a fold
+cannot score are now dropped. And every attack group on the CTU validation captures has its
+positives on exactly ONE host, so neither the probe nor the model separates "learned the
+behaviour" from "learned the host"; the host-leaky within-split probe reaches ROC
+0.913–0.996 on all four groups including the one that does not transfer at all, which is
+the measurement of what host identity alone buys. The same caveat applies to Run 8's Friday
+Bot-C2 result.
+
+**D128 — D127's "Rbot C2 is not separable" is WITHDRAWN; the signal is in the stage head, and
+fusing the two frozen heads does not recover it.** (2026-09-23) D127 concluded from a
+gradient-boosted transfer probe's ROC of 0.443 that `ctu_4:c2` is not reachable in 32 flow
+features at Δ=60 and that no head architecture would find it. That is wrong.
+`nidra/scripts/stage_head_diagnostic.py` scores NIDRA's own frozen STAGE head on the same 23
+windows, trained on the same captures, cross-host and cross-capture by the same
+construction: ROC **0.864**. The probe was the weaker learner, not the ceiling. Both Rbot
+failures are model failures, and the probe's verdict is one-sided — a `yes` proves the
+signal exists and transfers, a `no` proves only that this probe missed it. The script, its
+`separable` property and the table it writes now all say so, and a test pins the wording;
+the retracted paragraph is kept struck through in the report rather than deleted.
+The diagnostic also shows the risk head is not merely blind to the stages it misses but
+ranks them BELOW chance — c2 0.434 and recon 0.320 against the stage head's 0.854 and 0.638
+— while the two heads agree on exfil (0.915 / 0.910), the one stage with enough positives to
+dominate the pooled `risk_label`. That is the shape a pooled-objective problem has.
+`nidra/scripts/head_fusion_screen.py` then tested the cheap fix, since both heads are frozen
+and a scalar rule fits nothing: all five parameter-free rules LOSE against the published
+head (noisy-or −0.0026, max −0.0097, mean −0.0233, geometric −0.0379 AP). Per stage a fused
+score lands between the two heads rather than above either, because the risk head's
+confident scores on 172 exfil windows outrank the stage head's correct ordering of 24 c2
+ones and one pooled ranking cannot hold both. Not adopted. The evidence points at a
+stage-aware risk objective (§12), which is now motivated rather than speculative.
+
+**D129 — 20% of CTU validation's forecast positives are the silent state, and the
+history-aware head answers them with the host's name.** (2026-09-23)
+`nidra/scripts/silent_positive_audit.py`. `risk_label[t]` marks the window BEFORE an attack,
+and on CTU every such window is silent: 71/71 on train, 84/84 on val have `is_active == 0`,
+and 63 and 58 of them are within 1e-5 of the scaler's silent state on all 45 features —
+bit-identical to 1,026,383 and 47,650 negatives. Inside that stratum the best AP any
+function of the state can reach is the stratum's prevalence (0.001216 on val), which is a
+ceiling and also a leak check. The published state-only head emits exactly ONE distinct
+score over all 47,708 rows and lands on 0.001216 at ROC 0.5000; the bound is tight and the
+check passes. CIC has the same structure more weakly (pre-onset windows silent 24/45 train,
+9/22 val), so CTU's advance-warning signal specifically is a silence phenomenon.
+The `state+hidden` head produces 11,599 distinct scores there and reaches AP 0.0707 — 58x
+the ceiling, the largest number in the phase, and it does not survive decomposition. All 58
+floor positives sit on ONE host; replacing each score by its host's mean reproduces the
+ranking at ROC 0.9993, and within that host the head scores AP 0.4460 against a prevalence
+of 0.4567 — lift 0.98x, worse than a constant, ROC 0.3836. The head recognises the infected
+host, not the moment. ROC 0.4242 alongside 58x lift was the tell. §3.4's composite result is
+untouched (its positives are mostly real attack traffic); what is retracted is any reading
+of it as advance warning from silence. `floor_stratum_probe` reports the decomposition and
+flags `is_host_identity` generically, with a separate `is_constant` so a state-only head is
+not described as carrying timing signal. Consequence: the single-infected-host confound,
+not the architecture, is this phase's binding limitation — neither corpus has two infected
+hosts in one attack stage on one split, and §4/§12 will inherit that.
+
+**D130 — the history-aware head's advantage is timing signal on CIC and mostly host identity on
+CTU; aggregate AP alone would have said the opposite.** (2026-09-23) The host/timing
+decomposition from D129 generalises to any stratum (`--probe-stratum all`), and every attack
+group in both corpora has its positives on one host, so §3.4's headline needed it. Aggregates
+agree across the datasets: state -> state+hidden moves val AP 0.353 -> 0.489 on CTU and 0.678
+-> 0.783 on CIC. The decomposition does not. On CTU both heads score BELOW a host-level
+constant (host-mean AP 0.7579 against 0.3531 and 0.4894) and reach within-host ROC 0.656 and
+0.662 — flagging every window of the infected host would outscore the model. On CIC both beat
+it (host-mean 0.4196 against 0.6781 and 0.7825) and the history-aware head reaches within-host
+ROC 0.9245 against 0.8256, so its improvement is reproduced inside the host where only timing
+is left. Within-host ROC is prevalence-independent and comparable across the two; within-host
+LIFT is not, because CTU's infected hosts are 75.8% attack windows against CIC's 42.0%, and
+neither resembles a deployment. This answers the roadmap's question of whether Run 8's
+risk-head limitation is a CIC artifact: it is not, and the direction is reversed — CIC is
+where the model does genuine temporal work. §17's scorecard must carry within-host ROC beside
+the aggregates, because a scorecard of aggregate AP would have concluded the opposite (CTU's
+gap, +0.136, is the larger one). Host-mean ROC is 0.9995 and 0.9999, so the single-host
+confound is near-total on both. One seed, validation only; no test or holdout read.
+
+**D131 — the history-aware head replicates in all three training regimes, which is not the
+same as replicating the thing we want.** (2026-09-23) Three dynamics models (CTU-only,
+CIC-only at the cross_core mask, CIC+CTU combined), each with both head variants fitted on its
+own frozen encoder and transition, so within a regime the only change is what the head reads:
+val AP 0.3531 -> 0.4894 (CTU), 0.6781 -> 0.7825 (CIC), 0.3850 -> 0.5130 (combined). Same
+direction, similar size, three times. The rows are NOT comparable to each other — each regime
+has its own validation set, prevalence and difficulty, so the combined regime sitting below
+CIC-only reflects the mixture rather than a cost of combining. And per D130 most of CTU's
++0.136 is better recognition of the infected host, not of the moment, while CIC's +0.104
+survives the within-host test. An aggregate replication shows the effect is not a fluke of one
+split; it does not show the effect is the one being claimed. Stage A screening, one seed per
+cell, validation only; Stage B (3 seeds) is queued behind the cross-dataset matrix.
+
+**D132 — the stage-balanced risk objective, pre-registered before running.** (2026-09-23)
+D128 left the §12 direction motivated by evidence rather than speculation: the risk head ranks
+recon and c2 below chance where the stage head ranks them at 0.638 and 0.854, and no scalar
+fusion recovers it because one pooled ranking cannot hold both orderings.
+`train_heads.stage_balanced_positives` (default false, so every earlier run reproduces bit for
+bit) weights each positive by the inverse frequency of its own STAGE and rescales so the
+positive class's total weight is unchanged — the positive/negative balance, pos_weight, the
+sampler, the frozen dynamics, the seed and the data are all held fixed, and only the mix
+inside the positive class moves. `risk_head_loss` grew an optional per-row `sample_weight`
+normalised by its own total, so the loss scale does not track the weight total and the
+learning rate need not move with it.
+The criteria are written in the report (§3.13) BEFORE the run, because the expected outcome
+includes aggregate AP going DOWN — AP on CTU is dominated by exfil and the intervention
+deliberately stops exfil owning the gradient — and a criterion chosen afterwards would be one
+fitted to the result. Primary: recon and c2 rise above chance. Secondary: within-host ROC does
+not fall. Guardrail: exfil does not fall below 0.85. A fall in aggregate AP with all three met
+is a success and will be reported as one with the cost stated (§32). Criterion 1 failing kills
+the §12 direction, and that will be reported too.
+
+**D133 — training and validation have ONE infected host on both datasets; test and holdout
+have ten.** (2026-09-23) Counting per split: CIC train/val 179 and 94 positives on
+`172.16.0.1` alone, CTU train/val 1418 and 288 on `147.32.84.165` alone; CIC test 982
+positives on 10 hosts, CTU test 3814 on 10, holdouts 2 and 3. So every positive the model has
+ever trained on, and every positive behind any validation number in this phase, comes from a
+single machine per corpus — while the test and holdout splits do contain cross-host
+generalisation, most of those hosts never infected during training. This BOUNDS D130 rather
+than overturning it: D130's finding is about what a single-host validation split can show,
+and how either head behaves across ten infected hosts is settled on test, which the running
+cross-dataset matrix produces. Two consequences. The probe now reports `per_host_roc_macro`
+— ROC inside each infected host, averaged — because with several infected hosts the pooled
+within-host columns regain a between-host component, which is host identity one level down;
+on a single-host split the two are identical, which is why it did not matter until now.
+And `host_id` is the flow's SOURCE, so a positive attaches to the host emitting attack
+traffic: on CTU that is an internal infected workstation, but on CIC train/val it is
+`172.16.0.1`, the dedicated attack machine outside the victim network. Forecasting that the
+attack box will attack is an easier and different problem from forecasting internal
+compromise, and CIC's validation figures must be read that way; CIC test is where the
+internal 192.168.10.x hosts appear.
+
+**D134 — a finer Δ cannot help CTU's precursors, and the advance-warning question belongs on
+CIC.** (2026-09-23) Before paying the cost of changing `window_delta` — which invalidates
+every trained artifact and every recorded metric — measure whether Δ=60 is actually rounding
+a precursor away. It is not. CTU's infected host has emitted nothing for a median of 4.5
+minutes (val) or 47 minutes (train) before an attack starts, max 21 hours; splitting a silent
+minute into silent quarter-minutes yields silent quarter-minutes. The direction is closed for
+one query's cost. A probe fit on that host's own TRAIN rows and scored on its VAL rows —
+same host, so identity is unavailable, forward in time, so nothing leaks — returns AP equal
+to the base rate and ROC of exactly 0.5000. Q1 is answered: the absence of advance warning on
+CTU is a property of the capture.
+CIC is the opposite and must not be answered with CTU's number: in 83% of its validation
+onsets the host is active in the window immediately before the attack (median gap 60 s, p90
+60 s), and the same probe reaches ROC 0.7500 where Run 8 reported Task B at the prevalence
+floor. So there IS something to find on CIC — but `is_active` alone reaches 0.6783 of it, so
+the genuine precursor content beyond bare activity is the gap between 0.75 and 0.68. Q14's
+Δ=15 direction is withdrawn and replaced by advance-warning work on CIC, with that modest
+ceiling stated up front rather than discovered later.
+
+**D135 — the experiment matrix, and a provenance record that misstated which split a capture
+was in.** (2026-09-23) `nidra/scripts/experiment_matrix.py` renders every run in
+`experiments/runs/` from its own provenance record: corpora, day counts per split, feature
+regime, geometry, stages, seeds, commit and wall clock. Generating it from the records rather
+than by hand satisfies §33's two rules at once — a record per experiment, and no hidden
+failures: a run that failed is in the directory and therefore in the table, and the 0-minute
+rows from the onset 2x2 that the zsh glob bug silently skipped are visible as 0m. 36 runs,
+15.2 recorded hours on one M1.
+Building it found two defects. Reading the corpus from the record's prose `name` and cutting
+at the first parenthesis reported the COMBINED runs as CIC-only; corpora are now counted from
+the days' formats. And `dataset.days[].role` is a hand-written annotation that had drifted
+from `cfg["splits"]`, which is what actually assigns days — `ctu_4` and `ctu_6` are annotated
+`role: test` and are the validation captures, so every CTU record written before today
+misstates their split. Nothing downstream reads the annotation (`build_all_splits` uses
+`cfg["splits"]`), so no result is affected and the report's validation numbers are validation
+numbers; but a provenance record that misstates a split is worse than none, and
+`provenance.py` now derives the role from `cfg["splits"]` and keeps a disagreeing annotation
+beside it as `role_annotated_in_config`.
+The matrix also made explicit that the two datasets' "validation" are different kinds: CTU's
+is two held-out captures of unseen families, CIC's is the last 30% of the training days' own
+time. Both are legitimate and neither leaks, but the second is the easier target and part of
+why CIC's figures sit above CTU's in D130 and D131. Recorded in §3.16.
+
+**D136 — "cross-host by construction" was wrong; CTU reuses the same infected address across
+scenarios.** (2026-09-23) `147.32.84.165` is the bot in CTU captures 1, 2 and 3 (train) AND in
+4 and 6 (validation), under three different malware families; CIC's train and validation both
+carry `172.16.0.1`. So §3.8's transfer probe and §3.9's stage-head comparison are cross-capture
+and cross-family, NOT cross-host, and the text claiming they "cannot answer with host identity"
+is corrected. The one-vs-rest label does penalise pure host recognition — that host's own
+benign windows are negatives — but that is a partial control, not the structural guarantee
+claimed. The MEASUREMENTS stand; what changes is what they exclude. D130's CTU finding gets
+stronger rather than weaker: host-mean ROC 0.9995 on validation is not a within-split
+curiosity, because the model trained on that exact address in captures 1-3 and is scored on it
+in 4 and 6, so it had the chance to memorise the machine and the decomposition says it did.
+D128's central claim survives untouched, being a comparison of two heads on identical rows
+where any host information is available to both. Consequence: NO validation number in this
+phase is cross-host. Both test splits contain nine hosts never infected in training and both
+holdouts contain one; those are the only cross-host evaluations available, and the running
+matrix produces them. `group_separability`'s docstring states this and a test pins it.
+
+**D137 — the scorecard's "FA/h" column was a per-row fraction, hiding a 208/hour transfer
+failure.** (2026-09-23) Smoke-testing `cross_dataset_scorecard` against the first completed
+matrix arm, rather than running it once at the end, found `row_for` reading
+`active_benign_false_alarm_rate` — a fraction of active-benign ROWS — and printing it under a
+heading reading FA/h. It rounds to 0.00 at two decimals, so every regime appeared to produce
+no false alarms. `report_tables.py` and `compare_runs.py` read the correct
+`false_alarms_per_hour`; only the scorecard was wrong. It now carries alerts/hour, false
+alarms/hour and the active-benign rate as three separate labelled columns, and tests pin both
+the distinction and that a "not run" filler row has the same column count as a real one.
+The number it was hiding matters: CIC->CTU transfer fires 207.97 false alarms/hour on test and
+186.18 on holdout at precision 0.011 and 0.002, against 0.38-4.02/h for CIC->CIC. The
+operating point frozen on CIC validation does not transfer to CTU at all — an unusable
+operating point reported as silence. One seed, state-only head, matrix incomplete; recorded
+now because the defect is, not as a conclusion.
+
+**D138 — the cross-dataset matrix was missing its most important arm.** (2026-09-23) Auditing
+the queue against §2's five regimes found no CTU->CTU evaluation at all: the `ctu_heads` runs
+had validation metrics only, so the within-dataset generalisation result for the dataset this
+whole phase is about was never going to be produced. It is also the only place CTU's
+cross-host question can be settled — CTU test carries ten infected hosts against validation's
+one (D133, D136) — which makes it the arm D130's host-versus-timing finding actually depends
+on. `comb2cic` likewise had val and test but no holdout, so the combined model would never
+have been scored on Thursday's infiltration. Both are queued in a second pass that waits for
+the first, reusing each run's frozen `operating_point.json` so test and holdout only LOAD the
+selection rather than redo it. `q_stage` was re-chained behind both passes (recreated rather
+than edited, since editing a running zsh script corrupts its read position — D124).
+
+**D139 — the transfer arms verifiably carry the source domain's operating point, and the
+pooling rules differ between regimes.** (2026-09-23) §2 requires a transfer evaluation to take
+nothing from the target domain. Checking the threshold actually recorded in each finished
+benchmark rather than trusting the queue: CIC->CIC and CIC->CTU both use 0.501969
+(`mean|q=-|integrated`), CTU->CIC uses 0.181961 (`mean|q=-|max`) which is exactly
+`ctu_heads__state`'s frozen `operating_point.json`, and both combined arms use 0.040888
+(`p_above_half|q=-|max`). Every transfer carries its SOURCE run's validation-selected point
+unchanged; nothing was selected on a target domain or re-selected on test or holdout.
+The check surfaced a caveat for reading the scorecard: the three source runs selected
+DIFFERENT pooling rules on their own validation (CIC integrated, CTU and combined max;
+combined also `p_above_half` rather than `mean` across members). Each choice is legitimate and
+each was made on its own validation, but a row-to-row comparison therefore compares systems
+including their pooling, which is the right unit for "what would you deploy" and the wrong one
+for "does adding CTU help the dynamics" — that needs pooling held fixed and is a separate run
+not in this matrix. It is also the mechanism behind D137's 208 false alarms/hour: a threshold
+chosen against CIC's score distribution means something else against CTU's.
+
+**D140 — `--force-pooling`, so Q2 and Q3 can be asked with the readout held fixed.**
+(2026-09-23) D139 found that each run selects its own pooling on its own validation, so a
+scorecard row-to-row comparison differs in the readout as well as the training set. That is
+the right unit for "what would you deploy" and the wrong one for §31 Q2 and Q3, which ask
+whether ADDING a dataset helps. `benchmark.py --force-pooling '<method>|q=<q>|<horizon>'`
+scores under a named rule instead of the selected one, changing only the readout — the
+threshold and calibration still come from the source run's own selection, which is why the
+result is a controlled comparison and explicitly NOT a deployable configuration. The metrics
+record `pooling_forced: true` and `pooling_key_selected`, so a forced run cannot be mistaken
+for a selected one; the key must round-trip through `pooling_key` or the run is refused,
+since silently scoring under a rule other than the one named would make the comparison
+meaningless. Four cells are queued at lowest priority behind every other queue: CIC-only and
+combined on CIC test, CTU-only and combined on CTU test, all at `mean|q=-|max`. If the machine
+does not reach them, the scorecard is reported with the caveat attached rather than without.
+
+(Entry written late: the code and tests shipped in 0d9ded9, but the background job holding
+this text was waiting on a sentinel its test run never printed, so it never fired. Nothing
+about the decision changed — only when it was recorded.)
+
+**D141 — the served path could not run the head this phase is selecting.**
+(2026-09-23) `NidraPredictor` is the whole ML surface the backend imports, and every one of
+`forecast`, `forecast_batch`, `counterfactual` and `explain` raised on a `TrajectoryRiskHead`.
+Four call sites asked `score_states` for a risk number, which a history-aware head cannot
+produce from a bare state, and two asked `explain_current_risk` for an attribution without
+the context it holds fixed. Nothing caught it because every serving test built the Run 8
+per-state head, so §4's whole point — pick the head on evidence — would have produced a head
+that could be evaluated and not served.
+
+The fix keeps the per-state numbers bit-identical, which is the condition that makes it safe:
+`RolloutOutput.pool` concatenates the WHOLE rollout rather than just `states`, and scoring
+goes through `score_trajectory`, which for a per-state head is exactly `score_states(states)`;
+the observed origin goes through `score_observed`, which for a per-state head is exactly
+`score_states(x[:, -1, :])`; the one stage-only call uses the new `score_stage`. Both
+attribution sites now pass `WorldModel.observed_context`, making the current-risk explanation
+a CONDITIONAL attribution (the head's other inputs held at the origin's real values while
+SHAP perturbs the state) rather than an attribution against an implicit zero context, which
+would have looked entirely plausible and meant something else.
+
+`score_states` now raises a `TypeError` naming the three alternatives instead of a bare arity
+error from inside `nn.Module.__call__`. `eval/baselines.py` is deliberately NOT taught the
+history-aware heads: it serves only `run_eval.py`, the legacy balanced-subsample harness whose
+numbers are already not comparable to the natural-prevalence protocol, and a loud refusal
+naming the fix is the right failure there. The natural-prevalence harness
+(`benchmark.py` → `systems.py`) already handled both.
+
+Six tests in `tests/test_predictor_trajectory_head.py` drive the whole served surface with a
+`("state", "hidden")` head. Its weights are random, so none of its NUMBERS are asserted — one
+test does assert that two windows sharing a final state but differing earlier score
+differently, which is the check that the history actually reaches the head rather than
+arriving zeroed.
+
+**D142 — the benchmark refuses a scaler fitted under a different feature regime than the checkpoint.**
+(2026-09-23) A probe resolved `config/combined_eval_ctu.yaml` without the queue's
+`--set artifacts.scaler_dir=<source run>/artifacts/scaler`, so it got the shared
+`ml/artifacts/scaler` — which a later training run had rewritten at the full-45 regime,
+against a model trained at `cross_core`'s 32. Nothing raised. A dropped feature is ZEROED
+rather than removed, so the tensor shapes match, `load_state_dict` succeeds and the rollout
+runs; the only symptom was an AP 2.9× away from the independently recorded value for that
+cell, and it was noticed only because that recorded value existed to cross-check against.
+All 20 recorded cross-evaluation cells were audited and every one used a scaler from its own
+model's family, so no published number is affected.
+
+`load_models` now compares the loaded scaler's `dropped_features` against each checkpoint's
+recorded `dropped_features` and raises, naming the differing features and the checkpoint
+rather than just the counts. Checkpoints written before that field existed pass through
+unchecked: refusing them would break replaying Run 8's artifacts, which §29 forbids, and the
+guard is worth having for new work even if it cannot cover old.
+
+The drop set is the right thing to compare rather than a file hash. A hash would false-alarm
+on a legitimately refit but equivalent scaler, it is not recorded in the checkpoint metadata,
+and it would not say what differs. The drop set is exactly the property whose mismatch is
+silent.
+
+What is NOT fixed: `config/cic2ctu.yaml`, `config/ctu2cic.yaml` and
+`config/combined_eval_ctu.yaml` are still not self-contained — each is correct only when run
+with the scaler override, and the shared directory they otherwise resolve to is rewritten by
+whatever trained last. The guard turns that from a wrong answer into a refusal, which is the
+right first move and not the whole fix.
+
+**D143 — the benchmark refuses a risk head the checkpoint was not trained with.**
+(2026-09-23) Three `state+hidden` transfer arms produced no metrics at all. The transfer
+configs (`cic2ctu.yaml`, `ctu2cic.yaml`, `combined_eval_ctu.yaml`) are generic evaluation
+configs and do not declare `model.risk_head.components`, so `world_model_from_config` built
+the 45-wide per-state head and `load_state_dict` refused the 173-wide checkpoint. The failure
+was correct and loud; it was invisible because the queues write `rc=$?` after a pipeline,
+which reads `tail`'s status, so three crashes were logged `rc=0`. Six cells were missing from
+the cross-dataset matrix and the only symptom was three dashes in a scorecard dry run.
+
+`load_models` now compares the config's `risk_head_components(cfg)` against the checkpoint
+metadata's `risk_head_components` and raises a message quoting the exact
+`--set model.risk_head.components=[...]` that fixes it. This is strictly better than the
+shape error in two ways: it names the remedy rather than the symptom, and it catches the case
+where two different component sets happen to produce the same input width, which
+`load_state_dict` cannot. Metadata that is absent or unparseable passes through —
+`load_state_dict` stays the backstop, and a guard that crashes on a malformed record is worse
+than one that declines to judge it.
+
+Paired with D142: both are the same failure class — an evaluation configured against
+artifacts it does not match — and both were found by cross-checking a number rather than by a
+test. The tests exist now; they would not have caught either, because neither was a logic
+error in a function.
+
+The queues' `rc=$?` is fixed only in the recovery queue (`${pipestatus[1]}` plus an explicit
+`FAILED` line). The already-running queues are left alone: editing a script zsh is still
+reading is worse than the defect it would fix.
+
+**D144 — the persistence null is diagnosed, and the diagnosis is structural.**
+(2026-09-23) §3.32 found the world model's margin over persistence at −0.0100 [−0.0342,
++0.0034] for the `state+hidden` head at three seeds. Two escapes were closed before accepting
+it. First, the ablation is valid for a trajectory head: `rollout` advances the hidden by
+feeding the state actually produced, so under `persist` the GRU sees S_t six times and under
+`model` the predicted trajectory — the transition is removed from the hidden channel too, and
+`realized_deltas()` is identically zero. Second, the pre-registered divergence test (§3.33)
+came back on its second branch: the rollout moves the hidden state 40–62%, so the ablation
+bites, and the head's answer still does not move (positives-only composite correlation
+0.9910, attack mean differing 0.28%).
+
+The mechanism, with a null: the head's first layer responds to the rollout's displacement
+with a gain of 0.0909 and to a random displacement of the same norm with 0.0845 — 1.08×. The
+head is no more sensitive to the transition model than to noise. The null matters; without it
+0.0909 reads as orthogonality, which is a different claim and false.
+
+The structural reading is the one worth keeping. The risk head trains on OBSERVED states and
+freezes (invariant 1), so its readout separates observed hidden states and has no mechanism
+to become sensitive to where a rollout displaces them. That invariant exists to make the
+forecasting claim falsifiable, and here it returned a negative. Unfreezing the head on
+predicted states would close the gap and would also remove the reason the project is
+defensible — so it is not an option, and the null is reported as the result.
+
+~~One real effect AP cannot see: the benign composite mean halves under the model rollout
+(0.00412 → 0.00201) while the attack mean is unchanged.~~ **Withdrawn 2026-09-23 under
+D145.** Re-measured with the phantom feature slots masked, the benign composite means are
+**0.00672 against 0.00796** — a 19% difference, in the opposite direction, and not a
+halving. The effect was an artifact of untrained values in dropped feature slots, not
+something the transition model does. It had already been flagged here as not reportable as
+a false-alarm improvement; it is now withdrawn as an effect at all.
+
+**Every figure in this entry re-measured under D145's fix (§3.46), on identical rows
+(`ctu_heads__state+hidden`, val, n=1,483). The conclusion is unchanged; two of the numbers
+are not.** Hidden relative divergence 40–62% → **39–54%**, so the phantom was inflating the
+far end. The head's answer on positives 0.28% → **0.36%**; composite correlation 0.9910 →
+**0.9817**. Head-layer gain on the rollout's displacement 0.0909 → **0.0962**, against
+0.0845 → **0.0835** on a random displacement of equal norm, so the ratio is **1.15×** rather
+than 1.08× — a larger margin over the null, and still nowhere near a coupling.
+
+§3.33's pre-registered criterion was 10% divergence, and both the old and the new figures
+clear it by a factor of four, so the pre-registered conclusion is unaffected. It would not
+have been had the criterion been set at 55%. That is an argument for fixing a criterion
+against what would change the answer rather than against what the data happens to look
+like.
+
+## D145 — 2026-09-23 — The rollout manufactured state in features that carry no gradient
+
+`train/losses.py` masks dropped features out of the transition loss: a feature the
+scaler found constant or duplicated is excluded from the NLL and MSE reductions, so
+the transition network receives **no gradient at all** on those output dimensions.
+That part is deliberate and sensible — there is nothing to fit.
+
+`rollout()` did not carry the same contract. It fed the transition's untrained output
+back in as the next state, so whatever the network happened to emit in a dropped slot
+compounded once per step. Measured on `comb2cic_state+hidden`, 13 dropped of 45:
+
+| k | dropped slots, rms | abs max | kept slots, rms | true kept, rms |
+|---|---|---|---|---|
+| 1 | 0.581 | 2.24 | 0.643 | 0.712 |
+| 3 | 1.245 | 4.10 | 0.650 | 0.716 |
+| 6 | 2.035 | 6.21 | 0.695 | 0.709 |
+
+The input holds those slots at exactly 0.0 and so does the true future. By k=6 the
+forecast carried three times more magnitude in features that do not exist for this
+dataset pair than the real features carry, against a state clamp of 10.
+
+Why it matters beyond tidiness. The frozen risk head reads the 45-dim state. In
+training those 13 slots were always exactly zero, so the head's weights on them were
+never constrained by data — they are whatever initialisation and weight decay left.
+At inference the rollout feeds them rms-2.03 inputs. The risk score therefore contains
+a per-host projection of untrained weights onto untrained drift, growing with horizon.
+
+This is a candidate mechanism for two anomalies already recorded — candidate, not
+demonstrated; see the magnitude check below:
+
+- **§3.24's "the oracle is not an upper bound"** (13 of 28 cells beat it). The oracle
+  runs `state_source="truth"`, whose dropped slots are exact zeros, so it gets no
+  contribution through those weights at all, while the system under test gets a
+  host-specific one. The four *substantial* oracle-beats are all combined-training
+  cells, which is where the regime drops the most features.
+- **The deterministic arm scoring below chance in 12 of 24 cells** (ROC as low as
+  0.009). The mean path drives the phantom slots systematically with nothing to
+  average them out; sampling 40 draws partially cancels them.
+
+Both of those were reported as findings. Neither is safe to keep in that form.
+
+**The magnitude does not order the anomaly, though.** Phantom rms at k=6, against the
+real features' rms in the same rollout:
+
+| cell | phantom rms k=6 | abs max | real rms | ratio | oracle-beating? |
+|---|---|---|---|---|---|
+| CIC → CIC, `state+hidden` test | 1.69 | 6.31 | 0.45 | **3.8×** | no |
+| CTU → CTU, `state+hidden` test | 2.12 | 8.95 | 0.95 | 2.2× | no |
+| comb → CIC, `state+hidden` test | 2.01 | 5.78 | 0.68 | 2.9× | **yes** |
+| comb → CTU, `state+hidden` holdout | 2.49 | 8.88 | 0.68 | 3.7× | **yes** |
+
+The defect is present in **every** cell of the cross-dataset matrix — all of them use a
+regime that drops 13 or 15 features — and in every one the phantom carries more
+magnitude than the real features. But the largest ratio belongs to a *non*-anomalous
+cell. So D145 contaminates every cross-dataset number, and separately it is **not yet
+shown** to be why two of them beat their oracle. §3.24's cells stay unexplained until
+the masked re-score says otherwise.
+
+**Pre-registered, before the `mask_*` cells land.** If D145 is the mechanism behind the
+oracle anomaly, masking removes the oracle-beating in `comb2cic/test` and
+`comb2ctu/holdout`. If those cells still beat their oracle once the phantom slots are
+zero, the mechanism is refuted and negative result 10 stands as it is.
+
+**Fix.** `WorldModel.set_feature_mask()` takes the kept-feature mask from the scaler;
+`rollout()` applies it to `nxt`, `mu` and `logvar` after the clamp. All three are
+exposed to a head — `mu` to `state+delta`, `logvar` to `state+logvar` — and leaving any
+of them untrained puts the contamination straight into the head comparison of §3.22,
+where the decomposable `state+logvar` head is the most interesting arm. `logvar` is
+pinned to the transition's own floor rather than zeroed: a log-variance of 0 asserts
+UNIT variance, a loud claim at the scale a head reads, whereas the floor says "this slot
+does not vary", which is what a dropped feature means. Sampling in a dropped slot cannot
+reach the state, because the mask is applied after the noise is added. The mask is not a
+checkpoint entry — it belongs to the scaler, and
+`load_models` sets it from the scaler that the D142 guard already requires to match.
+Passing `None` restores the old path exactly, so the recorded runs stay reproducible.
+
+**Blast radius.** 40 of 63 run scalers drop features: every CTU-13 run (15 dropped) and
+every combined run (13 dropped). The 23 CIC-only `full`-regime runs drop nothing and
+are arithmetically unaffected — **Run 8 is not touched by this**, and its artifacts are
+not re-run regardless.
+
+The correction is being measured on six affected cells, written to `mask_*` rather than
+over the originals, for the same reason the reproduction re-run was: if the numbers
+move, the published figures must stay matched to the artifacts that produced them.
+
+**Scope correction, same day.** `rollout()` was not the only exposed path. Found by
+grepping for every direct `transition()` call and every `WorldModel` construction
+rather than by reasoning about which ones mattered: `observed_context` (serving),
+`train/head_context.py` (head training), `explain/counterfactual.py` (the served
+what-if, which re-implements the rollout loop to re-clamp the intervened feature) and
+`NidraPredictor` (which loads its own ensemble). All four now carry the contract;
+`train/losses.py` already masked, being the origin of the defect rather than a victim.
+`eval/run_eval.py` and `scripts/fit_calibration.py` are deliberately left unmasked —
+the legacy balanced-subsample harness, producing no Run 9 number, kept to reproduce
+Runs 1–7.
+
+In the counterfactual the mask is applied *after* the intervention, so a what-if on a
+dropped feature is inert rather than a confident answer about a quantity the model has
+no information on.
+
+**Third correction, and the one worth reading.** Wiring the mask at each call site was
+itself the bug. `benchmark.load_models` and `NidraPredictor` got it; the *training*
+entry point did not. Re-running the decomposable-head comparison "under the fix" then
+returned `state+logvar` = **0.7754417090891179** — bit-identical to the unfixed run,
+because `build_head_context` was calling `mask_logvar` on a model whose mask was still
+`None`. The run exited zero, produced a full record, and said nothing had changed,
+which is exactly what a real negative result would have looked like. It was caught only
+because bit-identical is too good for a retraining run.
+
+The mask now comes from `world_model_from_config`, the single construction point, so
+every path that builds a model gets it and the two call sites were deleted rather than
+kept in parallel. `run_eval.py` and `fit_calibration.py` go through the same builder,
+which is safe: the default scaler drops nothing, so their mask is `None` and Runs 1–7
+reproduce unchanged.
+
+A no-op that reads as a result is worse than a crash. The re-queued comparison carries
+`state` and `state+hidden` as controls: they do not read `logvar`, so they must come
+back unchanged, and if everything comes back unchanged again the harness is lying.
+`observed_context` (serving) and `train/head_context.py` (head *training*) both call the
+transition directly and take its `logvar`, so a `state+logvar` head was trained against
+13 untrained log-variances out of 45. Both now go through a shared `mask_logvar`
+helper. `state`, `hidden` and `delta` are built from observed data and were always
+clean. The consequence is that §3.38's decomposable-head comparison must be
+*re-trained*, not merely re-scored — `cic_core_decomp_masked` does that, with `state`
+and `state+hidden` as controls that do not read `logvar`.
+
+**The pre-registered test came back negative on both cells it named.** Masking does not
+remove the oracle-beating: `comb2cic/test` went from +0.0951 over its oracle to
+**+0.1499** (the gap grew), and `comb2ctu/holdout` from +0.0528 to **+0.0435** (shrank
+18%, nowhere near closed). The hypothesis in this entry is refuted and §3.24's cells
+remain unexplained.
+
+What the correction surfaced instead, in both anomalous cells: the frozen head ranks at
+or below chance on the **true** future states (oracle ROC 0.367 and 0.558, persistence
+0.194 and 0.456) and far above chance on states its own transition model produced
+(0.967 and 0.897). Both are combined-training cells. A projection-onto-the-learned-
+manifold hypothesis fits that, and is recorded as a hypothesis with no criterion yet —
+§3.27 is the standing reminder of what happens to an explanation on this question that
+is not given one in advance. The deterministic arm's below-chance ROC is not the phantom either
+(0.254 → 0.266).
+
+The correction itself does not go one way. Raw AP: comb → CIC test +0.0548, CTU → CTU
+test +0.0050, comb → CTU test −0.0147. A claim drafted off the first cell — "the
+phantom was costing accuracy" — was withdrawn when the third landed. An untrained
+signal projected through untrained weights helps some cells and hurts others, which is
+why the whole matrix is being re-scored rather than the correction estimated from a
+sample.
+
+---
+
+## D146 — 2026-09-24 — Run 9's architecture call is `state`, the head it set out to replace
+
+Run 9 exists because Run 8's per-state `RiskHead` failed on unseen attack families, and
+the phase's candidate replacement was `TrajectoryRiskHead`, which reads the encoder's
+recurrent summary alongside the predicted state. On the objective heads are trained
+against it wins clearly and repeatedly: three training regimes with the encoder and
+transition frozen so the head is the only variable (§3.12), then three seeds off one
+checkpoint (§3.29), then a decomposable 90-dimensional variant that matches the opaque
+173-dimensional one (§3.48).
+
+**It does not win the objective the system is evaluated against.** §3.47 pre-registered
+the bar — win mean benchmark AP at both splits with no seed-distribution overlap at
+either, the same standard the validation claim cleared — and §3.49 ran it on §3.29's own
+weights. `state+hidden` won CTU test 3/3 with no overlap and lost CTU holdout 1/3 with
+overlap, so the bar is not met. On ROC the per-state head wins both splits, on holdout by
+0.912 against 0.587. Across the wider one-seed matrix `state` leads on ROC in 11 of 12
+cells and clears its own baselines in 7 of 12 against 3 of 12.
+
+**Decision.** §36 item 7 is answered `state`, and §32's ranking is what decides it: it
+puts recall at controlled false-alarm rates and cross-dataset generalisation above
+aggregate AP, and AP is the only axis on which the history-aware head leads. Two systems
+with almost identical average precision, one of which ranks near chance on the held-out
+split, are not equivalent for a head whose job is to order hosts.
+
+**What this is not.** It is not a release: no Run 9 artifact is proposed for shipping,
+and `MODEL_CARD_RUN9.md` designates no configuration. It is not a finding that the
+history-aware head is worthless — it halves false alarms at the operating point (§3.32)
+and is the better alert. And it does not close `state+logvar`, which won validation 3/3
+paired and has no benchmark evidence at all; that is the obvious next run and it was not
+run here.
+
+**Why this is written down.** The phase's headline claim was that the history-aware head
+is a real improvement. It is — on head-training validation AP. Recording the reversal as
+a decision rather than as a footnote is what keeps the two objectives from being quoted
+interchangeably later.
+
+---
+
+## D147 — 2026-09-24 — Paired intervals are computed on the arm the project publishes
+
+`nidra/eval/benchmark.py` has two bootstrap paths. `BOOTSTRAP_SYSTEMS` gives each system
+its own marginal interval; `ATTRIBUTION_PAIRS` gives the paired difference between two
+systems, which is the statistic §33 means by "every claimed improvement gets a baseline
+comparison". §3.31 found the published arm missing from the first list and added it. It
+is also missing from the second, and that went unnoticed for the length of the phase.
+
+Every pair in `ATTRIBUTION_PAIRS` starts from `world_model`: one trajectory, no
+calibration. `world_model_calibrated` — ~200 pooled trajectories through a per-horizon
+Platt layer at a validation-frozen threshold — is what every table, the scorecard and the
+model card report. So the significance test was correct and was about a different system
+from the one being published.
+
+**Decision.** The published arm's margin is reported from a paired episode-cluster
+bootstrap against **the strongest baseline in each cell**, recomputed offline from the
+`benchmark_scores.npz` dumps the benchmark already writes
+(`nidra/scripts/margin_intervals.py`, 24 tests, 47 s for 28 cells, no re-run). Per-cell
+rather than fixed-baseline: against one fixed rival a cell could be credited for beating
+whichever baseline happened to be weak there.
+
+Two rules that come with it. The verdict is `ci_low > 0` strictly, with an endpoint
+exactly on zero counting as *spans* — and it was fixed before the data was read and
+applied as written rather than adjusted afterwards. And a cell that clears zero by less
+than 1e-3 is flagged **knife edge**: at 300 resamples the percentile endpoint is an order
+statistic, and five of the six counted cells clear by less than that, three by about
+1e-05. Flagging rather than re-specifying is the point — the count stays honest and the
+reader is told what it is made of.
+
+**Result:** 3 of 28 above zero, 3 below, 22 spanning, and exactly one cell with room to
+spare — `CIC+CTU → CIC`, `state+hidden`, test, +0.0660 [+0.0235, +0.1296]. That is the
+cell §3.44 had already singled out on point estimates, and it is now the only claim in
+the phase's matrix backed by a paired interval.
+
+**Why this is written down.** "We report confidence intervals" and "we report confidence
+intervals on what we publish" are different claims, and only the second one is worth
+anything. The gap was invisible because the number it produced looked right.
+
+---
+
+## D148 — 2026-09-30 — The PS's logistic-regression comparison gives each system its own threshold
+
+PS 26153 asks for "benchmark results comparing model performance (F1 score, precision,
+recall, false positive rate) against a logistic regression baseline trained on the same
+features". `benchmark.py` records all four for every system, but `_task_table` reads every
+system at a single threshold: the world model's operating point, 0.718, selected on
+validation for `world_model_calibrated`'s Platt-calibrated score and for nothing else.
+
+Logistic regression trained with class weighting puts its scores near 1.0; its own
+validation-F1-optimal threshold is 0.99999…. Read at 0.718 it alerts on far more than its
+own threshold would, and the recorded comparison reported that mismatch as its
+false-alarm rate: **44.81 false alarms/hour on test and 70.17 on holdout, against 4.80 and
+4.89 at its own threshold** — overstated 9–14×. A draft of this phase's recommendations
+quoted the recorded figures as "80× fewer false alarms than LR" before the threshold was
+checked; it was not published.
+
+**Decision.** The PS benchmark is reported from `nidra/scripts/ps_baseline_benchmark.py`
+(9 tests): every system gets the rule the world model got — the weighted-F1-optimal
+threshold on validation, frozen, applied unchanged to test and holdout — read from the
+score dumps already on disk, so no model is re-run and no Run 8 artifact changes. AP is
+reported alongside because it needs no threshold, with a paired episode-cluster interval
+on the world model's margin. Output: `ml/reports/PS_BASELINE_BENCHMARK.md`.
+
+**Result, and what it does to the claim.** Against LR on the same features the world model
+still has 10× (test) and 5.7× (holdout) fewer false alarms, roughly double the precision,
+higher F1 on holdout (0.46 vs 0.35) and slightly lower on test (0.06 vs 0.07). Its AP margin
+excludes zero on test, +0.025 [+0.005, +0.058], and touches it on holdout, +0.197 [−0.000,
++0.366]. The claim survives at a tenth of the size the recorded table implied.
+
+`benchmark.json`'s per-baseline `at_threshold` blocks are left as recorded — changing
+them would alter Run 8 artifacts — and should not be quoted as a comparison. The
+harness-level fix (per-system thresholds inside `_task_table`) belongs in the next
+benchmark revision, not in a retroactive edit.

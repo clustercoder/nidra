@@ -1,0 +1,69 @@
+# NIDRA ML — CTU-13 only.
+#
+# Inherits every hyperparameter from config/default.yaml and changes ONLY the
+# dataset, the splits and the feature regime, so a CTU-only result and the
+# CIC-only Run 8 result differ because of the data and nothing else.
+#
+# CTU-13 (Garcia et al. 2014) is 13 captures of real botnet traffic inside the
+# CVUT university network, ~20M Argus flows over ten days in August 2011. The
+# adapter is nidra/data/ctu_load.py; the dataset audit, including why the
+# public PCAPs cannot be used, is reports/CTU13_DATASET_ASSESSMENT_2026-09-23.md.
+
+extends: default.yaml
+
+dataset:
+  ctu13_dir: "~/nidra/CTU-13-Dataset"
+  # The monitored network. Every labelled host — botnet and verified-normal
+  # alike — is inside it; everything else is Internet background appearing as
+  # a flow source. Set to [] to keep the whole source population (~40x the
+  # rows, dominated by hosts seen in one window).
+  ctu13_internal_cidrs: ["147.32.0.0/16"]
+
+  # Scenario -> role. The split is TEMPORAL first (train ends 2011-08-15
+  # 10:13, every evaluation capture starts after it) and the holdout is also
+  # a FAMILY holdout: Virut and NSIS.ay never appear in training. That is the
+  # same shape as the CIC-IDS2017 split — early days train, later days test,
+  # one unseen-family holdout — so the two datasets' protocols are
+  # comparable. See reports/CTU13_DATASET_ASSESSMENT_2026-09-23.md §7.
+  #
+  #  key       family    bot behaviour                       start (CEST)
+  days:
+    _replace: true
+    ctu_1:  {file: "1/capture20110810.binetflow",    format: ctu_binetflow, dataset: ctu13, role: train,   family: neris,   scenario: 1,  behaviour: "IRC, spam, click-fraud"}
+    ctu_2:  {file: "2/capture20110811.binetflow",    format: ctu_binetflow, dataset: ctu13, role: train,   family: neris,   scenario: 2,  behaviour: "IRC, spam, click-fraud"}
+    ctu_3:  {file: "3/capture20110812.binetflow",    format: ctu_binetflow, dataset: ctu13, role: train,   family: rbot,    scenario: 3,  behaviour: "IRC, port scan"}
+    ctu_4:  {file: "4/capture20110815.binetflow",    format: ctu_binetflow, dataset: ctu13, role: test,    family: rbot,    scenario: 4,  behaviour: "IRC, UDP DDoS"}
+    ctu_6:  {file: "6/capture20110816.binetflow",    format: ctu_binetflow, dataset: ctu13, role: test,    family: menti,   scenario: 6,  behaviour: "port scan"}
+    ctu_7:  {file: "7/capture20110816-2.binetflow",  format: ctu_binetflow, dataset: ctu13, role: test,    family: sogou,   scenario: 7,  behaviour: "HTTP"}
+    ctu_8:  {file: "8/capture20110816-3.binetflow",  format: ctu_binetflow, dataset: ctu13, role: test,    family: murlo,   scenario: 8,  behaviour: "port scan"}
+    ctu_9:  {file: "9/capture20110817.binetflow",    format: ctu_binetflow, dataset: ctu13, role: test,    family: neris,   scenario: 9,  behaviour: "IRC, spam, click-fraud, port scan (10 bots)"}
+    ctu_10: {file: "10/capture20110818.binetflow",   format: ctu_binetflow, dataset: ctu13, role: test,    family: rbot,    scenario: 10, behaviour: "IRC, UDP DDoS (10 bots)"}
+    ctu_11: {file: "11/capture20110818-2.binetflow", format: ctu_binetflow, dataset: ctu13, role: test,    family: rbot,    scenario: 11, behaviour: "IRC, ICMP DDoS (3 bots)"}
+    ctu_5:  {file: "5/capture20110815-2.binetflow",  format: ctu_binetflow, dataset: ctu13, role: holdout, family: virut,   scenario: 5,  behaviour: "spam, port scan, HTTP"}
+    ctu_13: {file: "13/capture20110815-3.binetflow", format: ctu_binetflow, dataset: ctu13, role: holdout, family: virut,   scenario: 13, behaviour: "spam, port scan, HTTP"}
+    ctu_12: {file: "12/capture20110819.binetflow",   format: ctu_binetflow, dataset: ctu13, role: holdout, family: nsis_ay, scenario: 12, behaviour: "P2P (3 bots)"}
+
+splits:
+  # Validation is held-out CAPTURES, not a trailing block of the training
+  # captures. On CTU-13 the trailing block is pathological: scenario 1's
+  # episode runs from 1.3h to past the 70% mark of a 6.1h capture, the
+  # no-straddle nudge moves the cut to 0.8h, and 88% of the capture — with
+  # every one of its attack windows — lands in validation. Scenario 6 is in
+  # validation on purpose: Menti appears in no training capture, so model
+  # selection is scored on a family transfer rather than on more of what the
+  # model was fit to. Every evaluation capture starts after the last training
+  # capture ends (2011-08-15 10:13).
+  train_days: [ctu_1, ctu_2, ctu_3]
+  val_days: [ctu_4, ctu_6]
+  test_days: [ctu_8, ctu_9, ctu_10]
+  holdout_days: [ctu_5, ctu_13, ctu_12]
+  # Scenarios 7 (21 min) and 11 (15 min) are shorter than L+K = 36 windows,
+  # so no sample can be built from either at this geometry. They are declared
+  # above and simply produce no rows; that is reported, not hidden.
+  unusable_at_this_geometry: [ctu_7, ctu_11]
+
+# CTU-13's Argus records carry no packet-level detail and no per-flow IAT
+# maximum, so those 13 columns are declared drops rather than being fed to the
+# model as constant zeros. See schema.FEATURE_REGIMES.
+features:
+  regime: cross_core

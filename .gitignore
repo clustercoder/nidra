@@ -236,9 +236,11 @@ artifacts/*
 # Raw CIC-IDS2017 dataset (CSVs + PCAPs) and any tshark-extracted parquet — large,
 # not a repository deliverable. See REAL_DATA_RESULTS.md for how to obtain it.
 cicids2017/
+# CTU-13: 74GB of captures and 2.7GB of Argus binetflow, plus live malware
+# binaries the release ships alongside each scenario. Never committed, never
+# executed — only the .binetflow files are read (nidra/data/ctu_load.py).
+CTU-13-Dataset/
 *.parquet
-# Raw captures and derived parquet.
-data/
 
 # ---------------------------------------------------------------- frontend --
 # Donor clones are read-only reference material harvested into tokens/docs.
@@ -263,3 +265,17 @@ deck/diagrams
 .DS_Store
 deck/node_modules/
 deck/render/
+
+# ---------------------------------------------------------------- ML merge --
+# Private internal notes — never commit
+INTERNAL_NOTES.md
+
+# Local environment files at ANY level. The bare `.env` rule above does not
+# match `.env.local` / `.env.production`, which left web/.env.local
+# committable until this was caught.
+.env.*
+!.env.example
+
+# Vercel project metadata and Next's generated type shim
+/web/.vercel/
+/web/next-env.d.ts

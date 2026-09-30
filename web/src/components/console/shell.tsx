@@ -2,16 +2,16 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, Bell, LayoutDashboard, Search, X } from "lucide-react";
+import { ArrowLeft, Bell, FileUp, LayoutDashboard, Search, X } from "lucide-react";
 
 import { NidraMark } from "@/components/icons";
 import { ConsoleThemeToggle } from "@/components/console/theme-toggle";
 
-export type ConsoleView = "dashboard" | "search";
+export type ConsoleView = "dashboard" | "search" | "capture";
 
 /** The rail is the one Splunk signature that carries the whole redesign: a
  * persistent, icon-only nav standing in for the app's destinations, distinct
- * from the content it points at. Two real destinations only — a rail entry
+ * from the content it points at. Three real destinations only — a rail entry
  * with nothing behind it is worse than no rail. */
 export function ConsoleRail({
   view,
@@ -25,6 +25,7 @@ export function ConsoleRail({
   const items: { key: ConsoleView; label: string; Icon: typeof Search }[] = [
     { key: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
     { key: "search", label: "Search", Icon: Search },
+    { key: "capture", label: "Analyse a capture", Icon: FileUp },
   ];
   return (
     <nav

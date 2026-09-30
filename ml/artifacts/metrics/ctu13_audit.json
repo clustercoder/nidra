@@ -1,0 +1,2501 @@
+{
+  "scenarios": {
+    "ctu_11": {
+      "day_key": "ctu_11",
+      "scenario": 11,
+      "family": "rbot",
+      "behaviour": "IRC, ICMP DDoS (3 bots)",
+      "role": "test",
+      "file": "/Users/manteksinghburn/nidra/CTU-13-Dataset/11/capture20110818-2.binetflow",
+      "file_bytes": 14596615,
+      "file_sha256": "d761b4513ee42be57193fe8f442e9234e73ac81f4fbd01248e37c23ca8ec1cf2",
+      "raw": {
+        "input_rows": 107251,
+        "accepted_rows": 107251,
+        "drop_reasons": {},
+        "distinct_source_hosts": 29157,
+        "distinct_destination_hosts": 15159,
+        "start_utc": "2011-08-18T15:39:35.087798119",
+        "end_utc": "2011-08-18T15:55:46.379941225",
+        "duration_hours": 0.27,
+        "protocols": {
+          "udp": 74884,
+          "tcp": 19307,
+          "icmp": 12805,
+          "igmp": 82,
+          "rtcp": 76,
+          "arp": 54,
+          "rtp": 21,
+          "ipv6-icmp": 12,
+          "udt": 5,
+          "rarp": 2
+        },
+        "timestamp_resolution": {
+          "distinct_sub_minute_offsets": 45532,
+          "sub_second_precision": true
+        }
+      },
+      "labels": {
+        "n_distinct_labels": 58,
+        "flows_by_class": {
+          "botnet": 8164,
+          "normal": 2718,
+          "background": 96369
+        },
+        "flows_by_stage": {
+          "benign": 99087,
+          "exfil": 8143,
+          "c2": 18,
+          "recon": 3
+        },
+        "top_labels": {
+          "flow=Background-UDP-Established": 37342,
+          "flow=To-Background-UDP-CVUT-DNS-Server": 30568,
+          "flow=Background-TCP-Established": 9363,
+          "flow=Background-Established-cmpgw-CVUT": 6981,
+          "flow=From-Botnet-V51-1-ICMP": 4144,
+          "flow=From-Botnet-V51-2-ICMP": 3999,
+          "flow=Background-Attempt-cmpgw-CVUT": 3378,
+          "flow=Background": 3230,
+          "flow=From-Normal-V52-Grill": 2113,
+          "flow=Background-UDP-Attempt": 1951,
+          "flow=Background-TCP-Attempt": 1244,
+          "flow=To-Background-CVUT-Proxy": 661,
+          "flow=From-Normal-V52-Stribrek": 581,
+          "flow=Background-UDP-NTP-Established-1": 287,
+          "flow=To-Background-CVUT-WebServer": 162
+        }
+      },
+      "botnet_source_hosts": {
+        "147.32.84.165": 4151,
+        "147.32.84.191": 4006,
+        "147.32.84.192": 7
+      },
+      "host_filter": {
+        "cidrs": [
+          "147.32.0.0/16"
+        ],
+        "flows_kept": 72646,
+        "flows_dropped": 34605,
+        "hosts_kept": 272,
+        "botnet_flows_dropped": 0
+      },
+      "windowed": {
+        "cache_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_11__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+        "window_seconds": 60,
+        "n_rows": 2562,
+        "n_hosts": 272,
+        "n_active_rows": 1703,
+        "active_fraction": 0.66472,
+        "n_attack_rows": 11,
+        "attack_prevalence": 0.004294,
+        "n_risk_positive_rows": 13,
+        "risk_prevalence": 0.005074,
+        "stage_counts": {
+          "benign": 2551,
+          "c2": 6,
+          "exfil": 5
+        },
+        "n_hosts_with_at_least_L_plus_K_windows": 0,
+        "n_rows_on_those_hosts": 0
+      },
+      "episodes": {
+        "n_episodes": 5,
+        "n_hosts_with_episodes": 3,
+        "length_windows": {
+          "min": 1,
+          "median": 2.0,
+          "max": 3,
+          "total": 11
+        }
+      },
+      "pre_onset": {
+        "by_horizon": {
+          "1": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "3": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "5": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "10": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "15": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "30": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "60": {
+            "n_rows": 0,
+            "n_episodes": 0
+          }
+        }
+      },
+      "feature_coverage": {
+        "syn_ratio": 0.33528,
+        "ack_ratio": 0.37393,
+        "rst_ratio": 0.17291,
+        "fin_ratio": 0.29469,
+        "psh_ratio": 0.33997,
+        "urg_ratio": 0.0,
+        "bytes_total": 0.66472,
+        "bytes_up_down_ratio": 0.55894,
+        "pkts_per_flow_mean": 0.66472,
+        "flow_duration_mean": 0.63232,
+        "flow_duration_var": 0.47619,
+        "iat_mean": 0.62959,
+        "iat_var": 0.4758,
+        "iat_max": 0.0,
+        "active_flow_count": 0.66472,
+        "ttl_mean": 0.0,
+        "ttl_var": 0.0,
+        "tcp_window_mean": 0.0,
+        "tcp_window_entropy": 0.0,
+        "frag_flag_rate": 0.0,
+        "payload_size_mean": 0.0,
+        "payload_size_var": 0.0,
+        "payload_size_p95": 0.0,
+        "payload_size_entropy": 0.0,
+        "retrans_count": 0.0,
+        "retrans_rate": 0.0,
+        "out_degree": 0.66472,
+        "in_degree": 0.08938,
+        "dst_ip_entropy": 0.3829,
+        "dst_port_entropy": 0.35363,
+        "new_peer_count": 0.44653,
+        "neighbour_risk_fraction": 0.15027,
+        "local_clustering_coeff": 0.00937,
+        "reciprocity": 0.66472,
+        "d_syn_ratio": 0.35597,
+        "d_dst_port_entropy": 0.39344,
+        "d_out_degree": 0.54098,
+        "d_new_peer_count": 0.43013,
+        "d_iat_var": 0.52459,
+        "d_retrans_rate": 0.0,
+        "slope3_syn_ratio": 0.33333,
+        "slope3_dst_port_entropy": 0.36534,
+        "slope3_out_degree": 0.50781,
+        "slope3_iat_var": 0.48322,
+        "is_active": 0.66472
+      },
+      "seconds": 3.5
+    },
+    "ctu_7": {
+      "day_key": "ctu_7",
+      "scenario": 7,
+      "family": "sogou",
+      "behaviour": "HTTP",
+      "role": "test",
+      "file": "/Users/manteksinghburn/nidra/CTU-13-Dataset/7/capture20110816-2.binetflow",
+      "file_bytes": 15630512,
+      "file_sha256": "f224baab443b56b2f0812cf2f9cdbb0f118b8af70095c196d9ead6a92c72ef0f",
+      "raw": {
+        "input_rows": 114077,
+        "accepted_rows": 114077,
+        "drop_reasons": {},
+        "distinct_source_hosts": 23057,
+        "distinct_destination_hosts": 16753,
+        "start_utc": "2011-08-16T13:51:24.049046993",
+        "end_utc": "2011-08-16T14:12:41.499667883",
+        "duration_hours": 0.355,
+        "protocols": {
+          "udp": 89247,
+          "tcp": 22889,
+          "icmp": 1653,
+          "igmp": 103,
+          "rtcp": 85,
+          "arp": 64,
+          "rtp": 25,
+          "ipv6-icmp": 7,
+          "ipx/spx": 2,
+          "pim": 1
+        },
+        "timestamp_resolution": {
+          "distinct_sub_minute_offsets": 45754,
+          "sub_second_precision": true
+        }
+      },
+      "labels": {
+        "n_distinct_labels": 52,
+        "flows_by_class": {
+          "botnet": 63,
+          "normal": 1677,
+          "background": 112337
+        },
+        "flows_by_stage": {
+          "benign": 114014,
+          "c2": 57,
+          "recon": 4,
+          "initial_access": 1,
+          "exfil": 1
+        },
+        "top_labels": {
+          "flow=To-Background-UDP-CVUT-DNS-Server": 45799,
+          "flow=Background-UDP-Established": 32659,
+          "flow=Background-TCP-Established": 11821,
+          "flow=Background-Established-cmpgw-CVUT": 10468,
+          "flow=Background-UDP-Attempt": 4088,
+          "flow=Background": 2999,
+          "flow=To-Background-CVUT-Proxy": 1706,
+          "flow=Background-Attempt-cmpgw-CVUT": 955,
+          "flow=From-Normal-V48-Stribrek": 807,
+          "flow=Background-TCP-Attempt": 565,
+          "flow=From-Normal-V48-Grill": 520,
+          "flow=Background-UDP-NTP-Established-1": 308,
+          "flow=From-Normal-V48-Jist": 292,
+          "flow=To-Background-CVUT-WebServer": 231,
+          "flow=From-Background-CVUT-Proxy": 71
+        }
+      },
+      "botnet_source_hosts": {
+        "147.32.84.165": 63
+      },
+      "host_filter": {
+        "cidrs": [
+          "147.32.0.0/16"
+        ],
+        "flows_kept": 86246,
+        "flows_dropped": 27831,
+        "hosts_kept": 294,
+        "botnet_flows_dropped": 0
+      },
+      "windowed": {
+        "cache_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_7__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+        "window_seconds": 60,
+        "n_rows": 3733,
+        "n_hosts": 294,
+        "n_active_rows": 2412,
+        "active_fraction": 0.64613,
+        "n_attack_rows": 5,
+        "attack_prevalence": 0.001339,
+        "n_risk_positive_rows": 7,
+        "risk_prevalence": 0.001875,
+        "stage_counts": {
+          "benign": 3728,
+          "c2": 4,
+          "exfil": 1
+        },
+        "n_hosts_with_at_least_L_plus_K_windows": 0,
+        "n_rows_on_those_hosts": 0
+      },
+      "episodes": {
+        "n_episodes": 3,
+        "n_hosts_with_episodes": 1,
+        "length_windows": {
+          "min": 1,
+          "median": 1.0,
+          "max": 3,
+          "total": 5
+        }
+      },
+      "pre_onset": {
+        "by_horizon": {
+          "1": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "3": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "5": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "10": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "15": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "30": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "60": {
+            "n_rows": 0,
+            "n_episodes": 0
+          }
+        }
+      },
+      "feature_coverage": {
+        "syn_ratio": 0.34771,
+        "ack_ratio": 0.37691,
+        "rst_ratio": 0.14091,
+        "fin_ratio": 0.31262,
+        "psh_ratio": 0.35441,
+        "urg_ratio": 0.0,
+        "bytes_total": 0.64613,
+        "bytes_up_down_ratio": 0.55103,
+        "pkts_per_flow_mean": 0.64613,
+        "flow_duration_mean": 0.61077,
+        "flow_duration_var": 0.47227,
+        "iat_mean": 0.60916,
+        "iat_var": 0.47147,
+        "iat_max": 0.0,
+        "active_flow_count": 0.64613,
+        "ttl_mean": 0.0,
+        "ttl_var": 0.0,
+        "tcp_window_mean": 0.0,
+        "tcp_window_entropy": 0.0,
+        "frag_flag_rate": 0.0,
+        "payload_size_mean": 0.0,
+        "payload_size_var": 0.0,
+        "payload_size_p95": 0.0,
+        "payload_size_entropy": 0.0,
+        "retrans_count": 0.0,
+        "retrans_rate": 0.0,
+        "out_degree": 0.64613,
+        "in_degree": 0.06858,
+        "dst_ip_entropy": 0.38066,
+        "dst_port_entropy": 0.35441,
+        "new_peer_count": 0.38441,
+        "neighbour_risk_fraction": 0.12296,
+        "local_clustering_coeff": 0.00696,
+        "reciprocity": 0.64613,
+        "d_syn_ratio": 0.39887,
+        "d_dst_port_entropy": 0.41709,
+        "d_out_degree": 0.55559,
+        "d_new_peer_count": 0.41227,
+        "d_iat_var": 0.54996,
+        "d_retrans_rate": 0.0,
+        "slope3_syn_ratio": 0.38762,
+        "slope3_dst_port_entropy": 0.3962,
+        "slope3_out_degree": 0.54192,
+        "slope3_iat_var": 0.52585,
+        "is_active": 0.64613
+      },
+      "seconds": 0.8
+    },
+    "ctu_5": {
+      "day_key": "ctu_5",
+      "scenario": 5,
+      "family": "virut",
+      "behaviour": "spam, port scan, HTTP",
+      "role": "holdout",
+      "file": "/Users/manteksinghburn/nidra/CTU-13-Dataset/5/capture20110815-2.binetflow",
+      "file_bytes": 17766203,
+      "file_sha256": "ec67980705e59d794eb2cea5a39d6ea23507a531036e1a8a6cc16c8985d15da9",
+      "raw": {
+        "input_rows": 129832,
+        "accepted_rows": 129832,
+        "drop_reasons": {},
+        "distinct_source_hosts": 28301,
+        "distinct_destination_hosts": 15039,
+        "start_utc": "2011-08-15T16:43:20.931207895",
+        "end_utc": "2011-08-15T17:13:26.758893967",
+        "duration_hours": 0.502,
+        "protocols": {
+          "udp": 95540,
+          "tcp": 31899,
+          "icmp": 2062,
+          "igmp": 150,
+          "arp": 71,
+          "rtcp": 68,
+          "rtp": 28,
+          "ipv6-icmp": 11,
+          "ipx/spx": 1,
+          "pim": 1
+        },
+        "timestamp_resolution": {
+          "distinct_sub_minute_offsets": 48840,
+          "sub_second_precision": true
+        }
+      },
+      "labels": {
+        "n_distinct_labels": 77,
+        "flows_by_class": {
+          "botnet": 901,
+          "normal": 4679,
+          "background": 124252
+        },
+        "flows_by_stage": {
+          "benign": 128931,
+          "recon": 425,
+          "c2": 418,
+          "exfil": 52,
+          "initial_access": 6
+        },
+        "top_labels": {
+          "flow=To-Background-UDP-CVUT-DNS-Server": 50817,
+          "flow=Background-UDP-Established": 37203,
+          "flow=Background-TCP-Established": 15156,
+          "flow=Background-Established-cmpgw-CVUT": 9331,
+          "flow=Background": 3426,
+          "flow=Background-UDP-Attempt": 2893,
+          "flow=Background-TCP-Attempt": 1847,
+          "flow=From-Normal-V46-Stribrek": 1810,
+          "flow=From-Normal-V46-Grill": 1722,
+          "flow=To-Background-CVUT-Proxy": 1340,
+          "flow=From-Normal-V46-Jist": 1107,
+          "flow=Background-Attempt-cmpgw-CVUT": 470,
+          "flow=From-Botnet-V46-TCP-Attempt": 422,
+          "flow=Background-UDP-NTP-Established-1": 317,
+          "flow=To-Background-CVUT-WebServer": 254
+        }
+      },
+      "botnet_source_hosts": {
+        "147.32.84.165": 901
+      },
+      "host_filter": {
+        "cidrs": [
+          "147.32.0.0/16"
+        ],
+        "flows_kept": 94758,
+        "flows_dropped": 35074,
+        "hosts_kept": 254,
+        "botnet_flows_dropped": 0
+      },
+      "windowed": {
+        "cache_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_5__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+        "window_seconds": 60,
+        "n_rows": 4471,
+        "n_hosts": 254,
+        "n_active_rows": 2587,
+        "active_fraction": 0.57862,
+        "n_attack_rows": 21,
+        "attack_prevalence": 0.004697,
+        "n_risk_positive_rows": 20,
+        "risk_prevalence": 0.004473,
+        "stage_counts": {
+          "benign": 4450,
+          "exfil": 16,
+          "c2": 4,
+          "recon": 1
+        },
+        "n_hosts_with_at_least_L_plus_K_windows": 0,
+        "n_rows_on_those_hosts": 0
+      },
+      "episodes": {
+        "n_episodes": 1,
+        "n_hosts_with_episodes": 1,
+        "length_windows": {
+          "min": 21,
+          "median": 21.0,
+          "max": 21,
+          "total": 21
+        }
+      },
+      "pre_onset": {
+        "by_horizon": {
+          "1": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "3": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "5": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "10": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "15": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "30": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "60": {
+            "n_rows": 0,
+            "n_episodes": 0
+          }
+        }
+      },
+      "feature_coverage": {
+        "syn_ratio": 0.30418,
+        "ack_ratio": 0.3214,
+        "rst_ratio": 0.15478,
+        "fin_ratio": 0.2713,
+        "psh_ratio": 0.29121,
+        "urg_ratio": 0.0,
+        "bytes_total": 0.57862,
+        "bytes_up_down_ratio": 0.47506,
+        "pkts_per_flow_mean": 0.57862,
+        "flow_duration_mean": 0.53746,
+        "flow_duration_var": 0.42093,
+        "iat_mean": 0.53523,
+        "iat_var": 0.42026,
+        "iat_max": 0.0,
+        "active_flow_count": 0.57862,
+        "ttl_mean": 0.0,
+        "ttl_var": 0.0,
+        "tcp_window_mean": 0.0,
+        "tcp_window_entropy": 0.0,
+        "frag_flag_rate": 0.0,
+        "payload_size_mean": 0.0,
+        "payload_size_var": 0.0,
+        "payload_size_p95": 0.0,
+        "payload_size_entropy": 0.0,
+        "retrans_count": 0.0,
+        "retrans_rate": 0.0,
+        "out_degree": 0.57862,
+        "in_degree": 0.06106,
+        "dst_ip_entropy": 0.3393,
+        "dst_port_entropy": 0.31581,
+        "new_peer_count": 0.3346,
+        "neighbour_risk_fraction": 0.10289,
+        "local_clustering_coeff": 0.00671,
+        "reciprocity": 0.57862,
+        "d_syn_ratio": 0.35495,
+        "d_dst_port_entropy": 0.37307,
+        "d_out_degree": 0.52203,
+        "d_new_peer_count": 0.36927,
+        "d_iat_var": 0.49564,
+        "d_retrans_rate": 0.0,
+        "slope3_syn_ratio": 0.34422,
+        "slope3_dst_port_entropy": 0.36502,
+        "slope3_out_degree": 0.51197,
+        "slope3_iat_var": 0.47529,
+        "is_active": 0.57862
+      },
+      "seconds": 4.3
+    },
+    "ctu_12": {
+      "day_key": "ctu_12",
+      "scenario": 12,
+      "family": "nsis_ay",
+      "behaviour": "P2P (3 bots)",
+      "role": "holdout",
+      "file": "/Users/manteksinghburn/nidra/CTU-13-Dataset/12/capture20110819.binetflow",
+      "file_bytes": 44718958,
+      "file_sha256": "615e28233cb3c494b74c1016af940394c2765df9a285413256e65b0ebd11bbca",
+      "raw": {
+        "input_rows": 325471,
+        "accepted_rows": 325471,
+        "drop_reasons": {},
+        "distinct_source_hosts": 59552,
+        "distinct_destination_hosts": 42139,
+        "start_utc": "2011-08-19T10:02:43.748728037",
+        "end_utc": "2011-08-19T11:45:43.647861004",
+        "duration_hours": 1.717,
+        "protocols": {
+          "udp": 244873,
+          "tcp": 70724,
+          "icmp": 9008,
+          "igmp": 363,
+          "rtp": 209,
+          "rtcp": 148,
+          "arp": 124,
+          "ipv6-icmp": 12,
+          "ipx/spx": 3,
+          "udt": 3
+        },
+        "timestamp_resolution": {
+          "distinct_sub_minute_offsets": 59039,
+          "sub_second_precision": true
+        }
+      },
+      "labels": {
+        "n_distinct_labels": 72,
+        "flows_by_class": {
+          "botnet": 2168,
+          "normal": 7628,
+          "background": 315675
+        },
+        "flows_by_stage": {
+          "benign": 323303,
+          "c2": 1415,
+          "recon": 732,
+          "exfil": 21
+        },
+        "top_labels": {
+          "flow=To-Background-UDP-CVUT-DNS-Server": 128739,
+          "flow=Background-UDP-Established": 83642,
+          "flow=Background-TCP-Established": 40199,
+          "flow=Background-Established-cmpgw-CVUT": 25653,
+          "flow=Background-Attempt-cmpgw-CVUT": 15376,
+          "flow=Background-UDP-Attempt": 6481,
+          "flow=Background": 6458,
+          "flow=To-Background-CVUT-Proxy": 4517,
+          "flow=From-Normal-V53-Stribrek": 4359,
+          "flow=Background-TCP-Attempt": 2670,
+          "flow=From-Normal-V53-Jist": 2145,
+          "flow=From-Normal-V53-Grill": 1075,
+          "flow=To-Background-CVUT-WebServer": 773,
+          "flow=Background-UDP-NTP-Established-1": 591,
+          "flow=From-Botnet-V51-1-UDP-Established": 362
+        }
+      },
+      "botnet_source_hosts": {
+        "147.32.84.165": 807,
+        "147.32.84.191": 766,
+        "147.32.84.192": 570,
+        "222.160.227.154": 5,
+        "95.65.17.47": 4,
+        "91.188.37.153": 4,
+        "69.104.66.134": 4,
+        "161.200.133.204": 4,
+        "93.103.254.175": 4
+      },
+      "host_filter": {
+        "cidrs": [
+          "147.32.0.0/16"
+        ],
+        "flows_kept": 242419,
+        "flows_dropped": 83052,
+        "hosts_kept": 303,
+        "botnet_flows_dropped": 25
+      },
+      "windowed": {
+        "cache_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_12__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+        "window_seconds": 60,
+        "n_rows": 16751,
+        "n_hosts": 303,
+        "n_active_rows": 6962,
+        "active_fraction": 0.41562,
+        "n_attack_rows": 81,
+        "attack_prevalence": 0.004836,
+        "n_risk_positive_rows": 156,
+        "risk_prevalence": 0.009313,
+        "stage_counts": {
+          "benign": 16670,
+          "c2": 58,
+          "recon": 12,
+          "exfil": 11
+        },
+        "n_hosts_with_at_least_L_plus_K_windows": 238,
+        "n_rows_on_those_hosts": 16373
+      },
+      "episodes": {
+        "n_episodes": 32,
+        "n_hosts_with_episodes": 3,
+        "length_windows": {
+          "min": 1,
+          "median": 2.0,
+          "max": 7,
+          "total": 81
+        }
+      },
+      "pre_onset": {
+        "by_horizon": {
+          "1": {
+            "n_rows": 7,
+            "n_episodes": 7
+          },
+          "3": {
+            "n_rows": 21,
+            "n_episodes": 7
+          },
+          "5": {
+            "n_rows": 35,
+            "n_episodes": 7
+          },
+          "10": {
+            "n_rows": 52,
+            "n_episodes": 7
+          },
+          "15": {
+            "n_rows": 52,
+            "n_episodes": 7
+          },
+          "30": {
+            "n_rows": 52,
+            "n_episodes": 7
+          },
+          "60": {
+            "n_rows": 52,
+            "n_episodes": 7
+          }
+        }
+      },
+      "feature_coverage": {
+        "syn_ratio": 0.25037,
+        "ack_ratio": 0.24643,
+        "rst_ratio": 0.10513,
+        "fin_ratio": 0.21396,
+        "psh_ratio": 0.23443,
+        "urg_ratio": 0.0,
+        "bytes_total": 0.41562,
+        "bytes_up_down_ratio": 0.34547,
+        "pkts_per_flow_mean": 0.41562,
+        "flow_duration_mean": 0.38941,
+        "flow_duration_var": 0.30124,
+        "iat_mean": 0.38804,
+        "iat_var": 0.30082,
+        "iat_max": 0.0,
+        "active_flow_count": 0.41562,
+        "ttl_mean": 0.0,
+        "ttl_var": 0.0,
+        "tcp_window_mean": 0.0,
+        "tcp_window_entropy": 0.0,
+        "frag_flag_rate": 0.0,
+        "payload_size_mean": 0.0,
+        "payload_size_var": 0.0,
+        "payload_size_p95": 0.0,
+        "payload_size_entropy": 0.0,
+        "retrans_count": 0.0,
+        "retrans_rate": 0.0,
+        "out_degree": 0.41562,
+        "in_degree": 0.03737,
+        "dst_ip_entropy": 0.2367,
+        "dst_port_entropy": 0.21766,
+        "new_peer_count": 0.1653,
+        "neighbour_risk_fraction": 0.07212,
+        "local_clustering_coeff": 0.00281,
+        "reciprocity": 0.41562,
+        "d_syn_ratio": 0.29777,
+        "d_dst_port_entropy": 0.27777,
+        "d_out_degree": 0.40965,
+        "d_new_peer_count": 0.21109,
+        "d_iat_var": 0.37675,
+        "d_retrans_rate": 0.0,
+        "slope3_syn_ratio": 0.29037,
+        "slope3_dst_port_entropy": 0.27598,
+        "slope3_out_degree": 0.4103,
+        "slope3_iat_var": 0.37514,
+        "is_active": 0.41562
+      },
+      "seconds": 9.7
+    },
+    "ctu_6": {
+      "day_key": "ctu_6",
+      "scenario": 6,
+      "family": "menti",
+      "behaviour": "port scan",
+      "role": "test",
+      "file": "/Users/manteksinghburn/nidra/CTU-13-Dataset/6/capture20110816.binetflow",
+      "file_bytes": 76780048,
+      "file_sha256": "b1b49932c7ce0c4e344431fbc229e4f91be06772abfe7a2e6e7d4b0d439d61d7",
+      "raw": {
+        "input_rows": 558919,
+        "accepted_rows": 558919,
+        "drop_reasons": {},
+        "distinct_source_hosts": 72345,
+        "distinct_destination_hosts": 42434,
+        "start_utc": "2011-08-16T10:01:46.972101212",
+        "end_utc": "2011-08-16T12:10:56.805092096",
+        "duration_hours": 2.153,
+        "protocols": {
+          "udp": 421045,
+          "tcp": 128447,
+          "icmp": 7950,
+          "igmp": 628,
+          "rtp": 349,
+          "rtcp": 266,
+          "arp": 195,
+          "ipv6-icmp": 21,
+          "esp": 7,
+          "ipx/spx": 5
+        },
+        "timestamp_resolution": {
+          "distinct_sub_minute_offsets": 59947,
+          "sub_second_precision": true
+        }
+      },
+      "labels": {
+        "n_distinct_labels": 51,
+        "flows_by_class": {
+          "botnet": 4630,
+          "normal": 7494,
+          "background": 546795
+        },
+        "flows_by_stage": {
+          "benign": 554289,
+          "exfil": 4400,
+          "c2": 228,
+          "recon": 2
+        },
+        "top_labels": {
+          "flow=To-Background-UDP-CVUT-DNS-Server": 261525,
+          "flow=Background-UDP-Established": 128117,
+          "flow=Background-TCP-Established": 66424,
+          "flow=Background-Established-cmpgw-CVUT": 40960,
+          "flow=Background-UDP-Attempt": 14608,
+          "flow=Background": 11632,
+          "flow=To-Background-CVUT-Proxy": 8444,
+          "flow=From-Normal-V47-Stribrek": 5488,
+          "flow=From-Botnet-V47-TCP-Attempt-SPAM": 4398,
+          "flow=Background-TCP-Attempt": 4179,
+          "flow=Background-Attempt-cmpgw-CVUT": 3616,
+          "flow=From-Normal-V47-Grill": 1245,
+          "flow=To-Background-CVUT-WebServer": 1034,
+          "flow=Background-UDP-NTP-Established-1": 887,
+          "flow=From-Normal-V47-Jist": 682
+        }
+      },
+      "botnet_source_hosts": {
+        "147.32.84.165": 4630
+      },
+      "host_filter": {
+        "cidrs": [
+          "147.32.0.0/16"
+        ],
+        "flows_kept": 440994,
+        "flows_dropped": 117925,
+        "hosts_kept": 354,
+        "botnet_flows_dropped": 0
+      },
+      "windowed": {
+        "cache_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_6__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+        "window_seconds": 60,
+        "n_rows": 33484,
+        "n_hosts": 354,
+        "n_active_rows": 12417,
+        "active_fraction": 0.37083,
+        "n_attack_rows": 123,
+        "attack_prevalence": 0.003673,
+        "n_risk_positive_rows": 127,
+        "risk_prevalence": 0.003793,
+        "stage_counts": {
+          "benign": 33361,
+          "exfil": 122,
+          "c2": 1
+        },
+        "n_hosts_with_at_least_L_plus_K_windows": 295,
+        "n_rows_on_those_hosts": 33186
+      },
+      "episodes": {
+        "n_episodes": 2,
+        "n_hosts_with_episodes": 1,
+        "length_windows": {
+          "min": 1,
+          "median": 61.5,
+          "max": 122,
+          "total": 123
+        }
+      },
+      "pre_onset": {
+        "by_horizon": {
+          "1": {
+            "n_rows": 1,
+            "n_episodes": 1
+          },
+          "3": {
+            "n_rows": 3,
+            "n_episodes": 1
+          },
+          "5": {
+            "n_rows": 5,
+            "n_episodes": 1
+          },
+          "10": {
+            "n_rows": 6,
+            "n_episodes": 1
+          },
+          "15": {
+            "n_rows": 6,
+            "n_episodes": 1
+          },
+          "30": {
+            "n_rows": 6,
+            "n_episodes": 1
+          },
+          "60": {
+            "n_rows": 6,
+            "n_episodes": 1
+          }
+        }
+      },
+      "feature_coverage": {
+        "syn_ratio": 0.22518,
+        "ack_ratio": 0.22659,
+        "rst_ratio": 0.09727,
+        "fin_ratio": 0.19962,
+        "psh_ratio": 0.21225,
+        "urg_ratio": 0.0,
+        "bytes_total": 0.37083,
+        "bytes_up_down_ratio": 0.31012,
+        "pkts_per_flow_mean": 0.37083,
+        "flow_duration_mean": 0.34963,
+        "flow_duration_var": 0.26708,
+        "iat_mean": 0.34823,
+        "iat_var": 0.26652,
+        "iat_max": 0.0,
+        "active_flow_count": 0.37083,
+        "ttl_mean": 0.0,
+        "ttl_var": 0.0,
+        "tcp_window_mean": 0.0,
+        "tcp_window_entropy": 0.0,
+        "frag_flag_rate": 0.0,
+        "payload_size_mean": 0.0,
+        "payload_size_var": 0.0,
+        "payload_size_p95": 0.0,
+        "payload_size_entropy": 0.0,
+        "retrans_count": 0.0,
+        "retrans_rate": 0.0,
+        "out_degree": 0.37083,
+        "in_degree": 0.03793,
+        "dst_ip_entropy": 0.20547,
+        "dst_port_entropy": 0.194,
+        "new_peer_count": 0.12349,
+        "neighbour_risk_fraction": 0.07854,
+        "local_clustering_coeff": 0.00281,
+        "reciprocity": 0.37083,
+        "d_syn_ratio": 0.28228,
+        "d_dst_port_entropy": 0.25579,
+        "d_out_degree": 0.37301,
+        "d_new_peer_count": 0.16217,
+        "d_iat_var": 0.34757,
+        "d_retrans_rate": 0.0,
+        "slope3_syn_ratio": 0.27873,
+        "slope3_dst_port_entropy": 0.25119,
+        "slope3_out_degree": 0.37263,
+        "slope3_iat_var": 0.34434,
+        "is_active": 0.37083
+      },
+      "seconds": 16.4
+    },
+    "ctu_2": {
+      "day_key": "ctu_2",
+      "scenario": 2,
+      "family": "neris",
+      "behaviour": "IRC, spam, click-fraud",
+      "role": "train",
+      "file": "/Users/manteksinghburn/nidra/CTU-13-Dataset/2/capture20110811.binetflow",
+      "file_bytes": 247231783,
+      "file_sha256": "366b87099b5cbbf41b7464eefccc224b10497101a4597f4f5dab6b8259aa3cf8",
+      "raw": {
+        "input_rows": 1808122,
+        "accepted_rows": 1808122,
+        "drop_reasons": {},
+        "distinct_source_hosts": 392301,
+        "distinct_destination_hosts": 88199,
+        "start_utc": "2011-08-11T09:49:35.721274137",
+        "end_utc": "2011-08-11T14:01:11.264753819",
+        "duration_hours": 4.193,
+        "protocols": {
+          "udp": 1485660,
+          "tcp": 293675,
+          "icmp": 23616,
+          "rtp": 2023,
+          "rtcp": 1479,
+          "igmp": 1241,
+          "arp": 340,
+          "ipv6-icmp": 44,
+          "udt": 14,
+          "ipx/spx": 9
+        },
+        "timestamp_resolution": {
+          "distinct_sub_minute_offsets": 60001,
+          "sub_second_precision": true
+        }
+      },
+      "labels": {
+        "n_distinct_labels": 132,
+        "flows_by_class": {
+          "botnet": 20941,
+          "normal": 9120,
+          "background": 1778061
+        },
+        "flows_by_stage": {
+          "benign": 1787181,
+          "recon": 9759,
+          "exfil": 7809,
+          "c2": 3362,
+          "initial_access": 11
+        },
+        "top_labels": {
+          "flow=To-Background-UDP-CVUT-DNS-Server": 660177,
+          "flow=Background-UDP-Established": 602264,
+          "flow=Background-UDP-Attempt": 201380,
+          "flow=Background-TCP-Established": 149962,
+          "flow=Background-Established-cmpgw-CVUT": 78133,
+          "flow=Background": 29162,
+          "flow=Background-TCP-Attempt": 25929,
+          "flow=To-Background-CVUT-Proxy": 12950,
+          "flow=From-Botnet-V43-TCP-Attempt": 9759,
+          "flow=From-Normal-V43-Stribrek": 8960,
+          "flow=Background-Attempt-cmpgw-CVUT": 6096,
+          "flow=From-Botnet-V43-TCP-Attempt-SPAM": 5477,
+          "flow=Background-UDP-NTP-Established-1": 1601,
+          "flow=To-Background-CVUT-WebServer": 1449,
+          "flow=From-Botnet-V43-TCP-HTTP-Persistent-Down-1": 1210
+        }
+      },
+      "botnet_source_hosts": {
+        "147.32.84.165": 20941
+      },
+      "host_filter": {
+        "cidrs": [
+          "147.32.0.0/16"
+        ],
+        "flows_kept": 1049676,
+        "flows_dropped": 758446,
+        "hosts_kept": 392,
+        "botnet_flows_dropped": 0
+      },
+      "windowed": {
+        "cache_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_2__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+        "window_seconds": 60,
+        "n_rows": 70725,
+        "n_hosts": 392,
+        "n_active_rows": 22902,
+        "active_fraction": 0.32382,
+        "n_attack_rows": 204,
+        "attack_prevalence": 0.002884,
+        "n_risk_positive_rows": 208,
+        "risk_prevalence": 0.002941,
+        "stage_counts": {
+          "benign": 70521,
+          "exfil": 200,
+          "c2": 4
+        },
+        "n_hosts_with_at_least_L_plus_K_windows": 324,
+        "n_rows_on_those_hosts": 70499
+      },
+      "episodes": {
+        "n_episodes": 3,
+        "n_hosts_with_episodes": 1,
+        "length_windows": {
+          "min": 1,
+          "median": 1.0,
+          "max": 202,
+          "total": 204
+        }
+      },
+      "pre_onset": {
+        "by_horizon": {
+          "1": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "3": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "5": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "10": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "15": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "30": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "60": {
+            "n_rows": 0,
+            "n_episodes": 0
+          }
+        }
+      },
+      "feature_coverage": {
+        "syn_ratio": 0.19266,
+        "ack_ratio": 0.19138,
+        "rst_ratio": 0.09281,
+        "fin_ratio": 0.17439,
+        "psh_ratio": 0.18558,
+        "urg_ratio": 0.0,
+        "bytes_total": 0.32382,
+        "bytes_up_down_ratio": 0.27102,
+        "pkts_per_flow_mean": 0.32382,
+        "flow_duration_mean": 0.30326,
+        "flow_duration_var": 0.24286,
+        "iat_mean": 0.30159,
+        "iat_var": 0.24208,
+        "iat_max": 0.0,
+        "active_flow_count": 0.32382,
+        "ttl_mean": 0.0,
+        "ttl_var": 0.0,
+        "tcp_window_mean": 0.0,
+        "tcp_window_entropy": 0.0,
+        "frag_flag_rate": 0.0,
+        "payload_size_mean": 0.0,
+        "payload_size_var": 0.0,
+        "payload_size_p95": 0.0,
+        "payload_size_entropy": 0.0,
+        "retrans_count": 0.0,
+        "retrans_rate": 0.0,
+        "out_degree": 0.32382,
+        "in_degree": 0.02877,
+        "dst_ip_entropy": 0.1916,
+        "dst_port_entropy": 0.1793,
+        "new_peer_count": 0.09595,
+        "neighbour_risk_fraction": 0.05138,
+        "local_clustering_coeff": 0.00327,
+        "reciprocity": 0.32382,
+        "d_syn_ratio": 0.24225,
+        "d_dst_port_entropy": 0.23058,
+        "d_out_degree": 0.33578,
+        "d_new_peer_count": 0.12783,
+        "d_iat_var": 0.31058,
+        "d_retrans_rate": 0.0,
+        "slope3_syn_ratio": 0.24321,
+        "slope3_dst_port_entropy": 0.23211,
+        "slope3_out_degree": 0.34436,
+        "slope3_iat_var": 0.31253,
+        "is_active": 0.32382
+      },
+      "seconds": 39.9
+    },
+    "ctu_4": {
+      "day_key": "ctu_4",
+      "scenario": 4,
+      "family": "rbot",
+      "behaviour": "IRC, UDP DDoS",
+      "role": "test",
+      "file": "/Users/manteksinghburn/nidra/CTU-13-Dataset/4/capture20110815.binetflow",
+      "file_bytes": 153789874,
+      "file_sha256": "a2feb2d6253c2560fbffdfcc3e92b6c9235f1ea7c43a5f8d7902d7e352e84171",
+      "raw": {
+        "input_rows": 1121076,
+        "accepted_rows": 1121076,
+        "drop_reasons": {},
+        "distinct_source_hosts": 131177,
+        "distinct_destination_hosts": 80580,
+        "start_utc": "2011-08-15T10:42:52.613616228",
+        "end_utc": "2011-08-15T15:11:19.149681807",
+        "duration_hours": 4.474,
+        "protocols": {
+          "udp": 799238,
+          "tcp": 290135,
+          "icmp": 28735,
+          "igmp": 1231,
+          "rtp": 760,
+          "rtcp": 566,
+          "arp": 351,
+          "ipv6-icmp": 36,
+          "ipx/spx": 9,
+          "pim": 5
+        },
+        "timestamp_resolution": {
+          "distinct_sub_minute_offsets": 60001,
+          "sub_second_precision": true
+        }
+      },
+      "labels": {
+        "n_distinct_labels": 58,
+        "flows_by_class": {
+          "botnet": 2580,
+          "normal": 25268,
+          "background": 1093228
+        },
+        "flows_by_stage": {
+          "benign": 1118496,
+          "exfil": 1946,
+          "recon": 504,
+          "c2": 130
+        },
+        "top_labels": {
+          "flow=To-Background-UDP-CVUT-DNS-Server": 483307,
+          "flow=Background-UDP-Established": 246234,
+          "flow=Background-TCP-Established": 138727,
+          "flow=Background-Established-cmpgw-CVUT": 99088,
+          "flow=Background-UDP-Attempt": 38313,
+          "flow=Background": 33200,
+          "flow=Background-TCP-Attempt": 26449,
+          "flow=From-Normal-V45-Stribrek": 12133,
+          "flow=To-Background-CVUT-Proxy": 10791,
+          "flow=From-Normal-V45-Jist": 10482,
+          "flow=Background-Attempt-cmpgw-CVUT": 4144,
+          "flow=From-Normal-V45-Grill": 2474,
+          "flow=To-Background-CVUT-WebServer": 1714,
+          "flow=Background-UDP-NTP-Established-1": 1522,
+          "flow=From-Botnet-V45-TCP-Attempt-SPAM": 1127
+        }
+      },
+      "botnet_source_hosts": {
+        "147.32.84.165": 2580
+      },
+      "host_filter": {
+        "cidrs": [
+          "147.32.0.0/16"
+        ],
+        "flows_kept": 865723,
+        "flows_dropped": 255353,
+        "hosts_kept": 374,
+        "botnet_flows_dropped": 0
+      },
+      "windowed": {
+        "cache_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_4__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+        "window_seconds": 60,
+        "n_rows": 65982,
+        "n_hosts": 374,
+        "n_active_rows": 22888,
+        "active_fraction": 0.34688,
+        "n_attack_rows": 90,
+        "attack_prevalence": 0.001364,
+        "n_risk_positive_rows": 160,
+        "risk_prevalence": 0.002425,
+        "stage_counts": {
+          "benign": 65892,
+          "exfil": 50,
+          "c2": 23,
+          "recon": 17
+        },
+        "n_hosts_with_at_least_L_plus_K_windows": 299,
+        "n_rows_on_those_hosts": 65690
+      },
+      "episodes": {
+        "n_episodes": 22,
+        "n_hosts_with_episodes": 1,
+        "length_windows": {
+          "min": 1,
+          "median": 1.0,
+          "max": 31,
+          "total": 90
+        }
+      },
+      "pre_onset": {
+        "by_horizon": {
+          "1": {
+            "n_rows": 7,
+            "n_episodes": 7
+          },
+          "3": {
+            "n_rows": 21,
+            "n_episodes": 7
+          },
+          "5": {
+            "n_rows": 35,
+            "n_episodes": 7
+          },
+          "10": {
+            "n_rows": 69,
+            "n_episodes": 7
+          },
+          "15": {
+            "n_rows": 84,
+            "n_episodes": 7
+          },
+          "30": {
+            "n_rows": 99,
+            "n_episodes": 7
+          },
+          "60": {
+            "n_rows": 125,
+            "n_episodes": 7
+          }
+        }
+      },
+      "feature_coverage": {
+        "syn_ratio": 0.20533,
+        "ack_ratio": 0.20665,
+        "rst_ratio": 0.09121,
+        "fin_ratio": 0.18648,
+        "psh_ratio": 0.19783,
+        "urg_ratio": 0.0,
+        "bytes_total": 0.34688,
+        "bytes_up_down_ratio": 0.29055,
+        "pkts_per_flow_mean": 0.34688,
+        "flow_duration_mean": 0.32471,
+        "flow_duration_var": 0.25978,
+        "iat_mean": 0.32354,
+        "iat_var": 0.25939,
+        "iat_max": 0.0,
+        "active_flow_count": 0.34688,
+        "ttl_mean": 0.0,
+        "ttl_var": 0.0,
+        "tcp_window_mean": 0.0,
+        "tcp_window_entropy": 0.0,
+        "frag_flag_rate": 0.0,
+        "payload_size_mean": 0.0,
+        "payload_size_var": 0.0,
+        "payload_size_p95": 0.0,
+        "payload_size_entropy": 0.0,
+        "retrans_count": 0.0,
+        "retrans_rate": 0.0,
+        "out_degree": 0.34688,
+        "in_degree": 0.03265,
+        "dst_ip_entropy": 0.2021,
+        "dst_port_entropy": 0.19107,
+        "new_peer_count": 0.10101,
+        "neighbour_risk_fraction": 0.06062,
+        "local_clustering_coeff": 0.00311,
+        "reciprocity": 0.34688,
+        "d_syn_ratio": 0.25715,
+        "d_dst_port_entropy": 0.24829,
+        "d_out_degree": 0.35808,
+        "d_new_peer_count": 0.13629,
+        "d_iat_var": 0.33185,
+        "d_retrans_rate": 0.0,
+        "slope3_syn_ratio": 0.25857,
+        "slope3_dst_port_entropy": 0.24998,
+        "slope3_out_degree": 0.36443,
+        "slope3_iat_var": 0.33291,
+        "is_active": 0.34688
+      },
+      "seconds": 32.5
+    },
+    "ctu_1": {
+      "day_key": "ctu_1",
+      "scenario": 1,
+      "family": "neris",
+      "behaviour": "IRC, spam, click-fraud",
+      "role": "train",
+      "file": "/Users/manteksinghburn/nidra/CTU-13-Dataset/1/capture20110810.binetflow",
+      "file_bytes": 386629271,
+      "file_sha256": "d5fafadc606100b3dc4080dbf851a40d78c522c222576a0bcc375cbf13e0c106",
+      "raw": {
+        "input_rows": 2824636,
+        "accepted_rows": 2824636,
+        "drop_reasons": {},
+        "distinct_source_hosts": 542093,
+        "distinct_destination_hosts": 119296,
+        "start_utc": "2011-08-10T09:46:53.047276974",
+        "end_utc": "2011-08-10T15:54:07.368340015",
+        "duration_hours": 6.121,
+        "protocols": {
+          "udp": 2270083,
+          "tcp": 507557,
+          "icmp": 39694,
+          "rtp": 2570,
+          "rtcp": 2339,
+          "igmp": 1803,
+          "arp": 477,
+          "ipv6-icmp": 58,
+          "ipx/spx": 13,
+          "ipv6": 10
+        },
+        "timestamp_resolution": {
+          "distinct_sub_minute_offsets": 60001,
+          "sub_second_precision": true
+        }
+      },
+      "labels": {
+        "n_distinct_labels": 113,
+        "flows_by_class": {
+          "botnet": 40961,
+          "normal": 30387,
+          "background": 2753288
+        },
+        "flows_by_stage": {
+          "benign": 2783675,
+          "c2": 27027,
+          "exfil": 8980,
+          "recon": 4938,
+          "initial_access": 16
+        },
+        "top_labels": {
+          "flow=Background-UDP-Established": 1169677,
+          "flow=To-Background-UDP-CVUT-DNS-Server": 941706,
+          "flow=Background-TCP-Established": 223543,
+          "flow=Background-Established-cmpgw-CVUT": 137257,
+          "flow=Background-TCP-Attempt": 105438,
+          "flow=Background-UDP-Attempt": 66699,
+          "flow=Background": 40216,
+          "flow=Background-Attempt-cmpgw-CVUT": 30983,
+          "flow=From-Botnet-V42-UDP-DNS": 26140,
+          "flow=To-Background-CVUT-Proxy": 19542,
+          "flow=From-Normal-V42-Stribrek": 18438,
+          "flow=From-Botnet-V42-TCP-Attempt-SPAM": 8105,
+          "flow=From-Normal-V42-Grill": 7654,
+          "flow=From-Normal-V42-Jist": 3808,
+          "flow=From-Botnet-V42-UDP-Attempt-DNS": 3057
+        }
+      },
+      "botnet_source_hosts": {
+        "147.32.84.165": 40961
+      },
+      "host_filter": {
+        "cidrs": [
+          "147.32.0.0/16"
+        ],
+        "flows_kept": 1579214,
+        "flows_dropped": 1245422,
+        "hosts_kept": 425,
+        "botnet_flows_dropped": 0
+      },
+      "windowed": {
+        "cache_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_1__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+        "window_seconds": 60,
+        "n_rows": 107276,
+        "n_hosts": 425,
+        "n_active_rows": 33649,
+        "active_fraction": 0.31367,
+        "n_attack_rows": 284,
+        "attack_prevalence": 0.002647,
+        "n_risk_positive_rows": 284,
+        "risk_prevalence": 0.002647,
+        "stage_counts": {
+          "benign": 106992,
+          "exfil": 283,
+          "c2": 1
+        },
+        "n_hosts_with_at_least_L_plus_K_windows": 342,
+        "n_rows_on_those_hosts": 106933
+      },
+      "episodes": {
+        "n_episodes": 2,
+        "n_hosts_with_episodes": 1,
+        "length_windows": {
+          "min": 1,
+          "median": 142.0,
+          "max": 283,
+          "total": 284
+        }
+      },
+      "pre_onset": {
+        "by_horizon": {
+          "1": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "3": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "5": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "10": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "15": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "30": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "60": {
+            "n_rows": 0,
+            "n_episodes": 0
+          }
+        }
+      },
+      "feature_coverage": {
+        "syn_ratio": 0.19181,
+        "ack_ratio": 0.18719,
+        "rst_ratio": 0.08583,
+        "fin_ratio": 0.17189,
+        "psh_ratio": 0.18206,
+        "urg_ratio": 0.0,
+        "bytes_total": 0.31367,
+        "bytes_up_down_ratio": 0.25897,
+        "pkts_per_flow_mean": 0.31367,
+        "flow_duration_mean": 0.29398,
+        "flow_duration_var": 0.23789,
+        "iat_mean": 0.29297,
+        "iat_var": 0.2377,
+        "iat_max": 0.0,
+        "active_flow_count": 0.31367,
+        "ttl_mean": 0.0,
+        "ttl_var": 0.0,
+        "tcp_window_mean": 0.0,
+        "tcp_window_entropy": 0.0,
+        "frag_flag_rate": 0.0,
+        "payload_size_mean": 0.0,
+        "payload_size_var": 0.0,
+        "payload_size_p95": 0.0,
+        "payload_size_entropy": 0.0,
+        "retrans_count": 0.0,
+        "retrans_rate": 0.0,
+        "out_degree": 0.31367,
+        "in_degree": 0.02948,
+        "dst_ip_entropy": 0.1875,
+        "dst_port_entropy": 0.17242,
+        "new_peer_count": 0.08281,
+        "neighbour_risk_fraction": 0.05076,
+        "local_clustering_coeff": 0.00279,
+        "reciprocity": 0.31367,
+        "d_syn_ratio": 0.23644,
+        "d_dst_port_entropy": 0.2242,
+        "d_out_degree": 0.32305,
+        "d_new_peer_count": 0.11234,
+        "d_iat_var": 0.30363,
+        "d_retrans_rate": 0.0,
+        "slope3_syn_ratio": 0.23784,
+        "slope3_dst_port_entropy": 0.22254,
+        "slope3_out_degree": 0.32841,
+        "slope3_iat_var": 0.30535,
+        "is_active": 0.31367
+      },
+      "seconds": 61.3
+    },
+    "ctu_10": {
+      "day_key": "ctu_10",
+      "scenario": 10,
+      "family": "rbot",
+      "behaviour": "IRC, UDP DDoS (10 bots)",
+      "role": "test",
+      "file": "/Users/manteksinghburn/nidra/CTU-13-Dataset/10/capture20110818.binetflow",
+      "file_bytes": 179074339,
+      "file_sha256": "8ae44d50e48fdff5b810b741b7824999ccf474081676562a54aa2b23d55d556f",
+      "raw": {
+        "input_rows": 1309791,
+        "accepted_rows": 1309791,
+        "drop_reasons": {},
+        "distinct_source_hosts": 151256,
+        "distinct_destination_hosts": 72957,
+        "start_utc": "2011-08-18T09:56:29.146156073",
+        "end_utc": "2011-08-18T15:04:59.744388103",
+        "duration_hours": 5.142,
+        "protocols": {
+          "udp": 851563,
+          "tcp": 321651,
+          "icmp": 133425,
+          "igmp": 1328,
+          "rtp": 799,
+          "rtcp": 575,
+          "arp": 375,
+          "ipv6-icmp": 40,
+          "esp": 10,
+          "ipx/spx": 9
+        },
+        "timestamp_resolution": {
+          "distinct_sub_minute_offsets": 60001,
+          "sub_second_precision": true
+        }
+      },
+      "labels": {
+        "n_distinct_labels": 111,
+        "flows_by_class": {
+          "botnet": 106352,
+          "normal": 15847,
+          "background": 1187592
+        },
+        "flows_by_stage": {
+          "benign": 1203439,
+          "exfil": 105981,
+          "c2": 231,
+          "recon": 140
+        },
+        "top_labels": {
+          "flow=To-Background-UDP-CVUT-DNS-Server": 478151,
+          "flow=Background-UDP-Established": 303963,
+          "flow=Background-TCP-Established": 170192,
+          "flow=Background-Established-cmpgw-CVUT": 93215,
+          "flow=Background": 31625,
+          "flow=Background-UDP-Attempt": 27089,
+          "flow=Background-TCP-Attempt": 25043,
+          "flow=Background-Attempt-cmpgw-CVUT": 23145,
+          "flow=To-Background-CVUT-Proxy": 21004,
+          "flow=From-Botnet-V51-6-ICMP": 11836,
+          "flow=From-Botnet-V51-7-ICMP": 11252,
+          "flow=From-Botnet-V51-5-ICMP": 11125,
+          "flow=From-Botnet-V51-9-ICMP": 11081,
+          "flow=From-Botnet-V51-8-ICMP": 10541,
+          "flow=From-Botnet-V51-2-ICMP": 10415
+        }
+      },
+      "botnet_source_hosts": {
+        "147.32.84.205": 11874,
+        "147.32.84.206": 11287,
+        "147.32.84.204": 11159,
+        "147.32.84.208": 11118,
+        "147.32.84.207": 10581,
+        "147.32.84.191": 10454,
+        "147.32.84.192": 10397,
+        "147.32.84.193": 10009,
+        "147.32.84.209": 9894,
+        "147.32.84.165": 9579
+      },
+      "host_filter": {
+        "cidrs": [
+          "147.32.0.0/16"
+        ],
+        "flows_kept": 1005373,
+        "flows_dropped": 304418,
+        "hosts_kept": 413,
+        "botnet_flows_dropped": 0
+      },
+      "windowed": {
+        "cache_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_10__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+        "window_seconds": 60,
+        "n_rows": 84153,
+        "n_hosts": 413,
+        "n_active_rows": 27298,
+        "active_fraction": 0.32439,
+        "n_attack_rows": 357,
+        "attack_prevalence": 0.004242,
+        "n_risk_positive_rows": 1077,
+        "risk_prevalence": 0.012798,
+        "stage_counts": {
+          "benign": 83796,
+          "exfil": 190,
+          "recon": 106,
+          "c2": 61
+        },
+        "n_hosts_with_at_least_L_plus_K_windows": 345,
+        "n_rows_on_those_hosts": 83898
+      },
+      "episodes": {
+        "n_episodes": 191,
+        "n_hosts_with_episodes": 10,
+        "length_windows": {
+          "min": 1,
+          "median": 1.0,
+          "max": 8,
+          "total": 357
+        }
+      },
+      "pre_onset": {
+        "by_horizon": {
+          "1": {
+            "n_rows": 99,
+            "n_episodes": 99
+          },
+          "3": {
+            "n_rows": 297,
+            "n_episodes": 99
+          },
+          "5": {
+            "n_rows": 495,
+            "n_episodes": 99
+          },
+          "10": {
+            "n_rows": 924,
+            "n_episodes": 99
+          },
+          "15": {
+            "n_rows": 1140,
+            "n_episodes": 99
+          },
+          "30": {
+            "n_rows": 1444,
+            "n_episodes": 99
+          },
+          "60": {
+            "n_rows": 1766,
+            "n_episodes": 99
+          }
+        }
+      },
+      "feature_coverage": {
+        "syn_ratio": 0.19329,
+        "ack_ratio": 0.19984,
+        "rst_ratio": 0.09278,
+        "fin_ratio": 0.16941,
+        "psh_ratio": 0.18431,
+        "urg_ratio": 0.0,
+        "bytes_total": 0.32439,
+        "bytes_up_down_ratio": 0.26915,
+        "pkts_per_flow_mean": 0.32439,
+        "flow_duration_mean": 0.30365,
+        "flow_duration_var": 0.23934,
+        "iat_mean": 0.30258,
+        "iat_var": 0.23877,
+        "iat_max": 0.0,
+        "active_flow_count": 0.32439,
+        "ttl_mean": 0.0,
+        "ttl_var": 0.0,
+        "tcp_window_mean": 0.0,
+        "tcp_window_entropy": 0.0,
+        "frag_flag_rate": 0.0,
+        "payload_size_mean": 0.0,
+        "payload_size_var": 0.0,
+        "payload_size_p95": 0.0,
+        "payload_size_entropy": 0.0,
+        "retrans_count": 0.0,
+        "retrans_rate": 0.0,
+        "out_degree": 0.32439,
+        "in_degree": 0.03427,
+        "dst_ip_entropy": 0.18541,
+        "dst_port_entropy": 0.17431,
+        "new_peer_count": 0.09289,
+        "neighbour_risk_fraction": 0.06681,
+        "local_clustering_coeff": 0.00254,
+        "reciprocity": 0.32439,
+        "d_syn_ratio": 0.23525,
+        "d_dst_port_entropy": 0.22634,
+        "d_out_degree": 0.33459,
+        "d_new_peer_count": 0.12566,
+        "d_iat_var": 0.30574,
+        "d_retrans_rate": 0.0,
+        "slope3_syn_ratio": 0.23647,
+        "slope3_dst_port_entropy": 0.22653,
+        "slope3_out_degree": 0.33948,
+        "slope3_iat_var": 0.30794,
+        "is_active": 0.32439
+      },
+      "seconds": 36.2
+    },
+    "ctu_9": {
+      "day_key": "ctu_9",
+      "scenario": 9,
+      "family": "neris",
+      "behaviour": "IRC, spam, click-fraud, port scan (10 bots)",
+      "role": "test",
+      "file": "/Users/manteksinghburn/nidra/CTU-13-Dataset/9/capture20110817.binetflow",
+      "file_bytes": 285841002,
+      "file_sha256": "7974f3cb3f4b707d7543194b6cd96c52af804d4a11aad2645036fd6f3e635abe",
+      "raw": {
+        "input_rows": 2087508,
+        "accepted_rows": 2087508,
+        "drop_reasons": {},
+        "distinct_source_hosts": 313766,
+        "distinct_destination_hosts": 93299,
+        "start_utc": "2011-08-17T11:34:49.436880827",
+        "end_utc": "2011-08-17T17:12:13.867434978",
+        "duration_hours": 5.623,
+        "protocols": {
+          "udp": 1629194,
+          "tcp": 431554,
+          "icmp": 21856,
+          "rtp": 1588,
+          "igmp": 1523,
+          "rtcp": 1266,
+          "arp": 432,
+          "ipv6-icmp": 48,
+          "ipv6": 12,
+          "ipx/spx": 11
+        },
+        "timestamp_resolution": {
+          "distinct_sub_minute_offsets": 60001,
+          "sub_second_precision": true
+        }
+      },
+      "labels": {
+        "n_distinct_labels": 908,
+        "flows_by_class": {
+          "botnet": 184987,
+          "normal": 29967,
+          "background": 1872554
+        },
+        "flows_by_stage": {
+          "benign": 1902521,
+          "c2": 121134,
+          "exfil": 48354,
+          "recon": 15349,
+          "initial_access": 150
+        },
+        "top_labels": {
+          "flow=To-Background-UDP-CVUT-DNS-Server": 781402,
+          "flow=Background-UDP-Established": 615055,
+          "flow=Background-TCP-Established": 175576,
+          "flow=Background-Established-cmpgw-CVUT": 125013,
+          "flow=Background-UDP-Attempt": 79520,
+          "flow=Background-TCP-Attempt": 28937,
+          "flow=Background": 28018,
+          "flow=To-Background-CVUT-Proxy": 16407,
+          "flow=From-Normal-V50-Stribrek": 15806,
+          "flow=From-Botnet-V50-1-UDP-DNS": 15115,
+          "flow=From-Botnet-V50-7-UDP-DNS": 12588,
+          "flow=From-Botnet-V50-3-UDP-DNS": 11429,
+          "flow=From-Botnet-V50-2-UDP-DNS": 10961,
+          "flow=From-Botnet-V50-4-UDP-DNS": 10707,
+          "flow=From-Botnet-V50-5-UDP-DNS": 10412
+        }
+      },
+      "botnet_source_hosts": {
+        "147.32.84.165": 22792,
+        "147.32.84.192": 20305,
+        "147.32.84.204": 18783,
+        "147.32.84.191": 18774,
+        "147.32.84.206": 18553,
+        "147.32.84.193": 17961,
+        "147.32.84.208": 17909,
+        "147.32.84.205": 17535,
+        "147.32.84.209": 16376,
+        "147.32.84.207": 15999
+      },
+      "host_filter": {
+        "cidrs": [
+          "147.32.0.0/16"
+        ],
+        "flows_kept": 1468826,
+        "flows_dropped": 618682,
+        "hosts_kept": 398,
+        "botnet_flows_dropped": 0
+      },
+      "windowed": {
+        "cache_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_9__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+        "window_seconds": 60,
+        "n_rows": 89808,
+        "n_hosts": 398,
+        "n_active_rows": 29949,
+        "active_fraction": 0.33348,
+        "n_attack_rows": 1403,
+        "attack_prevalence": 0.015622,
+        "n_risk_positive_rows": 1606,
+        "risk_prevalence": 0.017883,
+        "stage_counts": {
+          "benign": 88405,
+          "exfil": 1342,
+          "recon": 32,
+          "c2": 29
+        },
+        "n_hosts_with_at_least_L_plus_K_windows": 346,
+        "n_rows_on_those_hosts": 89679
+      },
+      "episodes": {
+        "n_episodes": 55,
+        "n_hosts_with_episodes": 10,
+        "length_windows": {
+          "min": 1,
+          "median": 1.0,
+          "max": 164,
+          "total": 1403
+        }
+      },
+      "pre_onset": {
+        "by_horizon": {
+          "1": {
+            "n_rows": 34,
+            "n_episodes": 34
+          },
+          "3": {
+            "n_rows": 102,
+            "n_episodes": 34
+          },
+          "5": {
+            "n_rows": 170,
+            "n_episodes": 34
+          },
+          "10": {
+            "n_rows": 332,
+            "n_episodes": 34
+          },
+          "15": {
+            "n_rows": 485,
+            "n_episodes": 34
+          },
+          "30": {
+            "n_rows": 911,
+            "n_episodes": 34
+          },
+          "60": {
+            "n_rows": 1257,
+            "n_episodes": 34
+          }
+        }
+      },
+      "feature_coverage": {
+        "syn_ratio": 0.21245,
+        "ack_ratio": 0.21397,
+        "rst_ratio": 0.1126,
+        "fin_ratio": 0.18878,
+        "psh_ratio": 0.19937,
+        "urg_ratio": 0.0,
+        "bytes_total": 0.33348,
+        "bytes_up_down_ratio": 0.28236,
+        "pkts_per_flow_mean": 0.33348,
+        "flow_duration_mean": 0.31374,
+        "flow_duration_var": 0.25099,
+        "iat_mean": 0.31299,
+        "iat_var": 0.25066,
+        "iat_max": 0.0,
+        "active_flow_count": 0.33348,
+        "ttl_mean": 0.0,
+        "ttl_var": 0.0,
+        "tcp_window_mean": 0.0,
+        "tcp_window_entropy": 0.0,
+        "frag_flag_rate": 0.0,
+        "payload_size_mean": 0.0,
+        "payload_size_var": 0.0,
+        "payload_size_p95": 0.0,
+        "payload_size_entropy": 0.0,
+        "retrans_count": 0.0,
+        "retrans_rate": 0.0,
+        "out_degree": 0.33348,
+        "in_degree": 0.03026,
+        "dst_ip_entropy": 0.20123,
+        "dst_port_entropy": 0.18807,
+        "new_peer_count": 0.10519,
+        "neighbour_risk_fraction": 0.07531,
+        "local_clustering_coeff": 0.00238,
+        "reciprocity": 0.33348,
+        "d_syn_ratio": 0.24933,
+        "d_dst_port_entropy": 0.23747,
+        "d_out_degree": 0.33968,
+        "d_new_peer_count": 0.13613,
+        "d_iat_var": 0.31612,
+        "d_retrans_rate": 0.0,
+        "slope3_syn_ratio": 0.24874,
+        "slope3_dst_port_entropy": 0.23603,
+        "slope3_out_degree": 0.34181,
+        "slope3_iat_var": 0.31637,
+        "is_active": 0.33348
+      },
+      "seconds": 48.8
+    },
+    "ctu_13": {
+      "day_key": "ctu_13",
+      "scenario": 13,
+      "family": "virut",
+      "behaviour": "spam, port scan, HTTP",
+      "role": "holdout",
+      "file": "/Users/manteksinghburn/nidra/CTU-13-Dataset/13/capture20110815-3.binetflow",
+      "file_bytes": 262668288,
+      "file_sha256": "a4dbb317f53eaaef2538d1cc1cd228bda3743a84779032601d5762742c4daad1",
+      "raw": {
+        "input_rows": 1925149,
+        "accepted_rows": 1925149,
+        "drop_reasons": {},
+        "distinct_source_hosts": 277486,
+        "distinct_destination_hosts": 77330,
+        "start_utc": "2011-08-15T17:13:40.449530125",
+        "end_utc": "2011-08-16T09:36:00.806546926",
+        "duration_hours": 16.372,
+        "protocols": {
+          "udp": 1512108,
+          "tcp": 367679,
+          "icmp": 35930,
+          "igmp": 4822,
+          "rtp": 1757,
+          "rtcp": 1334,
+          "arp": 1321,
+          "ipv6-icmp": 133,
+          "ipx/spx": 33,
+          "pim": 17
+        },
+        "timestamp_resolution": {
+          "distinct_sub_minute_offsets": 60001,
+          "sub_second_precision": true
+        }
+      },
+      "labels": {
+        "n_distinct_labels": 115,
+        "flows_by_class": {
+          "botnet": 40003,
+          "normal": 31939,
+          "background": 1853207
+        },
+        "flows_by_stage": {
+          "benign": 1885146,
+          "recon": 22463,
+          "c2": 9642,
+          "exfil": 7878,
+          "initial_access": 20
+        },
+        "top_labels": {
+          "flow=To-Background-UDP-CVUT-DNS-Server": 756280,
+          "flow=Background-UDP-Established": 676312,
+          "flow=Background-TCP-Established": 218726,
+          "flow=Background": 46357,
+          "flow=Background-Established-cmpgw-CVUT": 43440,
+          "flow=Background-UDP-Attempt": 42431,
+          "flow=Background-TCP-Attempt": 39183,
+          "flow=From-Normal-V54-Stribrek": 26846,
+          "flow=From-Botnet-V54-TCP-Attempt": 22463,
+          "flow=To-Background-CVUT-Proxy": 8041,
+          "flow=From-Botnet-V54-UDP-DNS": 7523,
+          "flow=To-Background-CVUT-WebServer": 6692,
+          "flow=From-Botnet-V54-TCP-Attempt-SPAM": 6617,
+          "flow=Background-UDP-NTP-Established-1": 5822,
+          "flow=From-Normal-V54-Grill": 3539
+        }
+      },
+      "botnet_source_hosts": {
+        "147.32.84.165": 40003
+      },
+      "host_filter": {
+        "cidrs": [
+          "147.32.0.0/16"
+        ],
+        "flows_kept": 1201478,
+        "flows_dropped": 723671,
+        "hosts_kept": 433,
+        "botnet_flows_dropped": 0
+      },
+      "windowed": {
+        "cache_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_13__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+        "window_seconds": 60,
+        "n_rows": 251774,
+        "n_hosts": 433,
+        "n_active_rows": 50422,
+        "active_fraction": 0.20027,
+        "n_attack_rows": 978,
+        "attack_prevalence": 0.003884,
+        "n_risk_positive_rows": 978,
+        "risk_prevalence": 0.003884,
+        "stage_counts": {
+          "benign": 250796,
+          "exfil": 777,
+          "recon": 150,
+          "c2": 51
+        },
+        "n_hosts_with_at_least_L_plus_K_windows": 344,
+        "n_rows_on_those_hosts": 251015
+      },
+      "episodes": {
+        "n_episodes": 2,
+        "n_hosts_with_episodes": 1,
+        "length_windows": {
+          "min": 1,
+          "median": 489.0,
+          "max": 977,
+          "total": 978
+        }
+      },
+      "pre_onset": {
+        "by_horizon": {
+          "1": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "3": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "5": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "10": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "15": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "30": {
+            "n_rows": 0,
+            "n_episodes": 0
+          },
+          "60": {
+            "n_rows": 0,
+            "n_episodes": 0
+          }
+        }
+      },
+      "feature_coverage": {
+        "syn_ratio": 0.08719,
+        "ack_ratio": 0.08355,
+        "rst_ratio": 0.03261,
+        "fin_ratio": 0.06769,
+        "psh_ratio": 0.07257,
+        "urg_ratio": 0.0,
+        "bytes_total": 0.20027,
+        "bytes_up_down_ratio": 0.14714,
+        "pkts_per_flow_mean": 0.20027,
+        "flow_duration_mean": 0.17644,
+        "flow_duration_var": 0.12659,
+        "iat_mean": 0.17508,
+        "iat_var": 0.1262,
+        "iat_max": 0.0,
+        "active_flow_count": 0.20027,
+        "ttl_mean": 0.0,
+        "ttl_var": 0.0,
+        "tcp_window_mean": 0.0,
+        "tcp_window_entropy": 0.0,
+        "frag_flag_rate": 0.0,
+        "payload_size_mean": 0.0,
+        "payload_size_var": 0.0,
+        "payload_size_p95": 0.0,
+        "payload_size_entropy": 0.0,
+        "retrans_count": 0.0,
+        "retrans_rate": 0.0,
+        "out_degree": 0.20027,
+        "in_degree": 0.02008,
+        "dst_ip_entropy": 0.08966,
+        "dst_port_entropy": 0.0824,
+        "new_peer_count": 0.02884,
+        "neighbour_risk_fraction": 0.0237,
+        "local_clustering_coeff": 0.00169,
+        "reciprocity": 0.20027,
+        "d_syn_ratio": 0.10756,
+        "d_dst_port_entropy": 0.10698,
+        "d_out_degree": 0.20929,
+        "d_new_peer_count": 0.04059,
+        "d_iat_var": 0.16904,
+        "d_retrans_rate": 0.0,
+        "slope3_syn_ratio": 0.10829,
+        "slope3_dst_port_entropy": 0.10753,
+        "slope3_out_degree": 0.21427,
+        "slope3_iat_var": 0.16987,
+        "is_active": 0.20027
+      },
+      "seconds": 56.0
+    },
+    "ctu_8": {
+      "day_key": "ctu_8",
+      "scenario": 8,
+      "family": "murlo",
+      "behaviour": "port scan",
+      "role": "test",
+      "file": "/Users/manteksinghburn/nidra/CTU-13-Dataset/8/capture20110816-3.binetflow",
+      "file_bytes": 403955463,
+      "file_sha256": "c2ff96c8908f1b24b2ff9dc2033ca9fd034b994f3a59e0cc4f1f53a0615c4ec0",
+      "raw": {
+        "input_rows": 2954230,
+        "accepted_rows": 2954230,
+        "drop_reasons": {},
+        "distinct_source_hosts": 333816,
+        "distinct_destination_hosts": 97822,
+        "start_utc": "2011-08-16T14:18:55.889839172",
+        "end_utc": "2011-08-17T09:47:11.231724977",
+        "duration_hours": 19.471,
+        "protocols": {
+          "udp": 2354858,
+          "tcp": 540369,
+          "icmp": 47597,
+          "igmp": 5739,
+          "rtp": 2131,
+          "rtcp": 1757,
+          "arp": 1546,
+          "ipv6-icmp": 154,
+          "ipx/spx": 39,
+          "pim": 20
+        },
+        "timestamp_resolution": {
+          "distinct_sub_minute_offsets": 60001,
+          "sub_second_precision": true
+        }
+      },
+      "labels": {
+        "n_distinct_labels": 60,
+        "flows_by_class": {
+          "botnet": 6127,
+          "normal": 72822,
+          "background": 2875281
+        },
+        "flows_by_stage": {
+          "benign": 2948103,
+          "recon": 4713,
+          "c2": 1407,
+          "exfil": 5,
+          "initial_access": 2
+        },
+        "top_labels": {
+          "flow=To-Background-UDP-CVUT-DNS-Server": 1331472,
+          "flow=Background-UDP-Established": 875967,
+          "flow=Background-TCP-Established": 316366,
+          "flow=Background-Established-cmpgw-CVUT": 106864,
+          "flow=Background-UDP-Attempt": 70708,
+          "flow=Background": 60003,
+          "flow=Background-TCP-Attempt": 56007,
+          "flow=From-Normal-V49-Stribrek": 48588,
+          "flow=To-Background-CVUT-Proxy": 23886,
+          "flow=From-Normal-V49-Grill": 18164,
+          "flow=Background-Attempt-cmpgw-CVUT": 8030,
+          "flow=To-Background-CVUT-WebServer": 7235,
+          "flow=Background-UDP-NTP-Established-1": 6728,
+          "flow=From-Normal-V49-Jist": 5463,
+          "flow=From-Botnet-V49-TCP-Attempt": 4710
+        }
+      },
+      "botnet_source_hosts": {
+        "147.32.84.165": 6127
+      },
+      "host_filter": {
+        "cidrs": [
+          "147.32.0.0/16"
+        ],
+        "flows_kept": 2079133,
+        "flows_dropped": 875097,
+        "hosts_kept": 478,
+        "botnet_flows_dropped": 0
+      },
+      "windowed": {
+        "cache_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_8__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+        "window_seconds": 60,
+        "n_rows": 335311,
+        "n_hosts": 478,
+        "n_active_rows": 67082,
+        "active_fraction": 0.20006,
+        "n_attack_rows": 1094,
+        "attack_prevalence": 0.003263,
+        "n_risk_positive_rows": 1131,
+        "risk_prevalence": 0.003373,
+        "stage_counts": {
+          "benign": 334217,
+          "c2": 1061,
+          "recon": 28,
+          "exfil": 5
+        },
+        "n_hosts_with_at_least_L_plus_K_windows": 384,
+        "n_rows_on_those_hosts": 334940
+      },
+      "episodes": {
+        "n_episodes": 25,
+        "n_hosts_with_episodes": 1,
+        "length_windows": {
+          "min": 1,
+          "median": 35.0,
+          "max": 192,
+          "total": 1094
+        }
+      },
+      "pre_onset": {
+        "by_horizon": {
+          "1": {
+            "n_rows": 2,
+            "n_episodes": 2
+          },
+          "3": {
+            "n_rows": 6,
+            "n_episodes": 2
+          },
+          "5": {
+            "n_rows": 10,
+            "n_episodes": 2
+          },
+          "10": {
+            "n_rows": 20,
+            "n_episodes": 2
+          },
+          "15": {
+            "n_rows": 29,
+            "n_episodes": 2
+          },
+          "30": {
+            "n_rows": 44,
+            "n_episodes": 2
+          },
+          "60": {
+            "n_rows": 46,
+            "n_episodes": 2
+          }
+        }
+      },
+      "feature_coverage": {
+        "syn_ratio": 0.09896,
+        "ack_ratio": 0.09556,
+        "rst_ratio": 0.0387,
+        "fin_ratio": 0.07563,
+        "psh_ratio": 0.08262,
+        "urg_ratio": 0.0,
+        "bytes_total": 0.20006,
+        "bytes_up_down_ratio": 0.14939,
+        "pkts_per_flow_mean": 0.20006,
+        "flow_duration_mean": 0.18089,
+        "flow_duration_var": 0.13252,
+        "iat_mean": 0.17988,
+        "iat_var": 0.13216,
+        "iat_max": 0.0,
+        "active_flow_count": 0.20006,
+        "ttl_mean": 0.0,
+        "ttl_var": 0.0,
+        "tcp_window_mean": 0.0,
+        "tcp_window_entropy": 0.0,
+        "frag_flag_rate": 0.0,
+        "payload_size_mean": 0.0,
+        "payload_size_var": 0.0,
+        "payload_size_p95": 0.0,
+        "payload_size_entropy": 0.0,
+        "retrans_count": 0.0,
+        "retrans_rate": 0.0,
+        "out_degree": 0.20006,
+        "in_degree": 0.02062,
+        "dst_ip_entropy": 0.09435,
+        "dst_port_entropy": 0.08512,
+        "new_peer_count": 0.03072,
+        "neighbour_risk_fraction": 0.0276,
+        "local_clustering_coeff": 0.00166,
+        "reciprocity": 0.20006,
+        "d_syn_ratio": 0.11758,
+        "d_dst_port_entropy": 0.10967,
+        "d_out_degree": 0.20578,
+        "d_new_peer_count": 0.04254,
+        "d_iat_var": 0.17351,
+        "d_retrans_rate": 0.0,
+        "slope3_syn_ratio": 0.11792,
+        "slope3_dst_port_entropy": 0.10918,
+        "slope3_out_degree": 0.20996,
+        "slope3_iat_var": 0.17394,
+        "is_active": 0.20006
+      },
+      "seconds": 81.6
+    },
+    "ctu_3": {
+      "day_key": "ctu_3",
+      "scenario": 3,
+      "family": "rbot",
+      "behaviour": "IRC, port scan",
+      "role": "train",
+      "file": "/Users/manteksinghburn/nidra/CTU-13-Dataset/3/capture20110812.binetflow",
+      "file_bytes": 639643247,
+      "file_sha256": "a5e7311e25ff280e302ee5786b1aabf48dacfa6edaf25412f3aa1adbe1006039",
+      "raw": {
+        "input_rows": 4710638,
+        "accepted_rows": 4710638,
+        "drop_reasons": {},
+        "distinct_source_hosts": 359987,
+        "distinct_destination_hosts": 125482,
+        "start_utc": "2011-08-12T15:24:01.105062962",
+        "end_utc": "2011-08-15T10:13:26.439802170",
+        "duration_hours": 66.824,
+        "protocols": {
+          "udp": 3194929,
+          "tcp": 1354744,
+          "icmp": 132021,
+          "igmp": 19696,
+          "arp": 5195,
+          "rtp": 1654,
+          "rtcp": 1551,
+          "ipv6-icmp": 544,
+          "ipx/spx": 132,
+          "ipv6": 70
+        },
+        "timestamp_resolution": {
+          "distinct_sub_minute_offsets": 60001,
+          "sub_second_precision": true
+        }
+      },
+      "labels": {
+        "n_distinct_labels": 51,
+        "flows_by_class": {
+          "botnet": 26822,
+          "normal": 116887,
+          "background": 4566929
+        },
+        "flows_by_stage": {
+          "benign": 4683816,
+          "recon": 26237,
+          "c2": 564,
+          "exfil": 21
+        },
+        "top_labels": {
+          "flow=To-Background-UDP-CVUT-DNS-Server": 2169040,
+          "flow=Background-UDP-Established": 806119,
+          "flow=Background-TCP-Established": 729048,
+          "flow=Background-TCP-Attempt": 408887,
+          "flow=Background": 156122,
+          "flow=From-Normal-V44-Stribrek": 108807,
+          "flow=Background-UDP-Attempt": 104089,
+          "flow=Background-Established-cmpgw-CVUT": 85383,
+          "flow=From-Botnet-V44-TCP-Attempt": 26234,
+          "flow=To-Background-CVUT-WebServer": 24271,
+          "flow=Background-UDP-NTP-Established-1": 22345,
+          "flow=To-Background-CVUT-Proxy": 22009,
+          "flow=Background-Attempt-cmpgw-CVUT": 13659,
+          "flow=To-Background-MatLab-Server": 8937,
+          "flow=From-Normal-V44-Grill": 4580
+        }
+      },
+      "botnet_source_hosts": {
+        "147.32.84.165": 26759,
+        "38.229.70.20": 63
+      },
+      "host_filter": {
+        "cidrs": [
+          "147.32.0.0/16"
+        ],
+        "flows_kept": 3215706,
+        "flows_dropped": 1494932,
+        "hosts_kept": 504,
+        "botnet_flows_dropped": 63
+      },
+      "windowed": {
+        "cache_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_3__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+        "window_seconds": 60,
+        "n_rows": 1242263,
+        "n_hosts": 504,
+        "n_active_rows": 188180,
+        "active_fraction": 0.15148,
+        "n_attack_rows": 870,
+        "attack_prevalence": 0.0007,
+        "n_risk_positive_rows": 924,
+        "risk_prevalence": 0.000744,
+        "stage_counts": {
+          "benign": 1241393,
+          "recon": 703,
+          "c2": 152,
+          "exfil": 15
+        },
+        "n_hosts_with_at_least_L_plus_K_windows": 406,
+        "n_rows_on_those_hosts": 1241846
+      },
+      "episodes": {
+        "n_episodes": 13,
+        "n_hosts_with_episodes": 1,
+        "length_windows": {
+          "min": 1,
+          "median": 1.0,
+          "max": 705,
+          "total": 870
+        }
+      },
+      "pre_onset": {
+        "by_horizon": {
+          "1": {
+            "n_rows": 10,
+            "n_episodes": 10
+          },
+          "3": {
+            "n_rows": 30,
+            "n_episodes": 10
+          },
+          "5": {
+            "n_rows": 50,
+            "n_episodes": 10
+          },
+          "10": {
+            "n_rows": 100,
+            "n_episodes": 10
+          },
+          "15": {
+            "n_rows": 143,
+            "n_episodes": 10
+          },
+          "30": {
+            "n_rows": 263,
+            "n_episodes": 10
+          },
+          "60": {
+            "n_rows": 489,
+            "n_episodes": 10
+          }
+        }
+      },
+      "feature_coverage": {
+        "syn_ratio": 0.0604,
+        "ack_ratio": 0.05441,
+        "rst_ratio": 0.01655,
+        "fin_ratio": 0.04647,
+        "psh_ratio": 0.04966,
+        "urg_ratio": 0.0,
+        "bytes_total": 0.15148,
+        "bytes_up_down_ratio": 0.10795,
+        "pkts_per_flow_mean": 0.15148,
+        "flow_duration_mean": 0.13277,
+        "flow_duration_var": 0.0933,
+        "iat_mean": 0.13138,
+        "iat_var": 0.09285,
+        "iat_max": 0.0,
+        "active_flow_count": 0.15148,
+        "ttl_mean": 0.0,
+        "ttl_var": 0.0,
+        "tcp_window_mean": 0.0,
+        "tcp_window_entropy": 0.0,
+        "frag_flag_rate": 0.0,
+        "payload_size_mean": 0.0,
+        "payload_size_var": 0.0,
+        "payload_size_p95": 0.0,
+        "payload_size_entropy": 0.0,
+        "retrans_count": 0.0,
+        "retrans_rate": 0.0,
+        "out_degree": 0.15148,
+        "in_degree": 0.01422,
+        "dst_ip_entropy": 0.06361,
+        "dst_port_entropy": 0.05818,
+        "new_peer_count": 0.01283,
+        "neighbour_risk_fraction": 0.01559,
+        "local_clustering_coeff": 0.00125,
+        "reciprocity": 0.15148,
+        "d_syn_ratio": 0.07609,
+        "d_dst_port_entropy": 0.07485,
+        "d_out_degree": 0.15745,
+        "d_new_peer_count": 0.01916,
+        "d_iat_var": 0.12507,
+        "d_retrans_rate": 0.0,
+        "slope3_syn_ratio": 0.07691,
+        "slope3_dst_port_entropy": 0.07585,
+        "slope3_out_degree": 0.16165,
+        "slope3_iat_var": 0.12551,
+        "is_active": 0.15148
+      },
+      "seconds": 173.2
+    }
+  },
+  "config": {
+    "config_path": "config/ctu13.yaml",
+    "config_hash": "6a3581e1d59c0e62",
+    "git_commit": "8cc831753d256cc94ca5dcf41f58da7c091a1501",
+    "internal_cidrs": [
+      "147.32.0.0/16"
+    ],
+    "feature_regime": "cross_core"
+  }
+}

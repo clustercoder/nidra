@@ -1,0 +1,648 @@
+{
+  "stage": "train",
+  "recorded_at": "2026-09-22T22:18:53Z",
+  "git_commit": "61258de5ad3c8f3ebbfdba903dbfe917c0588ce7",
+  "config_path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/ctu_sh_cn01/config.yaml",
+  "config_hash": "46f3928c340de8c7",
+  "schema_version": "1.0",
+  "n_features": 45,
+  "geometry": {
+    "window_seconds": 60,
+    "context_length_L": 30,
+    "horizon_length_K": 6,
+    "history_minutes": 30.0,
+    "horizon_minutes": 6.0,
+    "min_windows_per_host": 36
+  },
+  "dataset": {
+    "name": "CTU-13 (Argus binetflow, flow-only)",
+    "flow_timebase": "utc12h",
+    "feature_regime": "cross_core",
+    "ctu13_internal_cidrs": [
+      "147.32.0.0/16"
+    ],
+    "days": {
+      "ctu_1": {
+        "role": "train",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/1/capture20110810.binetflow",
+          "bytes": 386629271,
+          "mtime": "2014-07-18T08:32:58Z"
+        },
+        "packets_parquet": null,
+        "family": "neris",
+        "scenario": 1,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_1__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 3913615,
+          "mtime": "2026-09-22T19:29:09Z"
+        }
+      },
+      "ctu_2": {
+        "role": "train",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/2/capture20110811.binetflow",
+          "bytes": 247231783,
+          "mtime": "2014-07-18T08:32:52Z"
+        },
+        "packets_parquet": null,
+        "family": "neris",
+        "scenario": 2,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_2__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 2698498,
+          "mtime": "2026-09-22T19:27:33Z"
+        }
+      },
+      "ctu_3": {
+        "role": "train",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/3/capture20110812.binetflow",
+          "bytes": 639643247,
+          "mtime": "2014-07-18T08:34:21Z"
+        },
+        "packets_parquet": null,
+        "family": "rbot",
+        "scenario": 3,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_3__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 16096482,
+          "mtime": "2026-09-22T19:35:51Z"
+        }
+      },
+      "ctu_4": {
+        "role": "test",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/4/capture20110815.binetflow",
+          "bytes": 153789874,
+          "mtime": "2014-07-18T08:33:46Z"
+        },
+        "packets_parquet": null,
+        "family": "rbot",
+        "scenario": 4,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_4__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 2647798,
+          "mtime": "2026-09-22T19:28:07Z"
+        }
+      },
+      "ctu_6": {
+        "role": "test",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/6/capture20110816.binetflow",
+          "bytes": 76780048,
+          "mtime": "2014-07-18T13:45:15Z"
+        },
+        "packets_parquet": null,
+        "family": "menti",
+        "scenario": 6,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_6__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 1446807,
+          "mtime": "2026-09-22T19:26:52Z"
+        }
+      },
+      "ctu_7": {
+        "role": "test",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/7/capture20110816-2.binetflow",
+          "bytes": 15630512,
+          "mtime": "2014-07-18T08:34:10Z"
+        },
+        "packets_parquet": null,
+        "family": "sogou",
+        "scenario": 7,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_7__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 305721,
+          "mtime": "2026-09-22T19:25:42Z"
+        }
+      },
+      "ctu_8": {
+        "role": "test",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/8/capture20110816-3.binetflow",
+          "bytes": 403955463,
+          "mtime": "2014-07-18T08:35:16Z"
+        },
+        "packets_parquet": null,
+        "family": "murlo",
+        "scenario": 8,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_8__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 6587364,
+          "mtime": "2026-09-22T19:32:57Z"
+        }
+      },
+      "ctu_9": {
+        "role": "test",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/9/capture20110817.binetflow",
+          "bytes": 285841002,
+          "mtime": "2014-07-18T08:42:06Z"
+        },
+        "packets_parquet": null,
+        "family": "neris",
+        "scenario": 9,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_9__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 3574796,
+          "mtime": "2026-09-22T19:30:37Z"
+        }
+      },
+      "ctu_10": {
+        "role": "test",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/10/capture20110818.binetflow",
+          "bytes": 179074339,
+          "mtime": "2014-07-18T08:35:09Z"
+        },
+        "packets_parquet": null,
+        "family": "rbot",
+        "scenario": 10,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_10__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 3154480,
+          "mtime": "2026-09-22T19:29:47Z"
+        }
+      },
+      "ctu_11": {
+        "role": "test",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/11/capture20110818-2.binetflow",
+          "bytes": 14596615,
+          "mtime": "2014-07-18T08:35:01Z"
+        },
+        "packets_parquet": null,
+        "family": "rbot",
+        "scenario": 11,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_11__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 225488,
+          "mtime": "2026-09-22T19:26:16Z"
+        }
+      },
+      "ctu_5": {
+        "role": "holdout",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/5/capture20110815-2.binetflow",
+          "bytes": 17766203,
+          "mtime": "2014-07-18T08:33:42Z"
+        },
+        "packets_parquet": null,
+        "family": "virut",
+        "scenario": 5,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_5__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 329803,
+          "mtime": "2026-09-22T19:26:23Z"
+        }
+      },
+      "ctu_13": {
+        "role": "holdout",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/13/capture20110815-3.binetflow",
+          "bytes": 262668288,
+          "mtime": "2014-07-18T08:36:03Z"
+        },
+        "packets_parquet": null,
+        "family": "virut",
+        "scenario": 13,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_13__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 4485724,
+          "mtime": "2026-09-22T19:31:34Z"
+        }
+      },
+      "ctu_12": {
+        "role": "holdout",
+        "format": "ctu_binetflow",
+        "flow_file": {
+          "path": "/Users/manteksinghburn/nidra/CTU-13-Dataset/12/capture20110819.binetflow",
+          "bytes": 44718958,
+          "mtime": "2014-07-18T08:35:17Z"
+        },
+        "packets_parquet": null,
+        "family": "nsis_ay",
+        "scenario": 12,
+        "processed_table": {
+          "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/artifacts/processed/ctu_12__ctu_binetflow__w60__flowonly__capNone__147.32.0.0-16__fuse2.parquet",
+          "bytes": 829203,
+          "mtime": "2026-09-22T19:26:34Z"
+        }
+      }
+    }
+  },
+  "seed": null,
+  "ensemble_seeds": [
+    0
+  ],
+  "split": null,
+  "threshold": 0.75,
+  "pooling": null,
+  "calibration": null,
+  "checkpoints": {
+    "weights": {
+      "seed_0": {
+        "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/ctu_sh_cn01/artifacts/weights/model_seed_0.pt",
+        "sha256": "e4f1fcd7242039f9595d8bbc1544a23dd371179ee970addc39735358024e60db"
+      }
+    },
+    "scaler": {
+      "robust_scaler.joblib": null,
+      "feature_scaler.json": "0261c095108681aff7c27a0eec7b605672e083e9e2fbccdde613cd415ae88d52",
+      "scaler_metadata.json": "a2a335a51cba7db6133bb440326477fecd85f5c2d4e3143cb15ccdedf8b4d135",
+      "shap_background.npy": "a61f35a1affa14d9b2a4caddbb754016a339776e5bfb8aa489ee99aa4514b5fa"
+    },
+    "calibration": {
+      "path": "/Users/manteksinghburn/nidra/.claude/worktrees/model-metrics-improvement-c81859/ml/experiments/runs/ctu_sh_cn01/artifacts/weights/risk_calibration.json",
+      "sha256": null
+    }
+  },
+  "platform": {
+    "python": "3.14.7",
+    "machine": "arm64",
+    "system": "Darwin"
+  },
+  "metrics": {
+    "seeds": {
+      "0": {
+        "heads": {
+          "seed": 0,
+          "stage": "dynamics_and_frozen_heads",
+          "selection_metric": "val_free_running_nll",
+          "best_epoch": 9,
+          "best_selection_score": -0.9313218295574188,
+          "best_val_multistep_nll": -0.7530692626285006,
+          "best_val_free_running": {
+            "val_free_nll_by_k": [
+              -1.04803466796875,
+              -1.0049726963043213,
+              -0.8988943099975586,
+              -0.9048014879226685,
+              -0.8916073441505432,
+              -0.8396204710006714
+            ],
+            "val_free_mse_by_k": [
+              0.2950421869754791,
+              0.33340176939964294,
+              0.3621446490287781,
+              0.3654819428920746,
+              0.3683071732521057,
+              0.3814333975315094
+            ],
+            "val_free_mse_persistence_by_k": [
+              0.754067599773407,
+              0.7641133666038513,
+              0.7094073295593262,
+              0.7104931473731995,
+              0.6786201596260071,
+              0.7207962274551392
+            ],
+            "val_free_coverage90_by_k": [
+              0.9561627507209778,
+              0.9522848725318909,
+              0.9483033418655396,
+              0.9488971829414368,
+              0.9487966895103455,
+              0.9448999762535095
+            ],
+            "val_free_nll": -0.9313218295574188,
+            "val_free_mse": 0.3509685198465983,
+            "val_free_skill_by_k": [
+              0.6087324437966336,
+              0.5636749938278562,
+              0.4895109848192051,
+              0.4855939930690162,
+              0.45727050983118056,
+              0.4708166011381504
+            ],
+            "val_free_skill": 0.514510161982076,
+            "val_free_coverage90": 0.94989080230395
+          },
+          "loss_options": {
+            "beta_nll": 0.5,
+            "mse_aux_weight": 0.0,
+            "nonsilent_sample_weight": 1.0,
+            "horizon_discount": 0.85
+          },
+          "features_kept": 30,
+          "dropped_features": [
+            "urg_ratio",
+            "iat_max",
+            "ttl_mean",
+            "ttl_var",
+            "tcp_window_mean",
+            "tcp_window_entropy",
+            "frag_flag_rate",
+            "payload_size_mean",
+            "payload_size_var",
+            "payload_size_p95",
+            "payload_size_entropy",
+            "retrans_count",
+            "retrans_rate",
+            "reciprocity",
+            "d_retrans_rate"
+          ],
+          "n_train_samples": 500000,
+          "n_val_samples": 50000,
+          "geometry": {
+            "window_seconds": 60,
+            "context_length": 30,
+            "horizon_length": 6
+          },
+          "config_hash": "c38997263408952e",
+          "git_commit": "5e1d6e182f69a508081c55329157350a7c935c6f",
+          "trained_at": "2026-09-22T20:41:22Z",
+          "heads_best_val_loss": 47.75951862335205,
+          "heads_best_val_auc_pr": 0.4999080714449136,
+          "heads_best_val_auc_pr_natural": 0.4999080714449136,
+          "heads_best_epoch_risk": 12,
+          "heads_best_epoch_stage": 12,
+          "heads_selection_metric": "val_auc_pr_natural",
+          "risk_head_components": [
+            "state",
+            "hidden"
+          ],
+          "risk_head_input_dim": 173,
+          "heads_data": "all_split_rows",
+          "heads_n_train": 1419278,
+          "heads_n_train_pos": 1418,
+          "heads_n_val": 98876,
+          "heads_n_val_pos": 288,
+          "heads_recipe": {
+            "risk_sampling": "imbalanced",
+            "input_noise": 0.3,
+            "context_noise": 0.1,
+            "pos_repeat": 20,
+            "neg_ratio": 10,
+            "hard_negative_fraction": 0.5,
+            "separate_optimizers": true
+          },
+          "heads_pos_weight": 999.9012451171875,
+          "heads_class_weights": [
+            0.166826531291008,
+            336.48175048828125,
+            236546.671875,
+            236546.671875,
+            1506.6666259765625,
+            474.9933166503906
+          ],
+          "heads_trained_at": "2026-09-22T22:18:53Z"
+        },
+        "heads_history": [
+          {
+            "epoch": 0,
+            "train_risk_loss": 0.34758483092100095,
+            "train_stage_loss": 0.17785045670497465,
+            "val_loss": 19.22990322113037,
+            "val_risk_loss": 14.534770965576172,
+            "val_stage_loss": 4.695132255554199,
+            "val_auc_pr": 0.3958502127209106,
+            "val_auc_pr_natural": 0.3958502127209106,
+            "val_stage_acc_on_attacks": 0.39436619718309857,
+            "val_stage_macro_f1": 0.2962697680023278
+          },
+          {
+            "epoch": 1,
+            "train_risk_loss": 0.31651469397792426,
+            "train_stage_loss": 0.13746426935471853,
+            "val_loss": 18.156169891357422,
+            "val_risk_loss": 12.944570541381836,
+            "val_stage_loss": 5.211599349975586,
+            "val_auc_pr": 0.4302103927897498,
+            "val_auc_pr_natural": 0.4302103927897498,
+            "val_stage_acc_on_attacks": 0.36619718309859156,
+            "val_stage_macro_f1": 0.31692972890576854
+          },
+          {
+            "epoch": 2,
+            "train_risk_loss": 0.2868661031056067,
+            "train_stage_loss": 0.13283937323123332,
+            "val_loss": 22.105030059814453,
+            "val_risk_loss": 16.860897064208984,
+            "val_stage_loss": 5.244132995605469,
+            "val_auc_pr": 0.4677448115177511,
+            "val_auc_pr_natural": 0.4677448115177511,
+            "val_stage_acc_on_attacks": 0.4413145539906103,
+            "val_stage_macro_f1": 0.3296731844924766
+          },
+          {
+            "epoch": 3,
+            "train_risk_loss": 0.2816835721730323,
+            "train_stage_loss": 0.13362216611021033,
+            "val_loss": 21.111291885375977,
+            "val_risk_loss": 15.558551788330078,
+            "val_stage_loss": 5.552740097045898,
+            "val_auc_pr": 0.4605799051527665,
+            "val_auc_pr_natural": 0.4605799051527665,
+            "val_stage_acc_on_attacks": 0.29577464788732394,
+            "val_stage_macro_f1": 0.30421159487965566
+          },
+          {
+            "epoch": 4,
+            "train_risk_loss": 0.28114113312369476,
+            "train_stage_loss": 0.1267548062066462,
+            "val_loss": 25.24287223815918,
+            "val_risk_loss": 19.737037658691406,
+            "val_stage_loss": 5.505834579467773,
+            "val_auc_pr": 0.4347089796928098,
+            "val_auc_pr_natural": 0.4347089796928098,
+            "val_stage_acc_on_attacks": 0.29577464788732394,
+            "val_stage_macro_f1": 0.28393988912409474
+          },
+          {
+            "epoch": 5,
+            "train_risk_loss": 0.27689657222241465,
+            "train_stage_loss": 0.12512412496890624,
+            "val_loss": 25.802416801452637,
+            "val_risk_loss": 20.555219650268555,
+            "val_stage_loss": 5.247197151184082,
+            "val_auc_pr": 0.4461590776609657,
+            "val_auc_pr_natural": 0.4461590776609657,
+            "val_stage_acc_on_attacks": 0.5211267605633803,
+            "val_stage_macro_f1": 0.33002888734528657
+          },
+          {
+            "epoch": 6,
+            "train_risk_loss": 0.2679601574194973,
+            "train_stage_loss": 0.12247491991596278,
+            "val_loss": 32.410701751708984,
+            "val_risk_loss": 26.691381454467773,
+            "val_stage_loss": 5.719320297241211,
+            "val_auc_pr": 0.4379837203130403,
+            "val_auc_pr_natural": 0.4379837203130403,
+            "val_stage_acc_on_attacks": 0.4084507042253521,
+            "val_stage_macro_f1": 0.32799334749886144
+          },
+          {
+            "epoch": 7,
+            "train_risk_loss": 0.28799427717068155,
+            "train_stage_loss": 0.12039647326434018,
+            "val_loss": 36.57426738739014,
+            "val_risk_loss": 30.076650619506836,
+            "val_stage_loss": 6.497616767883301,
+            "val_auc_pr": 0.4870252441566743,
+            "val_auc_pr_natural": 0.4870252441566743,
+            "val_stage_acc_on_attacks": 0.26291079812206575,
+            "val_stage_macro_f1": 0.3162659646773588
+          },
+          {
+            "epoch": 8,
+            "train_risk_loss": 0.27679209134018057,
+            "train_stage_loss": 0.12239479994608322,
+            "val_loss": 43.668354511260986,
+            "val_risk_loss": 36.88638687133789,
+            "val_stage_loss": 6.781967639923096,
+            "val_auc_pr": 0.49656403653177755,
+            "val_auc_pr_natural": 0.49656403653177755,
+            "val_stage_acc_on_attacks": 0.39906103286384975,
+            "val_stage_macro_f1": 0.3486986449700532
+          },
+          {
+            "epoch": 9,
+            "train_risk_loss": 0.2917023076636395,
+            "train_stage_loss": 0.12337123006522184,
+            "val_loss": 40.67427730560303,
+            "val_risk_loss": 34.17189025878906,
+            "val_stage_loss": 6.502387046813965,
+            "val_auc_pr": 0.45337422702606284,
+            "val_auc_pr_natural": 0.45337422702606284,
+            "val_stage_acc_on_attacks": 0.4694835680751174,
+            "val_stage_macro_f1": 0.3553113534259478
+          },
+          {
+            "epoch": 10,
+            "train_risk_loss": 0.27441764412183683,
+            "train_stage_loss": 0.11777118143047331,
+            "val_loss": 40.98671054840088,
+            "val_risk_loss": 34.690128326416016,
+            "val_stage_loss": 6.296582221984863,
+            "val_auc_pr": 0.42351971941180744,
+            "val_auc_pr_natural": 0.42351971941180744,
+            "val_stage_acc_on_attacks": 0.4788732394366197,
+            "val_stage_macro_f1": 0.3208253918766626
+          },
+          {
+            "epoch": 11,
+            "train_risk_loss": 0.2714134813308481,
+            "train_stage_loss": 0.11617939867740645,
+            "val_loss": 45.671091079711914,
+            "val_risk_loss": 38.83847427368164,
+            "val_stage_loss": 6.832616806030273,
+            "val_auc_pr": 0.46489497267982055,
+            "val_auc_pr_natural": 0.46489497267982055,
+            "val_stage_acc_on_attacks": 0.38497652582159625,
+            "val_stage_macro_f1": 0.3389175662025131
+          },
+          {
+            "epoch": 12,
+            "train_risk_loss": 0.27022787427586287,
+            "train_stage_loss": 0.12108309106618728,
+            "val_loss": 47.75951862335205,
+            "val_risk_loss": 40.64971160888672,
+            "val_stage_loss": 7.109807014465332,
+            "val_auc_pr": 0.4999080714449136,
+            "val_auc_pr_natural": 0.4999080714449136,
+            "val_stage_acc_on_attacks": 0.4647887323943662,
+            "val_stage_macro_f1": 0.37828372115592834
+          },
+          {
+            "epoch": 13,
+            "train_risk_loss": 0.270384961139285,
+            "train_stage_loss": 0.1167972420464003,
+            "val_loss": 50.288594245910645,
+            "val_risk_loss": 43.0626335144043,
+            "val_stage_loss": 7.225960731506348,
+            "val_auc_pr": 0.44468040015001087,
+            "val_auc_pr_natural": 0.44468040015001087,
+            "val_stage_acc_on_attacks": 0.47417840375586856,
+            "val_stage_macro_f1": 0.3728639832410594
+          },
+          {
+            "epoch": 14,
+            "train_risk_loss": 0.27354976699194755,
+            "train_stage_loss": 0.12291004528680026,
+            "val_loss": 54.11062431335449,
+            "val_risk_loss": 47.149566650390625,
+            "val_stage_loss": 6.961057662963867,
+            "val_auc_pr": 0.4652621242895476,
+            "val_auc_pr_natural": 0.4652621242895476,
+            "val_stage_acc_on_attacks": 0.4225352112676056,
+            "val_stage_macro_f1": 0.3210570540214661
+          },
+          {
+            "epoch": 15,
+            "train_risk_loss": 0.2772356981005353,
+            "train_stage_loss": 0.1137437140833343,
+            "val_loss": 55.42061996459961,
+            "val_risk_loss": 47.745418548583984,
+            "val_stage_loss": 7.675201416015625,
+            "val_auc_pr": 0.4272010048578186,
+            "val_auc_pr_natural": 0.4272010048578186,
+            "val_stage_acc_on_attacks": 0.5446009389671361,
+            "val_stage_macro_f1": 0.3709699542939809
+          },
+          {
+            "epoch": 16,
+            "train_risk_loss": 0.2795029744524984,
+            "train_stage_loss": 0.11845388111921769,
+            "val_loss": 52.89454698562622,
+            "val_risk_loss": 45.04742431640625,
+            "val_stage_loss": 7.847122669219971,
+            "val_auc_pr": 0.4654414336316086,
+            "val_auc_pr_natural": 0.4654414336316086,
+            "val_stage_acc_on_attacks": 0.3192488262910798,
+            "val_stage_macro_f1": 0.3282928531924231
+          },
+          {
+            "epoch": 17,
+            "train_risk_loss": 0.2768252088986107,
+            "train_stage_loss": 0.11871413221565948,
+            "val_loss": 62.667487144470215,
+            "val_risk_loss": 54.0568962097168,
+            "val_stage_loss": 8.610590934753418,
+            "val_auc_pr": 0.46082314691596193,
+            "val_auc_pr_natural": 0.46082314691596193,
+            "val_stage_acc_on_attacks": 0.2863849765258216,
+            "val_stage_macro_f1": 0.33440658646335275
+          },
+          {
+            "epoch": 18,
+            "train_risk_loss": 0.2889589143382347,
+            "train_stage_loss": 0.11743328158884613,
+            "val_loss": 58.12773942947388,
+            "val_risk_loss": 50.96515655517578,
+            "val_stage_loss": 7.162582874298096,
+            "val_auc_pr": 0.46120818482666076,
+            "val_auc_pr_natural": 0.46120818482666076,
+            "val_stage_acc_on_attacks": 0.5492957746478874,
+            "val_stage_macro_f1": 0.36164792783690536
+          }
+        ]
+      }
+    }
+  },
+  "label": "ctu_sh_cn01",
+  "note": "",
+  "stages": [
+    "heads"
+  ],
+  "epochs_override": null,
+  "init_from": "ctu_dyn",
+  "n_train_samples": 500000,
+  "n_val_samples": 50000,
+  "wall_seconds": 480.54478788375854
+}

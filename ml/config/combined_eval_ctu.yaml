@@ -1,0 +1,11 @@
+# The combined-training model, evaluated on CTU-13's held-out captures.
+# Same trained artifacts as config/combined.yaml — run with
+# `--init-from <the combined run>` so the two evaluations describe one model.
+extends: combined.yaml
+
+splits:
+  train_days: [monday, tuesday, wednesday, ctu_1, ctu_2, ctu_3]
+  val_days: [ctu_4, ctu_6]
+  val_carve_train_days: [monday, tuesday, wednesday]
+  test_days: [ctu_8, ctu_9, ctu_10]
+  holdout_days: [ctu_13, ctu_12]

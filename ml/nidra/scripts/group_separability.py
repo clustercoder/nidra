@@ -1,0 +1,286 @@
+"""Is this attack group separable AT ALL in the feature space it is scored in?
+
+    python -m nidra.scripts.group_separability --config experiments/runs/ctu_heads__state+hidden/config.yaml \\
+        --split val --out reports/tables/ctu_group_separability.md
+
+Every head tried in this phase scores `ctu_4:c2` (Rbot command-and-control,
+56 windows, 6 episodes) at AP 0.001 and ROC 0.47 — at or below chance — while
+`ctu_6:c2` goes from 0.478 to 0.999 ROC when the head gains history. Before
+concluding anything about the model, it is worth knowing whether those windows
+are distinguishable from the capture's benign traffic at all in 32 flow
+features at Δ=60 s.
+
+This fits a supervised probe DIRECTLY on the group's one-vs-rest label, with
+host-grouped cross-validation so no host appears in both folds, and reports
+its AP. Note what the `--fit-split` TRANSFER variant does and does not control
+for: CTU-13 reuses the same infected address across scenarios — `147.32.84.165`
+is the bot in captures 1, 2 and 3 (train) and in 4 and 6 (validation) — so
+fitting on the training captures and scoring a validation one is cross-capture
+and cross-family, NOT cross-host. The one-vs-rest label penalises a pure
+host-recognition strategy, since that host's own benign windows are negatives,
+but that is a partial control rather than a structural one. That is an upper bound in the same sense `oracle_true_future` is one:
+it uses information no deployed system has (the labels of the split it scores)
+and exists to bound what is achievable, never to produce a forecast. It is a
+diagnostic and is never a selection signal — nothing in the pipeline reads it.
+
+The verdict is ONE-SIDED, and reading it as two-sided was a real error in
+this phase. A probe that finds the group proves the signal is there and
+transfers, so a model that misses it is failing at something achievable. A
+probe that misses the group proves only that THIS probe missed it. `ctu_4:c2`
+was written up as "not separable at all" on a transfer ROC of 0.443, and
+NIDRA's own frozen stage head — trained on the same captures, scored on the
+same 23 windows, cross-host by the same construction — then ranked it at ROC
+0.864. The probe was the weaker learner, not the ceiling. Treat a `no` as
+"unproven", never as "unlearnable".
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+from dataclasses import dataclass
+
+import numpy as np
+
+logger = logging.getLogger(__name__)
+
+#: Small and regularised on purpose. The question is whether the signal is
+#: there, not how well an unconstrained model can memorise 56 windows.
+PROBE_KWARGS = dict(max_iter=400, learning_rate=0.08, max_depth=3,
+                    min_samples_leaf=20, l2_regularization=1.0, class_weight="balanced")
+
+
+@dataclass(frozen=True)
+class GroupProbe:
+    group: str
+    n_positive: int
+    n_positive_hosts: int
+    n_rows: int
+    base_rate: float
+    probe_ap: float
+    probe_roc: float
+    n_folds: int
+    host_leaky: bool = False
+
+    @property
+    def lift(self) -> float:
+        return self.probe_ap / self.base_rate if self.base_rate > 0 else float("nan")
+
+    #: A probe must clear BOTH to count as finding the group. Lift alone is
+    #: not enough at a 0.02% base rate: `ctu_4:c2` reached 34x lift with a
+    #: ROC of 0.443, i.e. a handful of positives at the very top of a ranking
+    #: that is below chance overall. ROC alone is not enough either — it is
+    #: insensitive to how the top of the ranking is spent.
+    MIN_LIFT = 3.0
+    MIN_ROC = 0.60
+
+    @property
+    def separable(self) -> bool:
+        """Did THIS probe find the group? True is evidence the signal exists
+        and transfers. False is not evidence that it does not — see the
+        module docstring; a better learner has already overturned one `no`.
+        NaN (nothing could be scored) is neither — read `n_folds`."""
+        return bool(self.lift >= self.MIN_LIFT and self.probe_roc >= self.MIN_ROC)
+
+
+def positive_hosts(hosts: np.ndarray, y: np.ndarray) -> np.ndarray:
+    return np.unique(np.asarray(hosts)[np.asarray(y) == 1])
+
+
+def host_grouped_folds(hosts: np.ndarray, y: np.ndarray, n_folds: int = 5, seed: int = 0) -> list[np.ndarray]:
+    """Fold assignment by host, so a host's windows never straddle a fold.
+    Hosts carrying positives are spread across folds first, otherwise a fold
+    can end up with no positive at all and an undefined AP."""
+    rng = np.random.default_rng(seed)
+    hosts = np.asarray(hosts)
+    uniq = np.unique(hosts)
+    pos_hosts = np.unique(hosts[np.asarray(y) == 1])
+    neg_hosts = np.setdiff1d(uniq, pos_hosts)
+    assign: dict = {}
+    for i, h in enumerate(rng.permutation(pos_hosts)):
+        assign[h] = i % n_folds
+    for i, h in enumerate(rng.permutation(neg_hosts)):
+        assign[h] = i % n_folds
+    fold_of = np.array([assign[h] for h in hosts])
+    return [np.where(fold_of == f)[0] for f in range(n_folds)]
+
+
+def _stratified_folds(y: np.ndarray, n_folds: int, seed: int) -> list[np.ndarray]:
+    """Row-level folds keeping the positive rate even. Used only when the
+    group's positives sit on too few hosts for a host-grouped split."""
+    rng = np.random.default_rng(seed)
+    folds: list[list[int]] = [[] for _ in range(n_folds)]
+    for cls in (1, 0):
+        idx = rng.permutation(np.where(np.asarray(y) == cls)[0])
+        for i, j in enumerate(idx):
+            folds[i % n_folds].append(int(j))
+    return [np.sort(np.array(f, dtype=int)) for f in folds]
+
+
+def probe_group(X: np.ndarray, y: np.ndarray, hosts: np.ndarray, group: str,
+                n_folds: int = 5, seed: int = 0) -> GroupProbe:
+    """Cross-validated probe AP/ROC for one group.
+
+    Host-grouped when the positives sit on at least two hosts. When they sit
+    on ONE — which is every attack group on the CTU validation captures — a
+    host-grouped split is impossible: the only fold with a positive test host
+    has no positive to train on and every other fold has no positive to
+    score. The earlier version of this function scored those rows at 0.0 by
+    default, which put every positive at the bottom of the ranking and
+    produced a confident ROC of 0.10 for every group. Rows a fold could not
+    score are now excluded, and a single-positive-host group falls back to
+    row-stratified folds, flagged `host_leaky` because the probe can then
+    recognise the host rather than the behaviour. That weaker probe still
+    bounds something worth knowing: if even it fails, the windows carry
+    nothing.
+    """
+    from sklearn.ensemble import HistGradientBoostingClassifier
+    from sklearn.metrics import average_precision_score, roc_auc_score
+
+    y = np.asarray(y).astype(int)
+    base = float(y.mean()) if len(y) else 0.0
+    n_pos_hosts = len(positive_hosts(hosts, y))
+    leaky = n_pos_hosts < 2
+    folds = (_stratified_folds(y, n_folds, seed) if leaky
+             else host_grouped_folds(hosts, y, min(n_folds, n_pos_hosts), seed))
+
+    scored = np.zeros(len(y), dtype=bool)
+    scores = np.zeros(len(y), dtype="float64")
+    used = 0
+    for test_idx in folds:
+        train_idx = np.setdiff1d(np.arange(len(y)), test_idx)
+        if len(test_idx) == 0 or len(np.unique(y[train_idx])) < 2 or y[test_idx].sum() == 0:
+            continue
+        clf = HistGradientBoostingClassifier(random_state=seed, **PROBE_KWARGS).fit(X[train_idx], y[train_idx])
+        scores[test_idx] = clf.predict_proba(X[test_idx])[:, 1]
+        scored[test_idx] = True
+        used += 1
+    ok = used > 0 and y[scored].sum() > 0 and (y[scored] == 0).sum() > 0
+    ap = float(average_precision_score(y[scored], scores[scored])) if ok else float("nan")
+    roc = float(roc_auc_score(y[scored], scores[scored])) if ok else float("nan")
+    return GroupProbe(group=group, n_positive=int(y.sum()), n_positive_hosts=n_pos_hosts,
+                      n_rows=int(len(y)), base_rate=base, probe_ap=ap, probe_roc=roc,
+                      n_folds=used, host_leaky=leaky)
+
+
+def transfer_probe(X_fit: np.ndarray, y_fit: np.ndarray, X_score: np.ndarray, y_score: np.ndarray,
+                   group: str, hosts_score: np.ndarray, seed: int = 0) -> GroupProbe:
+    """Fit on one split's rows for this group's STAGE, score another split's
+    group. Cross-host and cross-capture by construction, so unlike the
+    within-split probe it cannot answer with host identity — it asks the
+    question the model is actually asked: does this attack stage look the
+    same on a host the fit never saw?
+    """
+    from sklearn.ensemble import HistGradientBoostingClassifier
+    from sklearn.metrics import average_precision_score, roc_auc_score
+
+    y_fit = np.asarray(y_fit).astype(int)
+    y_score = np.asarray(y_score).astype(int)
+    base = float(y_score.mean()) if len(y_score) else 0.0
+    ok = y_fit.sum() > 0 and (y_fit == 0).sum() > 0 and y_score.sum() > 0 and (y_score == 0).sum() > 0
+    if not ok:
+        return GroupProbe(group=group, n_positive=int(y_score.sum()),
+                          n_positive_hosts=len(positive_hosts(hosts_score, y_score)),
+                          n_rows=int(len(y_score)), base_rate=base, probe_ap=float("nan"),
+                          probe_roc=float("nan"), n_folds=0, host_leaky=False)
+    clf = HistGradientBoostingClassifier(random_state=seed, **PROBE_KWARGS).fit(X_fit, y_fit)
+    sc = clf.predict_proba(X_score)[:, 1]
+    return GroupProbe(group=group, n_positive=int(y_score.sum()),
+                      n_positive_hosts=len(positive_hosts(hosts_score, y_score)),
+                      n_rows=int(len(y_score)), base_rate=base,
+                      probe_ap=float(average_precision_score(y_score, sc)),
+                      probe_roc=float(roc_auc_score(y_score, sc)), n_folds=1, host_leaky=False)
+
+
+def probes_markdown(probes: list[GroupProbe], split: str, forecast_ap: dict[str, float] | None = None) -> str:
+    out = [f"### Attack-group separability probe — **{split}**", "",
+           "A supervised probe fit directly on each group's one-vs-rest label. It reads the labels of "
+           "the split it scores, so it is an upper bound in the same sense the oracle is — a diagnostic, "
+           "never a system, and never a selection signal. Folds are host-grouped where the positives sit "
+           "on two or more hosts; where they sit on one, a host-grouped split cannot be formed and the "
+           "row-stratified fallback lets the probe recognise the host rather than the behaviour, which is "
+           "marked. AP is not comparable to the benchmark's per-group AP — the benchmark scores a "
+           "stratified subsample with capped negatives and this scores every row — but ROC is.", "",
+           "**The last column is one-sided.** A `yes` proves the signal exists and transfers, so a model "
+           "that misses the group is failing at something achievable. A `no` proves only that this probe "
+           "missed it: NIDRA's own frozen stage head ranked `ctu_4:c2` at ROC 0.864 after this probe "
+           "returned 0.443 on the same windows under the same cross-host construction. Read `no` as "
+           "*unproven*, never as *unlearnable*.", "",
+           "| group | positives | positive hosts | base rate | probe AP | lift | probe ROC | CV | probe found it |",
+           "|---|---|---|---|---|---|---|---|---|"]
+    for p in sorted(probes, key=lambda q: -q.n_positive):
+        def num(v, nd=3):
+            return "—" if v != v else f"{v:.{nd}f}"
+        cv = "host-grouped" if not p.host_leaky else "**row-stratified (host-leaky)**"
+        lift = "—" if p.lift != p.lift else f"{p.lift:.0f}×"
+        out.append(f"| {p.group} | {p.n_positive} | {p.n_positive_hosts} | {p.base_rate:.5f} | "
+                   f"{num(p.probe_ap)} | {lift} | {num(p.probe_roc)} | {cv} | "
+                   f"{'yes' if p.separable else '**no**'} |")
+    return "\n".join(out)
+
+
+def main() -> None:
+    from nidra.data.normalize import FeatureScaler
+    from nidra.data.schema import FEATURE_ORDER
+    from nidra.train.pipeline import build_all_splits
+    from nidra.utils.config import load_config, resolve_path
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--split", default="val")
+    parser.add_argument("--min-positives", type=int, default=5)
+    parser.add_argument("--fit-split", default=None,
+                        help="fit the probe on this split's rows for the group's STAGE and score --split. "
+                             "Cross-host and cross-capture, so the probe cannot answer with host identity; "
+                             "this is the diagnostic that parallels what the model is asked to do.")
+    parser.add_argument("--benchmark", default=None, help="a benchmark.json to read forecast AP from")
+    parser.add_argument("--out", default=None)
+    args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+    cfg = load_config(args.config)
+    splits = build_all_splits(cfg)
+    df = getattr(splits, args.split)
+    scaler = FeatureScaler.load(*FeatureScaler.default_paths(resolve_path(cfg, cfg["artifacts"]["scaler_dir"])))
+    X = scaler.transform(df[FEATURE_ORDER].to_numpy(dtype="float32")).astype("float32")
+    hosts = df["host_id"].to_numpy()
+    capture = df["split_group"].to_numpy() if "split_group" in df.columns else np.full(len(df), "all")
+    stage = df["stage_label"].to_numpy()
+
+    X_fit = stage_fit = None
+    if args.fit_split:
+        fit_df = getattr(splits, args.fit_split)
+        X_fit = scaler.transform(fit_df[FEATURE_ORDER].to_numpy(dtype="float32")).astype("float32")
+        stage_fit = fit_df["stage_label"].to_numpy()
+
+    keys = [f"{c}:{s}" for c, s in zip(capture, stage)]
+    probes = []
+    for group in sorted({k for k in keys if not k.endswith(":benign")}):
+        y = np.array([k == group for k in keys], dtype=int)
+        if y.sum() < args.min_positives:
+            continue
+        if args.fit_split:
+            group_stage = group.split(":", 1)[1]
+            probes.append(transfer_probe(X_fit, (stage_fit == group_stage).astype(int), X, y, group, hosts))
+        else:
+            probes.append(probe_group(X, y, hosts, group))
+        logger.info("%s: %d positives, probe AP %.4f (%.0fx base)", group, probes[-1].n_positive,
+                    probes[-1].probe_ap, probes[-1].lift)
+
+    forecast_ap = None
+    if args.benchmark:
+        rec = json.loads(open(args.benchmark).read())
+        per = rec.get("metrics", rec).get("per_attack_group", {})
+        forecast_ap = {g: v.get("systems", {}).get("world_model", {}).get("auc_pr") for g, v in per.items()} if per else None
+
+    md = probes_markdown(probes, args.split, forecast_ap)
+    print(md)
+    if args.out:
+        from pathlib import Path
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(md + "\n")
+
+
+if __name__ == "__main__":
+    main()

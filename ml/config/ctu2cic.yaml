@@ -1,0 +1,13 @@
+# Cross-dataset transfer the other way: train on CTU-13, evaluate on
+# CIC-IDS2017. Validation stays in the source dataset (CTU captures 4 and 6).
+extends: combined.yaml
+
+splits:
+  train_days: [ctu_1, ctu_2, ctu_3]
+  val_days: [ctu_4, ctu_6]
+  val_carve_train_days: []
+  test_days: [friday_morning, friday_portscan, friday_ddos]
+  holdout_days: [thursday_web, thursday_infiltration]
+
+features:
+  regime: cross_core

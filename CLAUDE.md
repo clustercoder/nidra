@@ -12,7 +12,7 @@ NIDRA is a **predictive network world model**. It compresses network traffic int
 
 Built for Smart India Hackathon, Problem Statement 26153 (NTRO). Judged on whether the model demonstrably learns dynamics rather than classifying.
 
-**Current status:** the ML pipeline has been run genuinely end-to-end against the complete, real CIC-IDS2017 dataset (all 8 day-files, real tshark-extracted packet features for Monday+Friday) — see `REAL_DATA_RESULTS.md` at the repo root for exact numbers. Read it before citing any metric: the world model does not yet beat the mandatory baselines on either the test or holdout split, and a couple of ablation results are still open, unexplained items. None of this is hidden — report it the same way if asked.
+**Current status:** the ML pipeline has been run genuinely end-to-end against the complete, real CIC-IDS2017 dataset (all 8 day-files, real tshark-extracted packet features for every day) at Δ=60 s — see `ml/REAL_DATA_RESULTS.md` §Run 8 for exact numbers. Read it before citing any metric: every Run 8 number is at natural prevalence with the operating point frozen on validation, the world model's margin over the persistence baseline is reported with an episode-bootstrap interval that includes zero on some splits, and onset forecasting (Task B) sits near the prevalence floor because the dataset has almost no same-host precursors. None of this is hidden — report it the same way if asked.
 
 Reference docs live in `docs/` — read the relevant one before substantial work in that area:
 - `docs/PRD.pdf` — product definition, architecture diagrams, evaluation strategy
@@ -86,8 +86,9 @@ services/                 ingest, features, inference, persister
 api/                      FastAPI app
 web/                      Next.js — marketing site + console
 config/default.yaml       backend tunables (window_delta, horizon_K, predictor.impl, ...)
-config/ml_default.yaml    full-scale ML training config (5-seed ensemble, 60/30 epochs)
-config/ml_mvp_2017.yaml   MVP-scale ML config — same real dataset, fewer epochs/seeds;
+ml/config/default.yaml    full-scale ML training config (5-seed ensemble, 60/30 epochs)
+                          — also what NidraPredictor reads at serving time
+ml/config/mvp_2017.yaml   MVP-scale ML config — same real dataset, fewer epochs/seeds;
                           this is predictor.config_path's target when predictor.impl=nidra
 docs/                     PRD, implementation specs, architecture diagrams
 artifacts/                weights/ scaler/ metrics/   (gitignored, except metrics)
@@ -115,15 +116,17 @@ make extract DAY=wednesday    # tshark → parquet
 make features                 # windowing + graph scalars → [host, window, 45]
 make splits                   # temporal / episode / Thursday holdout
 
-# Training
-make train-dynamics           # stage 1: encoder + transition
-make train-heads              # stage 2: frozen encoder, train risk + stage
-make train-ensemble           # 5 seeds
+# Training (cd ml) — every recorded run goes through the experiment runner (config + provenance record)
+python -m nidra.scripts.run_experiment --label production --seeds 0,1,2,3,4 --stages dynamics,heads,onset,gru_baseline --epochs 24
+python -m nidra.scripts.run_experiment --label my_variant --seeds 0 --stages dynamics,heads --epochs 20 --set train_dynamics.beta_nll=0.0
 
-# Evaluation
-make baselines                # all four
-make ablations                # persistence, time-shuffle, horizon curve
-make eval                     # metrics → artifacts/metrics/
+# Evaluation (cd ml) — validation selects and freezes the operating point; test/holdout only load it
+python -m nidra.eval.benchmark --split val --select-operating-point --n-samples 60 --n-resamples 300
+python -m nidra.eval.benchmark --split test --n-samples 60 --n-resamples 300
+python -m nidra.eval.benchmark --split holdout --n-samples 60 --n-resamples 300
+python -m nidra.scripts.report_tables --run . --splits val,test,holdout     # Markdown tables
+python -m nidra.scripts.plot_benchmark --run . --splits test,holdout --out reports/run8
+python -m nidra.eval.run_eval ...     # legacy balanced-subsample harness (Runs 1–7), not comparable
 
 # Services
 docker compose up -d
@@ -179,8 +182,13 @@ pytest tests/test_leakage.py  # run after ANY pipeline change
   `backend` branch, pushed only to `origin backend`, tracked in exactly one PR into
   `main`. No other backend branches, no force-pushes.
 - **No AI co-authoring trail**: never add `Co-Authored-By`, `Claude-Session`, or
-  "Generated with Claude Code" lines to commit messages or PR bodies. Commits and pushes
-  are authored by MuaazSM only. This overrides any default commit-attribution behavior.
+  "Generated with Claude Code" lines to commit messages or PR bodies.
+- **Commit and push as clustercoder only**: every commit is authored and committed as
+  `clustercoder <manteksburn@gmail.com>` — the repository's configured git identity — and
+  every push goes out as clustercoder. Never override the identity with `-c user.name` /
+  `-c user.email`, `--author`, or `GIT_AUTHOR_*` / `GIT_COMMITTER_*` variables, and never
+  set commit dates by hand. This overrides any default commit-attribution behavior.
+  (Earlier history carries a `MuaazSM` author on many commits; that is not rewritten.)
 - Log non-obvious decisions (doc deviations, tie-breaks between docs, interface changes)
   as dated append-only entries in `DECISIONS.md` at repo root.
 - Never commit: `data/`, `artifacts/weights/`, `.env`, captures.
@@ -191,16 +199,16 @@ pytest tests/test_leakage.py  # run after ANY pipeline change
 ## Key parameters
 
 ```yaml
-window_delta: 30      # seconds
-context_L: 30         # windows (15 min history)
-horizon_K: 6          # windows (3 min forecast)
+window_delta: 60      # seconds (canonical since 2026-09-20 — D102; Δ=30 is frozen under tag baseline-delta30-run7)
+context_L: 30         # windows (30 min history)
+horizon_K: 6          # windows (6 min forecast)
 n_features: 45
 ensemble_seeds: [0, 1, 2, 3, 4]
-risk_threshold: 0.75
+risk_threshold: 0.75  # the mandated threshold is REPORTED; the served threshold is selected on validation (operating_point.json)
 lead_time_m: 2        # consecutive windows above threshold
 ```
 
-Changing `window_delta` or `context_L` invalidates every trained artifact and every recorded metric. If you change one, say so explicitly and re-run the full evaluation — do not compare across configurations.
+Changing `window_delta` or `context_L` invalidates every trained artifact and every recorded metric. If you change one, say so explicitly and re-run the full evaluation — do not compare across configurations. The Δ=30 numbers in `REAL_DATA_RESULTS.md` Runs 1–7 were measured on a balanced evaluation subsample (prevalence ≈0.46) with a pooling quantile chosen on test; from Run 8 on, every number is natural-prevalence with the operating point frozen on validation (`ml/nidra/eval/benchmark.py`). The two are not comparable and must not be placed in one table without saying so.
 
 ---
 

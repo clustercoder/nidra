@@ -1,0 +1,18 @@
+# Cross-dataset transfer: train on CIC-IDS2017, evaluate on CTU-13.
+#
+# Validation stays in the SOURCE dataset. The operating point (pooling,
+# calibration, threshold) is therefore selected without ever seeing the
+# target domain, which is what "transfer" has to mean — a target-validated
+# variant answers a different and weaker question and is reported separately.
+extends: combined.yaml
+
+splits:
+  train_days: [monday, tuesday, wednesday]
+  val_days: []
+  test_days: [ctu_8, ctu_9, ctu_10]
+  holdout_days: [ctu_13, ctu_12]
+  val_fraction_of_train_time: 0.30
+  val_block_per_day: true
+
+features:
+  regime: cross_core

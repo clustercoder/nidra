@@ -11,7 +11,7 @@ const COLUMNS: {
     intro: "Traffic becomes state:",
     bullets: [
       "Flow-level (NetFlow/IPFIX) and packet-level (tshark/PCAP) features",
-      "45-dim state vector per host per 30-second window",
+      "45-dim state vector per host per 60-second window",
       "5 feature groups: flow, packet, graph, dynamics, activity",
     ],
   },
@@ -29,14 +29,14 @@ const COLUMNS: {
         </>
       ),
       "Trained self-supervised — no attack labels",
-      "15-minute context window (L=30)",
+      "30-minute context window (L=30)",
     ],
   },
   {
     heading: "Simulate & Forecast",
     intro: "Roll the future forward:",
     bullets: [
-      "Recursive rollout, K=6 steps (3-minute horizon)",
+      "Recursive rollout, K=6 steps (6-minute horizon)",
       "~500–1000 sampled trajectories via a 5-seed ensemble",
 "Maps predicted state to one of six lifecycle stages",
     ],

@@ -1,0 +1,48 @@
+# CIC-IDS2017 + CTU-13 trained together, evaluated on CIC-IDS2017.
+#
+# The companion config/combined_eval_ctu.yaml evaluates the SAME trained
+# artifacts on CTU-13's held-out captures; run it with
+# `--init-from combined_dyn` so both evaluations describe one model.
+#
+# Both datasets contribute their own training population and their own
+# validation, so the scaler is fit across the union (train only) and model
+# selection is scored on a validation set that contains both domains.
+extends: default.yaml
+
+dataset:
+  ctu13_dir: "~/nidra/CTU-13-Dataset"
+  ctu13_internal_cidrs: ["147.32.0.0/16"]
+  days:
+    monday: {file: "Monday-WorkingHours.pcap_ISCX.csv", dataset: cic2017, role: benign_baseline, packets: "Monday-WorkingHours_packets.parquet"}
+    tuesday: {file: "Tuesday-WorkingHours.pcap_ISCX.csv", dataset: cic2017, role: train, packets: "Tuesday-WorkingHours_packets.parquet"}
+    wednesday: {file: "Wednesday-workingHours.pcap_ISCX.csv", dataset: cic2017, role: train, packets: "Wednesday-workingHours_packets.parquet"}
+    thursday_web: {file: "Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv", dataset: cic2017, role: holdout, packets: "Thursday-WorkingHours_packets.parquet"}
+    thursday_infiltration: {file: "Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv", dataset: cic2017, role: holdout, packets: "Thursday-WorkingHours_packets.parquet"}
+    friday_morning: {file: "Friday-WorkingHours-Morning.pcap_ISCX.csv", dataset: cic2017, role: test, packets: "Friday-WorkingHours_packets.parquet"}
+    friday_portscan: {file: "Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv", dataset: cic2017, role: test, packets: "Friday-WorkingHours_packets.parquet"}
+    friday_ddos: {file: "Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv", dataset: cic2017, role: test, packets: "Friday-WorkingHours_packets.parquet"}
+    ctu_1:  {file: "1/capture20110810.binetflow",    format: ctu_binetflow, dataset: ctu13, role: train,   family: neris,   scenario: 1}
+    ctu_2:  {file: "2/capture20110811.binetflow",    format: ctu_binetflow, dataset: ctu13, role: train,   family: neris,   scenario: 2}
+    ctu_3:  {file: "3/capture20110812.binetflow",    format: ctu_binetflow, dataset: ctu13, role: train,   family: rbot,    scenario: 3}
+    ctu_4:  {file: "4/capture20110815.binetflow",    format: ctu_binetflow, dataset: ctu13, role: val,     family: rbot,    scenario: 4}
+    ctu_6:  {file: "6/capture20110816.binetflow",    format: ctu_binetflow, dataset: ctu13, role: val,     family: menti,   scenario: 6}
+    ctu_8:  {file: "8/capture20110816-3.binetflow",  format: ctu_binetflow, dataset: ctu13, role: test,    family: murlo,   scenario: 8}
+    ctu_9:  {file: "9/capture20110817.binetflow",    format: ctu_binetflow, dataset: ctu13, role: test,    family: neris,   scenario: 9}
+    ctu_10: {file: "10/capture20110818.binetflow",   format: ctu_binetflow, dataset: ctu13, role: test,    family: rbot,    scenario: 10}
+    ctu_13: {file: "13/capture20110815-3.binetflow", format: ctu_binetflow, dataset: ctu13, role: holdout, family: virut,   scenario: 13}
+    ctu_12: {file: "12/capture20110819.binetflow",   format: ctu_binetflow, dataset: ctu13, role: holdout, family: nsis_ay, scenario: 12}
+
+splits:
+  # CIC's own training days keep their trailing-block validation; CTU's named
+  # validation captures are added to it. `val_days` switches the split to
+  # "named captures", so the CIC training days are NOT carved — CIC's
+  # validation is supplied as its own named entries instead, which is the
+  # only way to mix the two rules in one split.
+  train_days: [monday, tuesday, wednesday, ctu_1, ctu_2, ctu_3]
+  val_days: [ctu_4, ctu_6]
+  val_carve_train_days: [monday, tuesday, wednesday]
+  test_days: [friday_morning, friday_portscan, friday_ddos]
+  holdout_days: [thursday_web, thursday_infiltration]
+
+features:
+  regime: cross_core

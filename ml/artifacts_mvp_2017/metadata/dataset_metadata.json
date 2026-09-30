@@ -1,0 +1,65 @@
+{
+  "dataset": "CIC-IDS2017",
+  "flow_dir": "~/nidra/cicids2017/csv/extracted/TrafficLabelling ",
+  "packets_dir": "~/nidra/cicids2017/pcap/parquet",
+  "days": {
+    "monday": {
+      "file": "Monday-WorkingHours.pcap_ISCX.csv",
+      "role": "benign_baseline",
+      "packets": "Monday-WorkingHours_packets.parquet"
+    },
+    "tuesday": {
+      "file": "Tuesday-WorkingHours.pcap_ISCX.csv",
+      "role": "train",
+      "packets": "Tuesday-WorkingHours_packets.parquet"
+    },
+    "wednesday": {
+      "file": "Wednesday-workingHours.pcap_ISCX.csv",
+      "role": "train",
+      "packets": "Wednesday-workingHours_packets.parquet"
+    },
+    "thursday_web": {
+      "file": "Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv",
+      "role": "holdout",
+      "packets": "Thursday-WorkingHours_packets.parquet"
+    },
+    "thursday_infiltration": {
+      "file": "Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv",
+      "role": "holdout",
+      "packets": "Thursday-WorkingHours_packets.parquet"
+    },
+    "friday_morning": {
+      "file": "Friday-WorkingHours-Morning.pcap_ISCX.csv",
+      "role": "test",
+      "packets": "Friday-WorkingHours_packets.parquet"
+    },
+    "friday_portscan": {
+      "file": "Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv",
+      "role": "test",
+      "packets": "Friday-WorkingHours_packets.parquet"
+    },
+    "friday_ddos": {
+      "file": "Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv",
+      "role": "test",
+      "packets": "Friday-WorkingHours_packets.parquet"
+    }
+  },
+  "train_days": [
+    "monday",
+    "tuesday",
+    "wednesday"
+  ],
+  "test_days": [
+    "friday_morning",
+    "friday_portscan",
+    "friday_ddos"
+  ],
+  "holdout_days": [
+    "thursday_web",
+    "thursday_infiltration"
+  ],
+  "window_seconds": 30,
+  "context_length": 30,
+  "horizon_length": 6,
+  "min_windows_per_host": 36
+}

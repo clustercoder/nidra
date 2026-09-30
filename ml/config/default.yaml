@@ -1,0 +1,355 @@
+# NIDRA ML — single source of truth for hyperparameters and paths.
+# Every training/eval/serving script reads this file via nidra.utils.config.
+# Nothing important should be hardcoded in a script.
+#
+# This is the full-scale production config: the complete real CIC-IDS2017
+# dataset (all 8 day-files), 5-seed ensemble, full epoch budget. For a
+# faster MVP-scale run against the same data (single seed, fewer epochs,
+# stratified sample capping), see config/mvp_2017.yaml — same dataset,
+# same paths, different training/ensemble knobs only.
+#
+# Packet-level (PCAP-derived) features are only as complete as the PCAPs
+# actually present under `dataset.packets_dir` — see the `packets:` key per
+# day below. A day without one runs in flow-only mode (packet-aggregate
+# features zero-filled, logged loudly, never silently treated as
+# full-feature data) rather than being skipped.
+
+version: "0.1.0"
+schema_version: "1.0"
+random_seed: 1337
+
+# ---------------------------------------------------------------------------
+# Dataset paths — machine-specific locations only, never hardcoded in code.
+# ---------------------------------------------------------------------------
+dataset:
+  # Directory containing the published CICFlowMeter CSVs for CIC-IDS2017,
+  # the "GeneratedLabelledFlows / TrafficLabelling" release that carries
+  # Source IP / Destination IP / Timestamp columns. NOTE: the sibling
+  # "MachineLearningCVE" distribution strips those columns entirely (kept
+  # only for reference/baselines that don't need host or time identity) and
+  # cannot be windowed by host/time — do not point this at that directory.
+  cic2017_flow_dir: "~/nidra/cicids2017/csv/extracted/TrafficLabelling "
+  # Directory holding this project's own tshark-extracted packet parquet
+  # files (see nidra/data/pcap_extract.py / python -m nidra.data.pcap_extract),
+  # one per raw CIC-IDS2017 PCAP that has actually been extracted. NOT the
+  # raw .pcap directory itself.
+  packets_dir: "~/nidra/cicids2017/pcap/parquet"
+
+  days:
+    # Monday and Friday have real packet-level features (their PCAPs were
+    # downloaded and extracted; see REAL_DATA_RESULTS.md for exactly when
+    # and how). Tuesday/Wednesday/Thursday run flow-only until their PCAPs
+    # are downloaded — dropping a `packets:` file in packets_dir and
+    # re-running is the entire upgrade path, no code changes needed.
+    monday: {file: "Monday-WorkingHours.pcap_ISCX.csv", role: benign_baseline, packets: "Monday-WorkingHours_packets.parquet"}
+    tuesday: {file: "Tuesday-WorkingHours.pcap_ISCX.csv", role: train, packets: "Tuesday-WorkingHours_packets.parquet"}
+    wednesday: {file: "Wednesday-workingHours.pcap_ISCX.csv", role: train, packets: "Wednesday-workingHours_packets.parquet"}
+    # Both Thursday day-files share one underlying PCAP capture, same
+    # pattern as the three Friday day-files below.
+    thursday_web: {file: "Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv", role: holdout, packets: "Thursday-WorkingHours_packets.parquet"}
+    thursday_infiltration: {file: "Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv", role: holdout, packets: "Thursday-WorkingHours_packets.parquet"}
+    # All three Friday day-files share one underlying PCAP (a single
+    # continuous Friday capture) — pointing all three at the same parquet
+    # is correct: windowize's flow/packet join is keyed on (host_id,
+    # window_ts), so each day-file only ever picks up the packets that fall
+    # inside its own flows' time range.
+    friday_morning: {file: "Friday-WorkingHours-Morning.pcap_ISCX.csv", role: test, packets: "Friday-WorkingHours_packets.parquet"}
+    friday_portscan: {file: "Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv", role: test, packets: "Friday-WorkingHours_packets.parquet"}
+    friday_ddos: {file: "Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv", role: test, packets: "Friday-WorkingHours_packets.parquet"}
+
+# ---------------------------------------------------------------------------
+# Windowing / state geometry
+# ---------------------------------------------------------------------------
+windowing:
+  # Delta = 60 s: the CIC-IDS2017 TrafficLabelling CSVs print minute-resolution
+  # timestamps (no seconds field), so any shorter window can only ever be
+  # populated at the :00 offset — at Delta=30 every :30 window was an
+  # artificial all-zero state, half of all risk positives were those empty
+  # windows, and persistence error oscillated with parity. See
+  # reports/NIDRA_REEVALUATION_2026-09-19.md §4.1 / §18. Changing Delta
+  # invalidates every trained artifact and recorded metric (CLAUDE.md); the
+  # Delta=30 record lives under git tag baseline-delta30-run7.
+  window_seconds: 60      # Delta
+  context_length: 30      # L (30 min of history at Delta=60)
+  horizon_length: 6       # K (6 min forecast at Delta=60)
+  min_windows_per_host: 36  # L + K; hosts with fewer windows are dropped when a split is built
+  clustering_degree_cap: 200  # sample cap for local_clustering_coeff on dense nodes
+
+# ---------------------------------------------------------------------------
+# Normalization
+# ---------------------------------------------------------------------------
+normalization:
+  method: robust_scaler
+  clip_min: -10.0
+  clip_max: 10.0
+  fit_split: train   # scaler is fit ONLY on this split, never re-fit at serving time
+
+# ---------------------------------------------------------------------------
+# Labels
+# ---------------------------------------------------------------------------
+labels:
+  risk_threshold_windows: 6   # K — risk_label[t] = 1 if attack stage occurs in (t, t+K]
+
+# ---------------------------------------------------------------------------
+# Splits
+# ---------------------------------------------------------------------------
+splits:
+  train_days: [monday, tuesday, wednesday]
+  test_days: [friday_morning, friday_portscan, friday_ddos]
+  holdout_days: [thursday_web, thursday_infiltration]
+  # Validation = a contiguous trailing time-block of EACH training day
+  # (never random), with the cut nudged earlier so no attack episode
+  # straddles it. Per-day rather than one block off the concatenated
+  # timeline: the days are consecutive, so a single trailing block was just
+  # the end of Wednesday and validation held one Heartbleed episode on one
+  # host — every model-selection decision rested on 54 positives of one
+  # attack type. See nidra/data/splits.py. risk_label is recomputed inside
+  # each of train and val after the cut so no label crosses the boundary.
+  val_fraction_of_train_time: 0.30
+  # The cut is nudged earlier so that no episode starts within this many
+  # minutes after it: an episode's run-up stays on the episode's side of
+  # the boundary (otherwise the last K training windows before a validation
+  # episode are pre-onset windows labelled negative, and validation has no
+  # pre-onset rows to measure lead time on). Matches the benchmark's
+  # pre-onset span.
+  pre_onset_margin_minutes: 30
+  val_block_per_day: true
+
+# ---------------------------------------------------------------------------
+# Model architecture
+# ---------------------------------------------------------------------------
+model:
+  n_features: 45
+  encoder:
+    hidden_size: 128
+    num_layers: 2
+    dropout: 0.1
+  transition:
+    mlp_hidden: 256
+    logvar_min: -6.0
+    logvar_max: 3.0
+    state_clamp: 10.0
+    # mu = MLP(h_t) + A[s_t, s_{t-1}] + b (zero-initialised). Off by default;
+    # a Stage-5 dynamics variant — see models/transition.py for the
+    # validation evidence that motivated it and DECISIONS.md for the outcome.
+    linear_skip: false
+  risk_head:
+    hidden: 64
+  stage_head:
+    hidden: 64
+    n_stages: 6
+
+# ---------------------------------------------------------------------------
+# Stage-1 dynamics training
+# ---------------------------------------------------------------------------
+train_dynamics:
+  optimizer: adamw
+  lr: 3.0e-4
+  weight_decay: 1.0e-4
+  batch_size: 256
+  epochs: 60
+  grad_clip: 1.0
+  scheduler: cosine
+  # Checkpoint selection (DECISIONS.md D107): "val_free_running_nll" — the
+  # deterministic free-running rollout's NLL on validation, i.e. the model
+  # as deployed — or "val_free_running_mse" / "val_multistep_nll" (the
+  # Δ=30 original, teacher-forced).
+  selection_metric: val_free_running_nll
+  early_stopping_metric: val_multistep_nll   # legacy name, kept for old records; selection_metric is what is used
+  patience: 8
+  horizon_discount: 0.85   # (0.85 ** k) per-horizon loss weighting
+  teacher_forcing:
+    start_p: 1.0
+    end_p: 0.3
+    anneal_fraction_of_epochs: 0.6
+  # Loss options, all measured as Stage-5 variants on the validation
+  # benchmark (see DECISIONS.md for which were kept):
+  #   beta_nll              β-NLL (Seitzer et al. 2022): each element's NLL is
+  #                         scaled by σ².detach()^β so the mean is fit even where
+  #                         the model claims high variance. 0 = plain NLL.
+  #   mse_aux_weight        adds w * MSE(mean, target) to the NLL.
+  #   nonsilent_sample_weight  training weight of samples whose origin window
+  #                         is active (the 94% silent windows dominate otherwise).
+  beta_nll: 0.5              # DECISIONS.md D113: kept — state skill 0.40 -> 0.63, risk AP +0.08 over persistence
+  mse_aux_weight: 0.0        # D113: comparable to β-NLL on risk AP, weaker on state skill; not kept
+  nonsilent_sample_weight: 1.0   # D113: best single risk AP (0.813) but state skill 0.52; not kept
+
+# ---------------------------------------------------------------------------
+# Stage-2 head training
+# ---------------------------------------------------------------------------
+train_heads:
+  # Stage 2: frozen dynamics, heads trained on OBSERVED states only.
+  #
+  # Which epoch's risk head to keep. "val_auc_pr_natural" selects on the risk
+  # head's validation AUC-PR reweighted to the split's natural prevalence
+  # (the benchmark's primary metric); "val_auc_pr" on the plain subsample
+  # AUC-PR; "weighted_val_loss" (the Δ=30 original) on risk BCE at
+  # pos_weight ~1741 plus stage CE with class weights up to ~83,000.
+  #
+  # History, for the record: under the Δ=30 pipeline (validation = trailing
+  # 15% of the train days, ONE attack family, 182 positives) selecting on
+  # val_auc_pr overfit that split — holdout F1 0.486 vs 0.727 (REAL_DATA_RESULTS
+  # Run 6) — and the weighted loss survived as an accidental regularizer.
+  # The Δ=60 rebuild changed the premise: validation is now a 30% per-day
+  # block holding two families (SSH-Patator, Heartbleed — DECISIONS D105),
+  # and selection is on the natural-prevalence statistic the system is
+  # judged on. The stage head is selected independently on validation
+  # macro-F1. Any change here must be re-measured on the natural-prevalence
+  # benchmark (nidra.eval.benchmark), never on validation AUC-PR alone.
+  selection_metric: val_auc_pr_natural
+  # Risk-head sampling. "imbalanced": every sample once per epoch, BCE with
+  # pos_weight = n_neg / n_pos. "balanced": every positive is seen
+  # `pos_repeat` times per epoch against `neg_ratio` freshly drawn negatives
+  # per positive, `hard_negative_fraction` of them from ACTIVE benign windows,
+  # BCE without pos_weight.
+  #
+  # Measured 2026-09-20 on the Δ=60 validation benchmark (geomA_L15K3 dynamics,
+  # seed 0; head on observed val states at natural prevalence / world-model
+  # path): imbalanced+noise 0.655/0.660, balanced no noise 0.599/0.638,
+  # balanced+noise 0.378/0.505, balanced pos_repeat 5 0.566/0.601, the Δ=30
+  # recipe (imbalanced, weighted_val_loss, no noise) 0.630/0.686. Validation
+  # holds two episodes, so these are one-seed numbers without a usable
+  # interval; the recipe was chosen on the head's own validation statistic.
+  # Balanced sampling with 147 training positives overfits within one epoch.
+  risk_sampling: imbalanced
+  pos_repeat: 20
+  neg_ratio: 10
+  hard_negative_fraction: 0.5
+  # Gaussian noise (in scaled feature space) added to S_t during head
+  # training only. The head must rank *predicted* states at inference, which
+  # carry rollout error the observed training states do not.
+  input_noise: 0.3
+  optimizer: adamw
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  batch_size: 256
+  epochs: 30
+  grad_clip: 1.0
+  patience: 6
+
+# ---------------------------------------------------------------------------
+# Onset head (stage 2b): explicit future-target supervision
+# ---------------------------------------------------------------------------
+# P(an attack episode BEGINS within h minutes | S_t), one output per horizon,
+# defined only at origins outside any episode (data/onset.py). Trained on
+# observed states, frozen, saved as onset_head_seed_<s>.pt. Selected on
+# validation natural-prevalence AP at `selection_horizon_min`.
+onset:
+  horizons_min: [1, 3, 5, 10, 15, 30]
+  selection_horizon_min: 5
+  hidden: 64
+  epochs: 30
+  patience: 6
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  batch_size: 256
+  input_noise: 0.3
+  pos_repeat: 20
+  neg_ratio: 10
+  hard_negative_fraction: 0.5
+
+# ---------------------------------------------------------------------------
+# Ensemble
+# ---------------------------------------------------------------------------
+ensemble:
+  seeds: [0, 1, 2, 3, 4]
+
+# ---------------------------------------------------------------------------
+# Rollout / serving
+# ---------------------------------------------------------------------------
+rollout:
+  n_samples_per_member: 200   # ~1000 total trajectories across 5-member ensemble
+  stochastic: true
+  ci_low_quantile: 0.05
+  ci_high_quantile: 0.95
+  # Measured against the real full-scale 5-seed ensemble at the production
+  # sample count (200 trajectories/member), both splits — see
+  # REAL_DATA_RESULTS.md Run 6. Mean pooling scores F1 0.010 (test) / 0.000
+  # (holdout) at the mandated 0.75 threshold; quantile 0.85 scores 0.855 and
+  # 0.729 while IMPROVING AUC-PR on both (0.925->0.936, 0.733->0.746).
+  #
+  # 0.85 rather than a higher quantile because holdout precision degrades
+  # steeply above it (0.699 at q=0.85, 0.592 at q=0.9, 0.421 at q=0.95) and
+  # q=0.85 has the best holdout F1 of any setting tested. q=0.9 buys +0.061
+  # test F1 for -0.036 holdout F1 and -0.107 holdout precision.
+  #
+  # NOTE: config/mvp_2017.yaml uses 0.5, measured best at MVP scale on a
+  # single seed. That does NOT transfer — at full scale q=0.5 is the worst
+  # setting tested, collapsing test AUC-PR to 0.499. Scale-specific.
+  risk_pooling_method: quantile
+  risk_pooling_quantile: 0.85
+  # Order of the two reductions in the POOLED-ENSEMBLE forecast
+  # (nidra.models.risk_pooling.pool_ensemble_risk). The five heads' opinions
+  # on the same trajectory are always soft-voted by a plain mean; this only
+  # chooses whether that mean happens before trajectory pooling
+  # ("before_pooling", the original behavior — head disagreement smooths the
+  # tail the quantile then selects from) or after it ("after_pooling" — each
+  # head pools its own trajectory distribution, then the tail estimates are
+  # soft-voted). Identical under risk_pooling_method: mean.
+  risk_pooling_head_reduction: before_pooling
+
+# ---------------------------------------------------------------------------
+# Training-data sample caps (shared by train_dynamics and train_heads)
+# ---------------------------------------------------------------------------
+# Applied DURING windowing, not after (see
+# nidra.data.dataset.build_windowed_arrays' two-pass design): the full
+# uncapped train split is ~6.9M [L,F] float32 windows at production scale,
+# which needs ~35GB to materialize and silently OOM-kills the training
+# process before the first epoch — no traceback, no error. These are the
+# caps the published Run 3 checkpoints were actually trained under
+# (artifacts/weights/model_seed_*_metadata.json records 500000/50000), so
+# leaving them in the config is what makes the documented reproduction
+# command reproduce those numbers. --max-train-samples/--max-val-samples
+# still override them; set either to null for a genuinely uncapped run, and
+# expect to need ~35GB of RAM.
+training_data:
+  max_train_samples: 500000
+  max_val_samples: 50000
+
+serving:
+  torch_num_threads: 2
+  latency_target_ms: 300
+
+# ---------------------------------------------------------------------------
+# Evaluation
+# ---------------------------------------------------------------------------
+eval:
+  risk_threshold: 0.75
+  lead_time_persistence_windows: 2   # m consecutive windows above threshold
+  # Eval rows rolled out per pass in eval.baselines.world_model_forecast /
+  # ensemble_world_model_forecast. Those tile the whole batch by n_samples in
+  # one allocation, so a large split at a high sample count can be OOM-killed
+  # by the OS with no Python traceback (observed at n_samples=100,
+  # max_eval_samples=4000 — see REAL_DATA_RESULTS.md). Chunking is an exact
+  # refactor (every reduction is per-row); null means one single pass.
+  forecast_chunk_size: 500
+  window_seconds: 60
+  # Natural-prevalence benchmark set (nidra/eval/eval_set.py): every positive
+  # and every pre-onset window (30 min before each onset) is kept; active and
+  # silent benign windows are sampled with these caps and carry weight
+  # N_full / n_sampled. Larger caps mean smaller per-row weights and a less
+  # fragile AP — with 2,000 silent rows one confident false alarm on a silent
+  # host weighs 340 positives. The variant screen used 6000 / 2000; the locked
+  # test/holdout runs use these.
+  episode_merge_gap_windows: 5
+  benchmark_set:
+    active_negative_cap: 15000
+    silent_negative_cap: 5000
+    pre_onset_minutes: 30
+
+# ---------------------------------------------------------------------------
+# Explainability
+# ---------------------------------------------------------------------------
+explain:
+  shap_background_centroids: 100
+  shap_background_source: benign_train
+
+# ---------------------------------------------------------------------------
+# Artifact paths (relative to ml/ project root)
+# ---------------------------------------------------------------------------
+artifacts:
+  root: "artifacts"
+  weights_dir: "artifacts/weights"
+  scaler_dir: "artifacts/scaler"
+  metrics_dir: "artifacts/metrics"
+  processed_dir: "artifacts/processed"   # windowed parquet, committed so the repo runs without the raw dataset

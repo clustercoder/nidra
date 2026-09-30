@@ -22,10 +22,10 @@ const R = 604;
 const T = 28;
 const B = 300; // x-axis; stage strip lives below
 
-const WINDOW_SECONDS = 30;
+const WINDOW_SECONDS = 60;
 const RISK_THRESHOLD = 0.75;
 
-/** Observed risk, one value per 30 s window, rising gently toward now. */
+/** Observed risk, one value per 60 s window, rising gently toward now. */
 const OBSERVED = [0.07, 0.09, 0.08, 0.12, 0.11, 0.17, 0.25, 0.34];
 /** Projected mean over the K=6 horizon, and the band half-width at each step. */
 const MEAN = [0.4, 0.56, 0.76, 0.79, 0.81, 0.82];
@@ -107,7 +107,7 @@ export function ForecastConeSvg({ className = "" }: { className?: string }) {
       viewBox={`0 0 ${W} ${H}`}
       className={className}
       role="img"
-      aria-label={`Forecast chart: observed risk rises to the now line, then a widening band of simulated trajectories projects forward three minutes and crosses the ${RISK_THRESHOLD} risk threshold ${LEAD_WINDOWS} windows out, giving about ${LEAD_SECONDS} seconds of lead time.`}
+      aria-label={`Forecast chart: observed risk rises to the now line, then a widening band of simulated trajectories projects forward six minutes and crosses the ${RISK_THRESHOLD} risk threshold ${LEAD_WINDOWS} windows out, giving about ${LEAD_SECONDS} seconds of lead time.`}
     >
       {/* grid */}
       <g className="stroke-gray-light" strokeWidth="1">
@@ -233,7 +233,7 @@ export function ForecastConeSvg({ className = "" }: { className?: string }) {
           strokeWidth="1"
         />
         <text x={(NOW_X + R) / 2} y={B + 12} textAnchor="middle">
-          K = {MEAN.length} windows · 3-minute horizon
+          K = {MEAN.length} windows · 6-minute horizon
         </text>
       </g>
 

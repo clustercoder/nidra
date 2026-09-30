@@ -1,0 +1,1880 @@
+[
+  {
+    "host_id": "192.168.10.3",
+    "origin_ts": "2017-07-07T17:24:00+00:00",
+    "horizons": [
+      {
+        "k": 1,
+        "ts": "2017-07-07T17:25:00+00:00",
+        "p_compromise": 0.991874635219574,
+        "ci_low": 0.09916195273399353,
+        "ci_high": 0.9999990463256836,
+        "stage_dist": {
+          "benign": 0.4386918842792511,
+          "recon": 3.362100324011408e-05,
+          "initial_access": 0.44986069202423096,
+          "lateral": 1.7508849850855768e-05,
+          "c2": 3.066620774916373e-05,
+          "exfil": 0.11136569827795029
+        },
+        "attack_mapping": [
+          {
+            "stage": "initial_access",
+            "probability": 0.44986069202423096,
+            "tactics": [
+              {
+                "id": "TA0001",
+                "name": "Initial Access"
+              },
+              {
+                "id": "TA0006",
+                "name": "Credential Access"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1110.001",
+                "name": "Brute Force: Password Guessing",
+                "tactic_id": "TA0006"
+              },
+              {
+                "id": "T1133",
+                "name": "External Remote Services",
+                "tactic_id": "TA0001"
+              },
+              {
+                "id": "T1190",
+                "name": "Exploit Public-Facing Application",
+                "tactic_id": "TA0001"
+              }
+            ],
+            "resolution": "Brute-force logins (many short sessions to one service port) and web exploitation are visible in flow shape; whether the attempt SUCCEEDED is not \u2014 the bucket means 'attempting entry', not 'entered'."
+          },
+          {
+            "stage": "exfil",
+            "probability": 0.11136569827795029,
+            "tactics": [
+              {
+                "id": "TA0040",
+                "name": "Impact"
+              },
+              {
+                "id": "TA0010",
+                "name": "Exfiltration"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1499.003",
+                "name": "Endpoint Denial of Service: Application Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1499.002",
+                "name": "Endpoint Denial of Service: Service Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1498.001",
+                "name": "Network Denial of Service: Direct Network Flood",
+                "tactic_id": "TA0040"
+              }
+            ],
+            "resolution": "IN THIS DATASET the bucket contains only DoS/DDoS episodes \u2014 there is no exfiltration in CIC-IDS2017. A predicted `exfil` stage therefore means Impact-like terminal activity (T1498/T1499); it is listed under Exfiltration only because the six-bucket taxonomy predates the dataset choice (labels.py documents the simplification)."
+          }
+        ],
+        "predicted_features": {
+          "syn_ratio": 0.004735180176794529,
+          "ack_ratio": 0.030986029654741287,
+          "rst_ratio": -0.01063066441565752,
+          "fin_ratio": -0.017127132043242455,
+          "psh_ratio": -0.009442850016057491,
+          "urg_ratio": 0.03140757977962494,
+          "bytes_total": 21670.103735049295,
+          "bytes_up_down_ratio": 0.30564412483709724,
+          "pkts_per_flow_mean": 2.1773133069355564,
+          "flow_duration_mean": 2346174.0587881096,
+          "flow_duration_var": 72004899336.38588,
+          "iat_mean": 929040.3380676496,
+          "iat_var": 72004899336.38588,
+          "iat_max": 19314150.120419122,
+          "active_flow_count": 184.5609788717516,
+          "ttl_mean": -3.1419276925052912,
+          "ttl_var": 0.007242559125697385,
+          "tcp_window_mean": 0.7416010433589053,
+          "tcp_window_entropy": 0.10468752193267905,
+          "frag_flag_rate": -0.001609353581443429,
+          "payload_size_mean": 1.1131682611841287,
+          "payload_size_var": 2.537490016345142,
+          "payload_size_p95": 1.2858265663978266,
+          "payload_size_entropy": 0.2099911161064561,
+          "retrans_count": 0.41998256796029504,
+          "retrans_rate": 0.044295478612184525,
+          "out_degree": 0.9342688946711852,
+          "in_degree": 5.05377127234151,
+          "dst_ip_entropy": -0.022750388170342223,
+          "dst_port_entropy": -0.058877608187307834,
+          "new_peer_count": 0.152120826654709,
+          "neighbour_risk_fraction": 0.04980934038758278,
+          "local_clustering_coeff": 0.016562476754188538,
+          "reciprocity": 1.0255368947982788,
+          "d_syn_ratio": -0.04083963856101036,
+          "d_dst_port_entropy": -0.06866417808539375,
+          "d_out_degree": 0.04949425732631943,
+          "d_new_peer_count": 0.3257574768870641,
+          "d_iat_var": -97336.03240394045,
+          "d_retrans_rate": 0.0421799011528492,
+          "slope3_syn_ratio": 0.022446729242801666,
+          "slope3_dst_port_entropy": 0.022653889297700486,
+          "slope3_out_degree": 0.004052317561833696,
+          "slope3_iat_var": -36002449668.69294,
+          "is_active": 1.0268281698226929
+        }
+      },
+      {
+        "k": 2,
+        "ts": "2017-07-07T17:26:00+00:00",
+        "p_compromise": 0.9840387105941772,
+        "ci_low": 0.0008609704091213644,
+        "ci_high": 0.9999998807907104,
+        "stage_dist": {
+          "benign": 0.48004046082496643,
+          "recon": 2.922025669249706e-05,
+          "initial_access": 0.38687944412231445,
+          "lateral": 1.4650027878815308e-05,
+          "c2": 2.8453781851567328e-05,
+          "exfil": 0.13300779461860657
+        },
+        "attack_mapping": [
+          {
+            "stage": "initial_access",
+            "probability": 0.38687944412231445,
+            "tactics": [
+              {
+                "id": "TA0001",
+                "name": "Initial Access"
+              },
+              {
+                "id": "TA0006",
+                "name": "Credential Access"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1110.001",
+                "name": "Brute Force: Password Guessing",
+                "tactic_id": "TA0006"
+              },
+              {
+                "id": "T1133",
+                "name": "External Remote Services",
+                "tactic_id": "TA0001"
+              },
+              {
+                "id": "T1190",
+                "name": "Exploit Public-Facing Application",
+                "tactic_id": "TA0001"
+              }
+            ],
+            "resolution": "Brute-force logins (many short sessions to one service port) and web exploitation are visible in flow shape; whether the attempt SUCCEEDED is not \u2014 the bucket means 'attempting entry', not 'entered'."
+          },
+          {
+            "stage": "exfil",
+            "probability": 0.13300779461860657,
+            "tactics": [
+              {
+                "id": "TA0040",
+                "name": "Impact"
+              },
+              {
+                "id": "TA0010",
+                "name": "Exfiltration"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1499.003",
+                "name": "Endpoint Denial of Service: Application Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1499.002",
+                "name": "Endpoint Denial of Service: Service Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1498.001",
+                "name": "Network Denial of Service: Direct Network Flood",
+                "tactic_id": "TA0040"
+              }
+            ],
+            "resolution": "IN THIS DATASET the bucket contains only DoS/DDoS episodes \u2014 there is no exfiltration in CIC-IDS2017. A predicted `exfil` stage therefore means Impact-like terminal activity (T1498/T1499); it is listed under Exfiltration only because the six-bucket taxonomy predates the dataset choice (labels.py documents the simplification)."
+          }
+        ],
+        "predicted_features": {
+          "syn_ratio": 0.023975281044840813,
+          "ack_ratio": 0.06887836009263992,
+          "rst_ratio": -0.029122795909643173,
+          "fin_ratio": -0.040884293615818024,
+          "psh_ratio": -0.018677564337849617,
+          "urg_ratio": 0.04895591735839844,
+          "bytes_total": 7381.321065125112,
+          "bytes_up_down_ratio": 0.27427635699380526,
+          "pkts_per_flow_mean": 1.9905925578012376,
+          "flow_duration_mean": 1179884.7412475015,
+          "flow_duration_var": 72004899336.38588,
+          "iat_mean": 441762.0248493533,
+          "iat_var": 72004899336.38588,
+          "iat_max": 7019597.500352734,
+          "active_flow_count": 129.752280352726,
+          "ttl_mean": -5.300483842632303,
+          "ttl_var": 0.0002106430814338065,
+          "tcp_window_mean": 1.206109862205894,
+          "tcp_window_entropy": 0.19882519235592833,
+          "frag_flag_rate": -0.010632422752678394,
+          "payload_size_mean": 1.8556709344146591,
+          "payload_size_var": 4.555628361576193,
+          "payload_size_p95": 2.260457464399435,
+          "payload_size_entropy": 0.35999722247365057,
+          "retrans_count": 0.4054176312526523,
+          "retrans_rate": 0.062075357884168625,
+          "out_degree": 0.7683964086655647,
+          "in_degree": 3.8276303441543384,
+          "dst_ip_entropy": -0.06725519060327617,
+          "dst_port_entropy": -0.15610471776880194,
+          "new_peer_count": 0.15182143256046648,
+          "neighbour_risk_fraction": 0.09836532175540924,
+          "local_clustering_coeff": 0.03250354528427124,
+          "reciprocity": 1.077901840209961,
+          "d_syn_ratio": -0.047278791666030884,
+          "d_dst_port_entropy": -0.1334010126252525,
+          "d_out_degree": 0.020049480270025736,
+          "d_new_peer_count": 0.32297433986094565,
+          "d_iat_var": -468.74649071232716,
+          "d_retrans_rate": 0.046940796077251434,
+          "slope3_syn_ratio": 0.040840234607458115,
+          "slope3_dst_port_entropy": -0.07003384727443154,
+          "slope3_out_degree": 0.013514894345170288,
+          "slope3_iat_var": -6778.478058438594,
+          "is_active": 1.047428846359253
+        }
+      },
+      {
+        "k": 3,
+        "ts": "2017-07-07T17:27:00+00:00",
+        "p_compromise": 0.9551896452903748,
+        "ci_low": 2.929904621851165e-05,
+        "ci_high": 0.9999998807907104,
+        "stage_dist": {
+          "benign": 0.5161619782447815,
+          "recon": 2.8810882213292643e-05,
+          "initial_access": 0.3451617658138275,
+          "lateral": 1.4277504305937327e-05,
+          "c2": 2.6855432224692777e-05,
+          "exfil": 0.13860629498958588
+        },
+        "attack_mapping": [
+          {
+            "stage": "initial_access",
+            "probability": 0.3451617658138275,
+            "tactics": [
+              {
+                "id": "TA0001",
+                "name": "Initial Access"
+              },
+              {
+                "id": "TA0006",
+                "name": "Credential Access"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1110.001",
+                "name": "Brute Force: Password Guessing",
+                "tactic_id": "TA0006"
+              },
+              {
+                "id": "T1133",
+                "name": "External Remote Services",
+                "tactic_id": "TA0001"
+              },
+              {
+                "id": "T1190",
+                "name": "Exploit Public-Facing Application",
+                "tactic_id": "TA0001"
+              }
+            ],
+            "resolution": "Brute-force logins (many short sessions to one service port) and web exploitation are visible in flow shape; whether the attempt SUCCEEDED is not \u2014 the bucket means 'attempting entry', not 'entered'."
+          },
+          {
+            "stage": "exfil",
+            "probability": 0.13860629498958588,
+            "tactics": [
+              {
+                "id": "TA0040",
+                "name": "Impact"
+              },
+              {
+                "id": "TA0010",
+                "name": "Exfiltration"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1499.003",
+                "name": "Endpoint Denial of Service: Application Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1499.002",
+                "name": "Endpoint Denial of Service: Service Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1498.001",
+                "name": "Network Denial of Service: Direct Network Flood",
+                "tactic_id": "TA0040"
+              }
+            ],
+            "resolution": "IN THIS DATASET the bucket contains only DoS/DDoS episodes \u2014 there is no exfiltration in CIC-IDS2017. A predicted `exfil` stage therefore means Impact-like terminal activity (T1498/T1499); it is listed under Exfiltration only because the six-bucket taxonomy predates the dataset choice (labels.py documents the simplification)."
+          }
+        ],
+        "predicted_features": {
+          "syn_ratio": 0.04294499382376671,
+          "ack_ratio": 0.10195311158895493,
+          "rst_ratio": -0.03815058618783951,
+          "fin_ratio": -0.05578427016735077,
+          "psh_ratio": -0.020383721217513084,
+          "urg_ratio": 0.06186182051897049,
+          "bytes_total": 3856.976909519197,
+          "bytes_up_down_ratio": 0.22486802429697633,
+          "pkts_per_flow_mean": 1.881695373905144,
+          "flow_duration_mean": 609303.0080076222,
+          "flow_duration_var": 72004899336.38588,
+          "iat_mean": 260497.03889810006,
+          "iat_var": 72004899336.38588,
+          "iat_max": 2850064.0832122234,
+          "active_flow_count": 103.43886275386264,
+          "ttl_mean": -5.301878721635902,
+          "ttl_var": 0.014463771784734835,
+          "tcp_window_mean": 2.345947928632111,
+          "tcp_window_entropy": 0.24969227264119778,
+          "frag_flag_rate": -0.01567400060594082,
+          "payload_size_mean": 2.752280864580988,
+          "payload_size_var": 7.536783031461575,
+          "payload_size_p95": 3.6395436918430026,
+          "payload_size_entropy": 0.4756584451391003,
+          "retrans_count": 0.48806898119971487,
+          "retrans_rate": 0.07802537828683853,
+          "out_degree": 0.6359261070335187,
+          "in_degree": 3.084296305468941,
+          "dst_ip_entropy": -0.10070955639998502,
+          "dst_port_entropy": -0.186744554670943,
+          "new_peer_count": 0.15101997775523043,
+          "neighbour_risk_fraction": 0.12200850993394852,
+          "local_clustering_coeff": 0.045677706599235535,
+          "reciprocity": 1.1204105615615845,
+          "d_syn_ratio": -0.0529852919280529,
+          "d_dst_port_entropy": -0.09557286232184108,
+          "d_out_degree": -0.0863034517057451,
+          "d_new_peer_count": 0.24104316224982447,
+          "d_iat_var": -55.60886768063839,
+          "d_retrans_rate": 0.05476672574877739,
+          "slope3_syn_ratio": 0.053583987057209015,
+          "slope3_dst_port_entropy": -0.067186933055463,
+          "slope3_out_degree": 0.09955613538425705,
+          "slope3_iat_var": -28.506018085243642,
+          "is_active": 1.0580949783325195
+        }
+      },
+      {
+        "k": 4,
+        "ts": "2017-07-07T17:28:00+00:00",
+        "p_compromise": 0.8909996151924133,
+        "ci_low": 3.3763873830139346e-07,
+        "ci_high": 1.0,
+        "stage_dist": {
+          "benign": 0.5491089820861816,
+          "recon": 3.392344297026284e-05,
+          "initial_access": 0.3140696883201599,
+          "lateral": 1.768427864590194e-05,
+          "c2": 2.9146180168027058e-05,
+          "exfil": 0.13674050569534302
+        },
+        "attack_mapping": [
+          {
+            "stage": "initial_access",
+            "probability": 0.3140696883201599,
+            "tactics": [
+              {
+                "id": "TA0001",
+                "name": "Initial Access"
+              },
+              {
+                "id": "TA0006",
+                "name": "Credential Access"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1110.001",
+                "name": "Brute Force: Password Guessing",
+                "tactic_id": "TA0006"
+              },
+              {
+                "id": "T1133",
+                "name": "External Remote Services",
+                "tactic_id": "TA0001"
+              },
+              {
+                "id": "T1190",
+                "name": "Exploit Public-Facing Application",
+                "tactic_id": "TA0001"
+              }
+            ],
+            "resolution": "Brute-force logins (many short sessions to one service port) and web exploitation are visible in flow shape; whether the attempt SUCCEEDED is not \u2014 the bucket means 'attempting entry', not 'entered'."
+          },
+          {
+            "stage": "exfil",
+            "probability": 0.13674050569534302,
+            "tactics": [
+              {
+                "id": "TA0040",
+                "name": "Impact"
+              },
+              {
+                "id": "TA0010",
+                "name": "Exfiltration"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1499.003",
+                "name": "Endpoint Denial of Service: Application Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1499.002",
+                "name": "Endpoint Denial of Service: Service Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1498.001",
+                "name": "Network Denial of Service: Direct Network Flood",
+                "tactic_id": "TA0040"
+              }
+            ],
+            "resolution": "IN THIS DATASET the bucket contains only DoS/DDoS episodes \u2014 there is no exfiltration in CIC-IDS2017. A predicted `exfil` stage therefore means Impact-like terminal activity (T1498/T1499); it is listed under Exfiltration only because the six-bucket taxonomy predates the dataset choice (labels.py documents the simplification)."
+          }
+        ],
+        "predicted_features": {
+          "syn_ratio": 0.0640559047460556,
+          "ack_ratio": 0.12219815701246262,
+          "rst_ratio": -0.051783934235572815,
+          "fin_ratio": -0.0745418518781662,
+          "psh_ratio": -0.019135700538754463,
+          "urg_ratio": 0.08246445655822754,
+          "bytes_total": 2307.5241230662014,
+          "bytes_up_down_ratio": 0.1933183415358383,
+          "pkts_per_flow_mean": 1.720053233739907,
+          "flow_duration_mean": 389674.03164863895,
+          "flow_duration_var": 72004899336.38588,
+          "iat_mean": 154709.33475060604,
+          "iat_var": 72004899336.38588,
+          "iat_max": 1442148.2312347067,
+          "active_flow_count": 93.37772363961398,
+          "ttl_mean": -3.6845069630052336,
+          "ttl_var": 0.039262410156970136,
+          "tcp_window_mean": 3.2548660066674944,
+          "tcp_window_entropy": 0.30405692526914024,
+          "frag_flag_rate": -0.018103428184986115,
+          "payload_size_mean": 3.71802101449647,
+          "payload_size_var": 12.570563453578929,
+          "payload_size_p95": 5.723509304167238,
+          "payload_size_entropy": 0.5595616445898374,
+          "retrans_count": 0.613064255192783,
+          "retrans_rate": 0.09070320427417755,
+          "out_degree": 0.6174734462858947,
+          "in_degree": 2.5829208702362694,
+          "dst_ip_entropy": -0.12303784725804023,
+          "dst_port_entropy": -0.15875677276717617,
+          "new_peer_count": 0.18447778630028164,
+          "neighbour_risk_fraction": 0.14264896512031555,
+          "local_clustering_coeff": 0.06164288893342018,
+          "reciprocity": 1.1505781412124634,
+          "d_syn_ratio": -0.056590475142002106,
+          "d_dst_port_entropy": -0.03220349226106982,
+          "d_out_degree": -0.08507751592098102,
+          "d_new_peer_count": 0.2320571204208601,
+          "d_iat_var": -17.61316179692783,
+          "d_retrans_rate": 0.05843871086835861,
+          "slope3_syn_ratio": 0.06495602428913116,
+          "slope3_dst_port_entropy": -0.026137724005291844,
+          "slope3_out_degree": 0.12953348088771302,
+          "slope3_iat_var": -4.983141005865314,
+          "is_active": 1.0805652141571045
+        }
+      },
+      {
+        "k": 5,
+        "ts": "2017-07-07T17:29:00+00:00",
+        "p_compromise": 0.8087848424911499,
+        "ci_low": 4.272583353781556e-08,
+        "ci_high": 1.0,
+        "stage_dist": {
+          "benign": 0.5754380822181702,
+          "recon": 3.144571019220166e-05,
+          "initial_access": 0.282799631357193,
+          "lateral": 1.760618579282891e-05,
+          "c2": 2.9224429454188794e-05,
+          "exfil": 0.14168399572372437
+        },
+        "attack_mapping": [
+          {
+            "stage": "initial_access",
+            "probability": 0.282799631357193,
+            "tactics": [
+              {
+                "id": "TA0001",
+                "name": "Initial Access"
+              },
+              {
+                "id": "TA0006",
+                "name": "Credential Access"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1110.001",
+                "name": "Brute Force: Password Guessing",
+                "tactic_id": "TA0006"
+              },
+              {
+                "id": "T1133",
+                "name": "External Remote Services",
+                "tactic_id": "TA0001"
+              },
+              {
+                "id": "T1190",
+                "name": "Exploit Public-Facing Application",
+                "tactic_id": "TA0001"
+              }
+            ],
+            "resolution": "Brute-force logins (many short sessions to one service port) and web exploitation are visible in flow shape; whether the attempt SUCCEEDED is not \u2014 the bucket means 'attempting entry', not 'entered'."
+          },
+          {
+            "stage": "exfil",
+            "probability": 0.14168399572372437,
+            "tactics": [
+              {
+                "id": "TA0040",
+                "name": "Impact"
+              },
+              {
+                "id": "TA0010",
+                "name": "Exfiltration"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1499.003",
+                "name": "Endpoint Denial of Service: Application Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1499.002",
+                "name": "Endpoint Denial of Service: Service Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1498.001",
+                "name": "Network Denial of Service: Direct Network Flood",
+                "tactic_id": "TA0040"
+              }
+            ],
+            "resolution": "IN THIS DATASET the bucket contains only DoS/DDoS episodes \u2014 there is no exfiltration in CIC-IDS2017. A predicted `exfil` stage therefore means Impact-like terminal activity (T1498/T1499); it is listed under Exfiltration only because the six-bucket taxonomy predates the dataset choice (labels.py documents the simplification)."
+          }
+        ],
+        "predicted_features": {
+          "syn_ratio": 0.08071563392877579,
+          "ack_ratio": 0.1366971880197525,
+          "rst_ratio": -0.05854472517967224,
+          "fin_ratio": -0.08881312608718872,
+          "psh_ratio": -0.01652495004236698,
+          "urg_ratio": 0.10395199060440063,
+          "bytes_total": 1578.5172146106297,
+          "bytes_up_down_ratio": 0.1816158406313493,
+          "pkts_per_flow_mean": 1.5994196482354475,
+          "flow_duration_mean": 260170.14641354824,
+          "flow_duration_var": 72004899336.38588,
+          "iat_mean": 109916.8787549219,
+          "iat_var": 54616958132.94909,
+          "iat_max": 868120.2012124528,
+          "active_flow_count": 89.04981122670802,
+          "ttl_mean": -1.663203085245371,
+          "ttl_var": 0.049374129512305645,
+          "tcp_window_mean": 4.87712441606885,
+          "tcp_window_entropy": 0.3388063448315205,
+          "frag_flag_rate": -0.024538222700357437,
+          "payload_size_mean": 4.53714116932328,
+          "payload_size_var": 16.0525223593586,
+          "payload_size_p95": 7.473213308461791,
+          "payload_size_entropy": 0.6153658745092515,
+          "retrans_count": 0.6833004636014735,
+          "retrans_rate": 0.10655874013900757,
+          "out_degree": 0.6154391261230897,
+          "in_degree": 2.321888446944065,
+          "dst_ip_entropy": -0.10246292794771883,
+          "dst_port_entropy": -0.13845876414006483,
+          "new_peer_count": 0.20395888237237253,
+          "neighbour_risk_fraction": 0.1547536551952362,
+          "local_clustering_coeff": 0.07136973738670349,
+          "reciprocity": 1.1847894191741943,
+          "d_syn_ratio": -0.061714813113212585,
+          "d_dst_port_entropy": 0.008313510136440057,
+          "d_out_degree": 0.016329263635373112,
+          "d_new_peer_count": 0.2763260621550618,
+          "d_iat_var": -3.7390791884205936,
+          "d_retrans_rate": 0.07256248593330383,
+          "slope3_syn_ratio": 0.07718392461538315,
+          "slope3_dst_port_entropy": -0.00864812777572161,
+          "slope3_out_degree": 0.1622931210669597,
+          "slope3_iat_var": -3.791764036810735,
+          "is_active": 1.1019041538238525
+        }
+      },
+      {
+        "k": 6,
+        "ts": "2017-07-07T17:30:00+00:00",
+        "p_compromise": 0.7491071224212646,
+        "ci_low": 3.7009574072044416e-08,
+        "ci_high": 1.0,
+        "stage_dist": {
+          "benign": 0.5968963503837585,
+          "recon": 2.1433521396829747e-05,
+          "initial_access": 0.26276782155036926,
+          "lateral": 1.174245699075982e-05,
+          "c2": 1.92045554285869e-05,
+          "exfil": 0.14028345048427582
+        },
+        "attack_mapping": [
+          {
+            "stage": "initial_access",
+            "probability": 0.26276782155036926,
+            "tactics": [
+              {
+                "id": "TA0001",
+                "name": "Initial Access"
+              },
+              {
+                "id": "TA0006",
+                "name": "Credential Access"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1110.001",
+                "name": "Brute Force: Password Guessing",
+                "tactic_id": "TA0006"
+              },
+              {
+                "id": "T1133",
+                "name": "External Remote Services",
+                "tactic_id": "TA0001"
+              },
+              {
+                "id": "T1190",
+                "name": "Exploit Public-Facing Application",
+                "tactic_id": "TA0001"
+              }
+            ],
+            "resolution": "Brute-force logins (many short sessions to one service port) and web exploitation are visible in flow shape; whether the attempt SUCCEEDED is not \u2014 the bucket means 'attempting entry', not 'entered'."
+          },
+          {
+            "stage": "exfil",
+            "probability": 0.14028345048427582,
+            "tactics": [
+              {
+                "id": "TA0040",
+                "name": "Impact"
+              },
+              {
+                "id": "TA0010",
+                "name": "Exfiltration"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1499.003",
+                "name": "Endpoint Denial of Service: Application Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1499.002",
+                "name": "Endpoint Denial of Service: Service Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1498.001",
+                "name": "Network Denial of Service: Direct Network Flood",
+                "tactic_id": "TA0040"
+              }
+            ],
+            "resolution": "IN THIS DATASET the bucket contains only DoS/DDoS episodes \u2014 there is no exfiltration in CIC-IDS2017. A predicted `exfil` stage therefore means Impact-like terminal activity (T1498/T1499); it is listed under Exfiltration only because the six-bucket taxonomy predates the dataset choice (labels.py documents the simplification)."
+          }
+        ],
+        "predicted_features": {
+          "syn_ratio": 0.09632833302021027,
+          "ack_ratio": 0.1500941962003708,
+          "rst_ratio": -0.06587184965610504,
+          "fin_ratio": -0.10271216183900833,
+          "psh_ratio": -0.015466008335351944,
+          "urg_ratio": 0.1190231442451477,
+          "bytes_total": 1145.7062280268692,
+          "bytes_up_down_ratio": 0.201899839514149,
+          "pkts_per_flow_mean": 1.5783027967898882,
+          "flow_duration_mean": 242608.34263174655,
+          "flow_duration_var": 32520949402.732452,
+          "iat_mean": 86660.39242739903,
+          "iat_var": 25522884762.175316,
+          "iat_max": 556115.9173562536,
+          "active_flow_count": 82.32175434088008,
+          "ttl_mean": -1.4426975550885004,
+          "ttl_var": 0.00800967190672401,
+          "tcp_window_mean": 6.176788091251346,
+          "tcp_window_entropy": 0.36418481719544854,
+          "frag_flag_rate": -0.026166176423430443,
+          "payload_size_mean": 5.119246981899108,
+          "payload_size_var": 24.054180890929644,
+          "payload_size_p95": 8.425583907436131,
+          "payload_size_entropy": 0.6646313737830848,
+          "retrans_count": 0.800330432308444,
+          "retrans_rate": 0.1159103512763977,
+          "out_degree": 0.6367188495734399,
+          "in_degree": 2.1965366968064415,
+          "dst_ip_entropy": -0.10387211269315871,
+          "dst_port_entropy": -0.1259957612790555,
+          "new_peer_count": 0.224408892329177,
+          "neighbour_risk_fraction": 0.1652451604604721,
+          "local_clustering_coeff": 0.08432751893997192,
+          "reciprocity": 1.1845864057540894,
+          "d_syn_ratio": -0.07129672914743423,
+          "d_dst_port_entropy": 0.024182267354782808,
+          "d_out_degree": 0.05562367459208664,
+          "d_new_peer_count": 0.19947311098943232,
+          "d_iat_var": -4.138253347050733,
+          "d_retrans_rate": 0.08195855468511581,
+          "slope3_syn_ratio": 0.08759775012731552,
+          "slope3_dst_port_entropy": 0.0025924611989943877,
+          "slope3_out_degree": 0.19917395331703752,
+          "slope3_iat_var": -8.327398056226388,
+          "is_active": 1.108108401298523
+        }
+      }
+    ],
+    "lead_time_s": 60.0,
+    "observed_stage": "initial_access",
+    "observed_risk": 0.9746967554092407,
+    "risk_curve": {
+      "horizon_seconds": [
+        60,
+        120,
+        180,
+        240,
+        300,
+        360
+      ],
+      "p_attack_at_k": [
+        0.991874635219574,
+        0.9840387105941772,
+        0.9551896452903748,
+        0.8909996151924133,
+        0.8087848424911499,
+        0.7491071224212646
+      ],
+      "p_attack_at_k_raw": [
+        0.9840342998504639,
+        0.9711074233055115,
+        0.9351317286491394,
+        0.8627392053604126,
+        0.7864625453948975,
+        0.7336673140525818
+      ],
+      "band_low": [
+        0.09916195273399353,
+        0.0008609704091213644,
+        2.929904621851165e-05,
+        3.3763873830139346e-07,
+        4.272583353781556e-08,
+        3.7009574072044416e-08
+      ],
+      "band_high": [
+        0.9999990463256836,
+        0.9999998807907104,
+        0.9999998807907104,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "trajectory_std": [
+        0.2737162411212921,
+        0.36140111088752747,
+        0.3978925943374634,
+        0.41292718052864075,
+        0.4238019585609436,
+        0.4393549859523773
+      ],
+      "p_attack_within_horizon": 0.991874635219574,
+      "horizon_reduction": "max",
+      "threshold": 0.7177971005439758,
+      "above_threshold": true,
+      "calibrated": true
+    },
+    "progression": {
+      "steps": [
+        {
+          "k": 1,
+          "t_plus_s": 60,
+          "stage": "initial_access",
+          "probability": 0.44986069202423096,
+          "tactics": [
+            {
+              "id": "TA0001",
+              "name": "Initial Access"
+            },
+            {
+              "id": "TA0006",
+              "name": "Credential Access"
+            }
+          ]
+        },
+        {
+          "k": 2,
+          "t_plus_s": 120,
+          "stage": "benign",
+          "probability": 0.48004046082496643,
+          "tactics": []
+        },
+        {
+          "k": 3,
+          "t_plus_s": 180,
+          "stage": "benign",
+          "probability": 0.5161619782447815,
+          "tactics": []
+        },
+        {
+          "k": 4,
+          "t_plus_s": 240,
+          "stage": "benign",
+          "probability": 0.5491089820861816,
+          "tactics": []
+        },
+        {
+          "k": 5,
+          "t_plus_s": 300,
+          "stage": "benign",
+          "probability": 0.5754380822181702,
+          "tactics": []
+        },
+        {
+          "k": 6,
+          "t_plus_s": 360,
+          "stage": "benign",
+          "probability": 0.5968963503837585,
+          "tactics": []
+        }
+      ],
+      "tactics_in_order": [
+        {
+          "tactic": {
+            "id": "TA0001",
+            "name": "Initial Access"
+          },
+          "first_k": 1,
+          "first_t_plus_s": 60,
+          "stage": "initial_access"
+        },
+        {
+          "tactic": {
+            "id": "TA0006",
+            "name": "Credential Access"
+          },
+          "first_k": 1,
+          "first_t_plus_s": 60,
+          "stage": "initial_access"
+        }
+      ],
+      "attack_version": "Enterprise ATT&CK v14",
+      "label": "projected stage sequence (model-internal)"
+    },
+    "operating_point": {
+      "source": "operating_point.json (selected on val)",
+      "pooling_key": "median|q=-|max",
+      "threshold": 0.7177971005439758,
+      "threshold_mandated": 0.75,
+      "selected_at": "2026-09-20T05:45:01Z",
+      "calibrated": true
+    },
+    "top_signals": [
+      {
+        "name": "active_flow_count",
+        "shap_value": 0.6415792348270619,
+        "direction": "up",
+        "display": "active_flow_count rising"
+      },
+      {
+        "name": "tcp_window_mean",
+        "shap_value": -0.13667979309197842,
+        "direction": "down",
+        "display": "tcp_window_mean falling"
+      },
+      {
+        "name": "bytes_total",
+        "shap_value": 0.101919456997506,
+        "direction": "up",
+        "display": "bytes_total rising"
+      },
+      {
+        "name": "ttl_mean",
+        "shap_value": 0.08688789647838409,
+        "direction": "up",
+        "display": "ttl_mean rising"
+      },
+      {
+        "name": "tcp_window_entropy",
+        "shap_value": 0.08555619331727066,
+        "direction": "up",
+        "display": "tcp_window_entropy rising"
+      }
+    ],
+    "driving_window": 29,
+    "model_version": "nidra-v0.1.0",
+    "schema_ver": "1.0",
+    "n_trajectories": 1000
+  },
+  {
+    "host_id": "192.168.10.3",
+    "origin_ts": "2017-07-07T17:36:00+00:00",
+    "horizons": [
+      {
+        "k": 1,
+        "ts": "2017-07-07T17:37:00+00:00",
+        "p_compromise": 0.8520649075508118,
+        "ci_low": 0.0031637735664844513,
+        "ci_high": 0.9999970197677612,
+        "stage_dist": {
+          "benign": 0.5338391661643982,
+          "recon": 1.2992177289561369e-05,
+          "initial_access": 0.391266793012619,
+          "lateral": 5.961379429209046e-06,
+          "c2": 1.3687501450476702e-05,
+          "exfil": 0.07486142963171005
+        },
+        "attack_mapping": [
+          {
+            "stage": "initial_access",
+            "probability": 0.391266793012619,
+            "tactics": [
+              {
+                "id": "TA0001",
+                "name": "Initial Access"
+              },
+              {
+                "id": "TA0006",
+                "name": "Credential Access"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1110.001",
+                "name": "Brute Force: Password Guessing",
+                "tactic_id": "TA0006"
+              },
+              {
+                "id": "T1133",
+                "name": "External Remote Services",
+                "tactic_id": "TA0001"
+              },
+              {
+                "id": "T1190",
+                "name": "Exploit Public-Facing Application",
+                "tactic_id": "TA0001"
+              }
+            ],
+            "resolution": "Brute-force logins (many short sessions to one service port) and web exploitation are visible in flow shape; whether the attempt SUCCEEDED is not \u2014 the bucket means 'attempting entry', not 'entered'."
+          },
+          {
+            "stage": "exfil",
+            "probability": 0.07486142963171005,
+            "tactics": [
+              {
+                "id": "TA0040",
+                "name": "Impact"
+              },
+              {
+                "id": "TA0010",
+                "name": "Exfiltration"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1499.003",
+                "name": "Endpoint Denial of Service: Application Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1499.002",
+                "name": "Endpoint Denial of Service: Service Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1498.001",
+                "name": "Network Denial of Service: Direct Network Flood",
+                "tactic_id": "TA0040"
+              }
+            ],
+            "resolution": "IN THIS DATASET the bucket contains only DoS/DDoS episodes \u2014 there is no exfiltration in CIC-IDS2017. A predicted `exfil` stage therefore means Impact-like terminal activity (T1498/T1499); it is listed under Exfiltration only because the six-bucket taxonomy predates the dataset choice (labels.py documents the simplification)."
+          }
+        ],
+        "predicted_features": {
+          "syn_ratio": -0.009806949645280838,
+          "ack_ratio": 0.04098522290587425,
+          "rst_ratio": -0.017037970945239067,
+          "fin_ratio": -0.018706293776631355,
+          "psh_ratio": 0.004410107620060444,
+          "urg_ratio": 0.057868026196956635,
+          "bytes_total": 17670.11256060833,
+          "bytes_up_down_ratio": 0.39502382995705315,
+          "pkts_per_flow_mean": 2.4375101934765326,
+          "flow_duration_mean": 1942395.5384922277,
+          "flow_duration_var": 72004899336.38588,
+          "iat_mean": 609556.4068973671,
+          "iat_var": 72004899336.38588,
+          "iat_max": 26731542.954876702,
+          "active_flow_count": 161.25598052065098,
+          "ttl_mean": 2.571162317405154,
+          "ttl_var": 0.031594659237991395,
+          "tcp_window_mean": 0.9573185891449355,
+          "tcp_window_entropy": 0.09838330795744832,
+          "frag_flag_rate": -0.002040110994130373,
+          "payload_size_mean": 0.6270712227785231,
+          "payload_size_var": 1.1486279132018626,
+          "payload_size_p95": 0.8417357411489094,
+          "payload_size_entropy": 0.1930772292823993,
+          "retrans_count": 0.39292447308635786,
+          "retrans_rate": 0.01582268439233303,
+          "out_degree": 1.8539598745263202,
+          "in_degree": 6.675186547322396,
+          "dst_ip_entropy": -0.12067771340935535,
+          "dst_port_entropy": 0.07630984551961306,
+          "new_peer_count": 0.08993889859616218,
+          "neighbour_risk_fraction": 0.5829522609710693,
+          "local_clustering_coeff": 0.134794682264328,
+          "reciprocity": 1.0608046054840088,
+          "d_syn_ratio": -0.023749327287077904,
+          "d_dst_port_entropy": 0.017654995914375346,
+          "d_out_degree": -0.7427578812325986,
+          "d_new_peer_count": -0.005840678225625361,
+          "d_iat_var": -1169.5079585678768,
+          "d_retrans_rate": 0.020726170390844345,
+          "slope3_syn_ratio": -0.00042447567102499306,
+          "slope3_dst_port_entropy": -0.04621326480713709,
+          "slope3_out_degree": -0.6232592613924721,
+          "slope3_iat_var": 124.01535898038075,
+          "is_active": 1.0555005073547363
+        }
+      },
+      {
+        "k": 2,
+        "ts": "2017-07-07T17:38:00+00:00",
+        "p_compromise": 0.8828827738761902,
+        "ci_low": 7.686911703785881e-05,
+        "ci_high": 0.9999998807907104,
+        "stage_dist": {
+          "benign": 0.5401395559310913,
+          "recon": 1.82313106051879e-05,
+          "initial_access": 0.3540360927581787,
+          "lateral": 9.639199561206624e-06,
+          "c2": 1.77599758899305e-05,
+          "exfil": 0.10577874630689621
+        },
+        "attack_mapping": [
+          {
+            "stage": "initial_access",
+            "probability": 0.3540360927581787,
+            "tactics": [
+              {
+                "id": "TA0001",
+                "name": "Initial Access"
+              },
+              {
+                "id": "TA0006",
+                "name": "Credential Access"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1110.001",
+                "name": "Brute Force: Password Guessing",
+                "tactic_id": "TA0006"
+              },
+              {
+                "id": "T1133",
+                "name": "External Remote Services",
+                "tactic_id": "TA0001"
+              },
+              {
+                "id": "T1190",
+                "name": "Exploit Public-Facing Application",
+                "tactic_id": "TA0001"
+              }
+            ],
+            "resolution": "Brute-force logins (many short sessions to one service port) and web exploitation are visible in flow shape; whether the attempt SUCCEEDED is not \u2014 the bucket means 'attempting entry', not 'entered'."
+          },
+          {
+            "stage": "exfil",
+            "probability": 0.10577874630689621,
+            "tactics": [
+              {
+                "id": "TA0040",
+                "name": "Impact"
+              },
+              {
+                "id": "TA0010",
+                "name": "Exfiltration"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1499.003",
+                "name": "Endpoint Denial of Service: Application Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1499.002",
+                "name": "Endpoint Denial of Service: Service Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1498.001",
+                "name": "Network Denial of Service: Direct Network Flood",
+                "tactic_id": "TA0040"
+              }
+            ],
+            "resolution": "IN THIS DATASET the bucket contains only DoS/DDoS episodes \u2014 there is no exfiltration in CIC-IDS2017. A predicted `exfil` stage therefore means Impact-like terminal activity (T1498/T1499); it is listed under Exfiltration only because the six-bucket taxonomy predates the dataset choice (labels.py documents the simplification)."
+          }
+        ],
+        "predicted_features": {
+          "syn_ratio": -0.017484862357378006,
+          "ack_ratio": 0.07658157497644424,
+          "rst_ratio": -0.029084088280797005,
+          "fin_ratio": -0.03461923077702522,
+          "psh_ratio": -0.003993692342191935,
+          "urg_ratio": 0.09631027281284332,
+          "bytes_total": 9149.327038586931,
+          "bytes_up_down_ratio": 0.3752471167181891,
+          "pkts_per_flow_mean": 2.3128529021246558,
+          "flow_duration_mean": 905749.8054222444,
+          "flow_duration_var": 72004899336.38588,
+          "iat_mean": 282429.41034903395,
+          "iat_var": 72004899336.38588,
+          "iat_max": 8949863.476977533,
+          "active_flow_count": 152.8051907903641,
+          "ttl_mean": 1.375569485977067,
+          "ttl_var": 0.12515107672412712,
+          "tcp_window_mean": 1.88669232270367,
+          "tcp_window_entropy": 0.19279450837701353,
+          "frag_flag_rate": -0.001938230125233531,
+          "payload_size_mean": 1.3942683643258342,
+          "payload_size_var": 2.451838699597097,
+          "payload_size_p95": 1.6472365938675577,
+          "payload_size_entropy": 0.3391149075030832,
+          "retrans_count": 0.5795785132505421,
+          "retrans_rate": 0.03749346360564232,
+          "out_degree": 1.8101312964276095,
+          "in_degree": 5.290248618297914,
+          "dst_ip_entropy": -0.15990096344722682,
+          "dst_port_entropy": 0.030024688828669238,
+          "new_peer_count": 0.18442418377526004,
+          "neighbour_risk_fraction": 0.5840689539909363,
+          "local_clustering_coeff": 0.1493944376707077,
+          "reciprocity": 1.0920939445495605,
+          "d_syn_ratio": -0.04704612120985985,
+          "d_dst_port_entropy": -0.07086439059757067,
+          "d_out_degree": -0.2997391567718378,
+          "d_new_peer_count": 0.3407961511319589,
+          "d_iat_var": -15447.228786360572,
+          "d_retrans_rate": 0.03476773947477341,
+          "slope3_syn_ratio": 0.0005968718323856592,
+          "slope3_dst_port_entropy": -0.028910486438671452,
+          "slope3_out_degree": -0.299368008367922,
+          "slope3_iat_var": -30063.212708197192,
+          "is_active": 1.0716760158538818
+        }
+      },
+      {
+        "k": 3,
+        "ts": "2017-07-07T17:39:00+00:00",
+        "p_compromise": 0.8498086333274841,
+        "ci_low": 1.8790901776810642e-06,
+        "ci_high": 0.9999998807907104,
+        "stage_dist": {
+          "benign": 0.5514687299728394,
+          "recon": 2.6426298063597642e-05,
+          "initial_access": 0.32052233815193176,
+          "lateral": 1.4334892512124497e-05,
+          "c2": 2.316639438504353e-05,
+          "exfil": 0.12794499099254608
+        },
+        "attack_mapping": [
+          {
+            "stage": "initial_access",
+            "probability": 0.32052233815193176,
+            "tactics": [
+              {
+                "id": "TA0001",
+                "name": "Initial Access"
+              },
+              {
+                "id": "TA0006",
+                "name": "Credential Access"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1110.001",
+                "name": "Brute Force: Password Guessing",
+                "tactic_id": "TA0006"
+              },
+              {
+                "id": "T1133",
+                "name": "External Remote Services",
+                "tactic_id": "TA0001"
+              },
+              {
+                "id": "T1190",
+                "name": "Exploit Public-Facing Application",
+                "tactic_id": "TA0001"
+              }
+            ],
+            "resolution": "Brute-force logins (many short sessions to one service port) and web exploitation are visible in flow shape; whether the attempt SUCCEEDED is not \u2014 the bucket means 'attempting entry', not 'entered'."
+          },
+          {
+            "stage": "exfil",
+            "probability": 0.12794499099254608,
+            "tactics": [
+              {
+                "id": "TA0040",
+                "name": "Impact"
+              },
+              {
+                "id": "TA0010",
+                "name": "Exfiltration"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1499.003",
+                "name": "Endpoint Denial of Service: Application Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1499.002",
+                "name": "Endpoint Denial of Service: Service Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1498.001",
+                "name": "Network Denial of Service: Direct Network Flood",
+                "tactic_id": "TA0040"
+              }
+            ],
+            "resolution": "IN THIS DATASET the bucket contains only DoS/DDoS episodes \u2014 there is no exfiltration in CIC-IDS2017. A predicted `exfil` stage therefore means Impact-like terminal activity (T1498/T1499); it is listed under Exfiltration only because the six-bucket taxonomy predates the dataset choice (labels.py documents the simplification)."
+          }
+        ],
+        "predicted_features": {
+          "syn_ratio": -0.010459806770086288,
+          "ack_ratio": 0.09898270666599274,
+          "rst_ratio": -0.045798901468515396,
+          "fin_ratio": -0.04400888457894325,
+          "psh_ratio": -0.012208034284412861,
+          "urg_ratio": 0.12035630643367767,
+          "bytes_total": 4513.420387490265,
+          "bytes_up_down_ratio": 0.35928287731394815,
+          "pkts_per_flow_mean": 2.192621543006103,
+          "flow_duration_mean": 616522.0516470127,
+          "flow_duration_var": 72004899336.38588,
+          "iat_mean": 183722.82609188484,
+          "iat_var": 23188102644.032764,
+          "iat_max": 4251782.780461189,
+          "active_flow_count": 133.35543154821485,
+          "ttl_mean": 2.030264544882158,
+          "ttl_var": 0.1810728343072368,
+          "tcp_window_mean": 2.8983736675675664,
+          "tcp_window_entropy": 0.2546891826828718,
+          "frag_flag_rate": -0.004026694223284721,
+          "payload_size_mean": 2.4381827476296727,
+          "payload_size_var": 4.789093111017843,
+          "payload_size_p95": 3.057029072822874,
+          "payload_size_entropy": 0.4437219763156256,
+          "retrans_count": 0.6749684206019766,
+          "retrans_rate": 0.05806223303079605,
+          "out_degree": 1.8132279550230366,
+          "in_degree": 4.189658857439721,
+          "dst_ip_entropy": -0.16569267519795744,
+          "dst_port_entropy": 0.035832910025955345,
+          "new_peer_count": 0.17793437704355464,
+          "neighbour_risk_fraction": 0.6003067493438721,
+          "local_clustering_coeff": 0.16627384722232819,
+          "reciprocity": 1.1129345893859863,
+          "d_syn_ratio": -0.06463179737329483,
+          "d_dst_port_entropy": 0.008150631585955206,
+          "d_out_degree": -0.008127491548799933,
+          "d_new_peer_count": 0.3455023530817204,
+          "d_iat_var": -83.24342789831994,
+          "d_retrans_rate": 0.03754904866218567,
+          "slope3_syn_ratio": 0.008928604423999786,
+          "slope3_dst_port_entropy": -0.03660006097131408,
+          "slope3_out_degree": -0.10962060356628589,
+          "slope3_iat_var": -5171.210307871894,
+          "is_active": 1.0869476795196533
+        }
+      },
+      {
+        "k": 4,
+        "ts": "2017-07-07T17:40:00+00:00",
+        "p_compromise": 0.8310825228691101,
+        "ci_low": 5.979183015369927e-08,
+        "ci_high": 1.0,
+        "stage_dist": {
+          "benign": 0.5555418133735657,
+          "recon": 2.483642856532242e-05,
+          "initial_access": 0.3007722795009613,
+          "lateral": 1.346284170722356e-05,
+          "c2": 2.1101333913975395e-05,
+          "exfil": 0.14362646639347076
+        },
+        "attack_mapping": [
+          {
+            "stage": "initial_access",
+            "probability": 0.3007722795009613,
+            "tactics": [
+              {
+                "id": "TA0001",
+                "name": "Initial Access"
+              },
+              {
+                "id": "TA0006",
+                "name": "Credential Access"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1110.001",
+                "name": "Brute Force: Password Guessing",
+                "tactic_id": "TA0006"
+              },
+              {
+                "id": "T1133",
+                "name": "External Remote Services",
+                "tactic_id": "TA0001"
+              },
+              {
+                "id": "T1190",
+                "name": "Exploit Public-Facing Application",
+                "tactic_id": "TA0001"
+              }
+            ],
+            "resolution": "Brute-force logins (many short sessions to one service port) and web exploitation are visible in flow shape; whether the attempt SUCCEEDED is not \u2014 the bucket means 'attempting entry', not 'entered'."
+          },
+          {
+            "stage": "exfil",
+            "probability": 0.14362646639347076,
+            "tactics": [
+              {
+                "id": "TA0040",
+                "name": "Impact"
+              },
+              {
+                "id": "TA0010",
+                "name": "Exfiltration"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1499.003",
+                "name": "Endpoint Denial of Service: Application Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1499.002",
+                "name": "Endpoint Denial of Service: Service Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1498.001",
+                "name": "Network Denial of Service: Direct Network Flood",
+                "tactic_id": "TA0040"
+              }
+            ],
+            "resolution": "IN THIS DATASET the bucket contains only DoS/DDoS episodes \u2014 there is no exfiltration in CIC-IDS2017. A predicted `exfil` stage therefore means Impact-like terminal activity (T1498/T1499); it is listed under Exfiltration only because the six-bucket taxonomy predates the dataset choice (labels.py documents the simplification)."
+          }
+        ],
+        "predicted_features": {
+          "syn_ratio": 0.00043217753409408033,
+          "ack_ratio": 0.10452577471733093,
+          "rst_ratio": -0.057306624948978424,
+          "fin_ratio": -0.05604175478219986,
+          "psh_ratio": -0.015102138742804527,
+          "urg_ratio": 0.12996052205562592,
+          "bytes_total": 2887.1034009991886,
+          "bytes_up_down_ratio": 0.38229992136674007,
+          "pkts_per_flow_mean": 1.834413364456746,
+          "flow_duration_mean": 337512.05713164184,
+          "flow_duration_var": 53844411811.08709,
+          "iat_mean": 111976.19190474646,
+          "iat_var": 7549091390.473875,
+          "iat_max": 1691283.5649261402,
+          "active_flow_count": 116.63479597249453,
+          "ttl_mean": 2.277119912654811,
+          "ttl_var": 0.16161820723999132,
+          "tcp_window_mean": 4.5841422002835435,
+          "tcp_window_entropy": 0.31003535221733225,
+          "frag_flag_rate": -0.00684300297871232,
+          "payload_size_mean": 3.6902759037495043,
+          "payload_size_var": 7.853997383089783,
+          "payload_size_p95": 4.885853226499177,
+          "payload_size_entropy": 0.5309484722952899,
+          "retrans_count": 0.7068389421030941,
+          "retrans_rate": 0.06688719242811203,
+          "out_degree": 1.6721813802493157,
+          "in_degree": 3.224527420765612,
+          "dst_ip_entropy": -0.1958824705719467,
+          "dst_port_entropy": 0.03725164653729618,
+          "new_peer_count": 0.17411410143717926,
+          "neighbour_risk_fraction": 0.5926058292388916,
+          "local_clustering_coeff": 0.18474125862121582,
+          "reciprocity": 1.10847806930542,
+          "d_syn_ratio": -0.07958965003490448,
+          "d_dst_port_entropy": 0.06614320699314767,
+          "d_out_degree": -0.06661684886912,
+          "d_new_peer_count": 0.3254922410514309,
+          "d_iat_var": -2.589148321208357,
+          "d_retrans_rate": 0.04331929609179497,
+          "slope3_syn_ratio": 0.019818643108010292,
+          "slope3_dst_port_entropy": 0.011021655675605247,
+          "slope3_out_degree": 0.026010843806551748,
+          "slope3_iat_var": -82.3652786006714,
+          "is_active": 1.0932729244232178
+        }
+      },
+      {
+        "k": 5,
+        "ts": "2017-07-07T17:41:00+00:00",
+        "p_compromise": 0.8207641839981079,
+        "ci_low": 4.272583353781556e-08,
+        "ci_high": 1.0,
+        "stage_dist": {
+          "benign": 0.5886978507041931,
+          "recon": 2.5344486857648008e-05,
+          "initial_access": 0.268441766500473,
+          "lateral": 1.435370541003067e-05,
+          "c2": 2.3116677766665816e-05,
+          "exfil": 0.14279749989509583
+        },
+        "attack_mapping": [
+          {
+            "stage": "initial_access",
+            "probability": 0.268441766500473,
+            "tactics": [
+              {
+                "id": "TA0001",
+                "name": "Initial Access"
+              },
+              {
+                "id": "TA0006",
+                "name": "Credential Access"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1110.001",
+                "name": "Brute Force: Password Guessing",
+                "tactic_id": "TA0006"
+              },
+              {
+                "id": "T1133",
+                "name": "External Remote Services",
+                "tactic_id": "TA0001"
+              },
+              {
+                "id": "T1190",
+                "name": "Exploit Public-Facing Application",
+                "tactic_id": "TA0001"
+              }
+            ],
+            "resolution": "Brute-force logins (many short sessions to one service port) and web exploitation are visible in flow shape; whether the attempt SUCCEEDED is not \u2014 the bucket means 'attempting entry', not 'entered'."
+          },
+          {
+            "stage": "exfil",
+            "probability": 0.14279749989509583,
+            "tactics": [
+              {
+                "id": "TA0040",
+                "name": "Impact"
+              },
+              {
+                "id": "TA0010",
+                "name": "Exfiltration"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1499.003",
+                "name": "Endpoint Denial of Service: Application Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1499.002",
+                "name": "Endpoint Denial of Service: Service Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1498.001",
+                "name": "Network Denial of Service: Direct Network Flood",
+                "tactic_id": "TA0040"
+              }
+            ],
+            "resolution": "IN THIS DATASET the bucket contains only DoS/DDoS episodes \u2014 there is no exfiltration in CIC-IDS2017. A predicted `exfil` stage therefore means Impact-like terminal activity (T1498/T1499); it is listed under Exfiltration only because the six-bucket taxonomy predates the dataset choice (labels.py documents the simplification)."
+          }
+        ],
+        "predicted_features": {
+          "syn_ratio": 0.01022876426577568,
+          "ack_ratio": 0.11182703077793121,
+          "rst_ratio": -0.06734383851289749,
+          "fin_ratio": -0.06846702843904495,
+          "psh_ratio": -0.015735888853669167,
+          "urg_ratio": 0.13950930535793304,
+          "bytes_total": 1911.1014282603642,
+          "bytes_up_down_ratio": 0.35134032867901954,
+          "pkts_per_flow_mean": 1.5742523356520561,
+          "flow_duration_mean": 201762.51534304608,
+          "flow_duration_var": 16912779379.553926,
+          "iat_mean": 77985.57016049694,
+          "iat_var": 1854879568.9471178,
+          "iat_max": 732083.5203883693,
+          "active_flow_count": 106.90429114744931,
+          "ttl_mean": 2.4502759884157825,
+          "ttl_var": 0.17926800884239436,
+          "tcp_window_mean": 6.509780812775531,
+          "tcp_window_entropy": 0.3190033575111957,
+          "frag_flag_rate": -0.012930408120155334,
+          "payload_size_mean": 4.659324298975149,
+          "payload_size_var": 12.024099994674499,
+          "payload_size_p95": 6.518621974031824,
+          "payload_size_entropy": 0.5959554160090261,
+          "retrans_count": 0.7080041348264939,
+          "retrans_rate": 0.07981856167316437,
+          "out_degree": 1.6101519464314034,
+          "in_degree": 2.6473516640654675,
+          "dst_ip_entropy": -0.21644230953268312,
+          "dst_port_entropy": -0.004918409889235781,
+          "new_peer_count": 0.16657899531542306,
+          "neighbour_risk_fraction": 0.5821256041526794,
+          "local_clustering_coeff": 0.19450120627880096,
+          "reciprocity": 1.100887417793274,
+          "d_syn_ratio": -0.087724968791008,
+          "d_dst_port_entropy": 0.016099446800240745,
+          "d_out_degree": -0.03976116779469373,
+          "d_new_peer_count": 0.38152860640504493,
+          "d_iat_var": -1.0235693485591173,
+          "d_retrans_rate": 0.04523026943206787,
+          "slope3_syn_ratio": 0.02770361304283142,
+          "slope3_dst_port_entropy": 0.0015622213200628746,
+          "slope3_out_degree": 0.011680523597070929,
+          "slope3_iat_var": -1.5715311918739066,
+          "is_active": 1.1000062227249146
+        }
+      },
+      {
+        "k": 6,
+        "ts": "2017-07-07T17:42:00+00:00",
+        "p_compromise": 0.6793850064277649,
+        "ci_low": 3.7009574072044416e-08,
+        "ci_high": 1.0,
+        "stage_dist": {
+          "benign": 0.6088182926177979,
+          "recon": 2.431823668302968e-05,
+          "initial_access": 0.23216408491134644,
+          "lateral": 1.378620981995482e-05,
+          "c2": 2.04889292945154e-05,
+          "exfil": 0.1589590609073639
+        },
+        "attack_mapping": [
+          {
+            "stage": "initial_access",
+            "probability": 0.23216408491134644,
+            "tactics": [
+              {
+                "id": "TA0001",
+                "name": "Initial Access"
+              },
+              {
+                "id": "TA0006",
+                "name": "Credential Access"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1110.001",
+                "name": "Brute Force: Password Guessing",
+                "tactic_id": "TA0006"
+              },
+              {
+                "id": "T1133",
+                "name": "External Remote Services",
+                "tactic_id": "TA0001"
+              },
+              {
+                "id": "T1190",
+                "name": "Exploit Public-Facing Application",
+                "tactic_id": "TA0001"
+              }
+            ],
+            "resolution": "Brute-force logins (many short sessions to one service port) and web exploitation are visible in flow shape; whether the attempt SUCCEEDED is not \u2014 the bucket means 'attempting entry', not 'entered'."
+          },
+          {
+            "stage": "exfil",
+            "probability": 0.1589590609073639,
+            "tactics": [
+              {
+                "id": "TA0040",
+                "name": "Impact"
+              },
+              {
+                "id": "TA0010",
+                "name": "Exfiltration"
+              }
+            ],
+            "candidate_techniques": [
+              {
+                "id": "T1499.003",
+                "name": "Endpoint Denial of Service: Application Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1499.002",
+                "name": "Endpoint Denial of Service: Service Exhaustion Flood",
+                "tactic_id": "TA0040"
+              },
+              {
+                "id": "T1498.001",
+                "name": "Network Denial of Service: Direct Network Flood",
+                "tactic_id": "TA0040"
+              }
+            ],
+            "resolution": "IN THIS DATASET the bucket contains only DoS/DDoS episodes \u2014 there is no exfiltration in CIC-IDS2017. A predicted `exfil` stage therefore means Impact-like terminal activity (T1498/T1499); it is listed under Exfiltration only because the six-bucket taxonomy predates the dataset choice (labels.py documents the simplification)."
+          }
+        ],
+        "predicted_features": {
+          "syn_ratio": 0.02239094488322735,
+          "ack_ratio": 0.10764315724372864,
+          "rst_ratio": -0.07535237073898315,
+          "fin_ratio": -0.07815419882535934,
+          "psh_ratio": -0.01436974760144949,
+          "urg_ratio": 0.1450824737548828,
+          "bytes_total": 1306.2229656236266,
+          "bytes_up_down_ratio": 0.37096804014957074,
+          "pkts_per_flow_mean": 1.4221834643797167,
+          "flow_duration_mean": 126003.36655744397,
+          "flow_duration_var": 6988326047.558828,
+          "iat_mean": 50396.14264779363,
+          "iat_var": 803722008.5461789,
+          "iat_max": 350108.1623003093,
+          "active_flow_count": 100.54437041574162,
+          "ttl_mean": 2.132128928007475,
+          "ttl_var": 0.12228351783905443,
+          "tcp_window_mean": 8.03954708084236,
+          "tcp_window_entropy": 0.31543412191739656,
+          "frag_flag_rate": -0.017076043412089348,
+          "payload_size_mean": 5.956016980273722,
+          "payload_size_var": 16.10711174828212,
+          "payload_size_p95": 7.175197126980114,
+          "payload_size_entropy": 0.6204462520793317,
+          "retrans_count": 0.895776792629687,
+          "retrans_rate": 0.09194138646125793,
+          "out_degree": 1.6717342493237577,
+          "in_degree": 2.121518833598713,
+          "dst_ip_entropy": -0.18869375663269589,
+          "dst_port_entropy": -0.021871044102586307,
+          "new_peer_count": 0.17243390379011062,
+          "neighbour_risk_fraction": 0.5587230324745178,
+          "local_clustering_coeff": 0.21546100080013275,
+          "reciprocity": 1.0896135568618774,
+          "d_syn_ratio": -0.09701759368181229,
+          "d_dst_port_entropy": 0.016052120047673465,
+          "d_out_degree": -0.0012785684935774832,
+          "d_new_peer_count": 0.3817764065593897,
+          "d_iat_var": -0.002120638006783567,
+          "d_retrans_rate": 0.03975614905357361,
+          "slope3_syn_ratio": 0.03733111172914505,
+          "slope3_dst_port_entropy": -0.014679873349360682,
+          "slope3_out_degree": 0.1480727766679446,
+          "slope3_iat_var": -0.13261883653975415,
+          "is_active": 1.1009836196899414
+        }
+      }
+    ],
+    "lead_time_s": 60.0,
+    "observed_stage": "initial_access",
+    "observed_risk": 0.9560714960098267,
+    "risk_curve": {
+      "horizon_seconds": [
+        60,
+        120,
+        180,
+        240,
+        300,
+        360
+      ],
+      "p_attack_at_k": [
+        0.8520649075508118,
+        0.8828827738761902,
+        0.8498086333274841,
+        0.8310825228691101,
+        0.8207641839981079,
+        0.6793850064277649
+      ],
+      "p_attack_at_k_raw": [
+        0.8300117254257202,
+        0.8561289310455322,
+        0.8268611431121826,
+        0.8057565689086914,
+        0.7972085475921631,
+        0.6756843328475952
+      ],
+      "band_low": [
+        0.0031637735664844513,
+        7.686911703785881e-05,
+        1.8790901776810642e-06,
+        5.979183015369927e-08,
+        4.272583353781556e-08,
+        3.7009574072044416e-08
+      ],
+      "band_high": [
+        0.9999970197677612,
+        0.9999998807907104,
+        0.9999998807907104,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "trajectory_std": [
+        0.35793739557266235,
+        0.3845379650592804,
+        0.4073379337787628,
+        0.41612792015075684,
+        0.42937198281288147,
+        0.42815059423446655
+      ],
+      "p_attack_within_horizon": 0.8828827738761902,
+      "horizon_reduction": "max",
+      "threshold": 0.7177971005439758,
+      "above_threshold": true,
+      "calibrated": true
+    },
+    "progression": {
+      "steps": [
+        {
+          "k": 1,
+          "t_plus_s": 60,
+          "stage": "benign",
+          "probability": 0.5338391661643982,
+          "tactics": []
+        },
+        {
+          "k": 2,
+          "t_plus_s": 120,
+          "stage": "benign",
+          "probability": 0.5401395559310913,
+          "tactics": []
+        },
+        {
+          "k": 3,
+          "t_plus_s": 180,
+          "stage": "benign",
+          "probability": 0.5514687299728394,
+          "tactics": []
+        },
+        {
+          "k": 4,
+          "t_plus_s": 240,
+          "stage": "benign",
+          "probability": 0.5555418133735657,
+          "tactics": []
+        },
+        {
+          "k": 5,
+          "t_plus_s": 300,
+          "stage": "benign",
+          "probability": 0.5886978507041931,
+          "tactics": []
+        },
+        {
+          "k": 6,
+          "t_plus_s": 360,
+          "stage": "benign",
+          "probability": 0.6088182926177979,
+          "tactics": []
+        }
+      ],
+      "tactics_in_order": [],
+      "attack_version": "Enterprise ATT&CK v14",
+      "label": "projected stage sequence (model-internal)"
+    },
+    "operating_point": {
+      "source": "operating_point.json (selected on val)",
+      "pooling_key": "median|q=-|max",
+      "threshold": 0.7177971005439758,
+      "threshold_mandated": 0.75,
+      "selected_at": "2026-09-20T05:45:01Z",
+      "calibrated": true
+    },
+    "top_signals": [
+      {
+        "name": "active_flow_count",
+        "shap_value": 0.5819405066317865,
+        "direction": "up",
+        "display": "active_flow_count rising"
+      },
+      {
+        "name": "ttl_mean",
+        "shap_value": 0.14779498787154632,
+        "direction": "up",
+        "display": "ttl_mean rising"
+      },
+      {
+        "name": "d_retrans_rate",
+        "shap_value": 0.02690741287256803,
+        "direction": "up",
+        "display": "d_retrans_rate rising"
+      },
+      {
+        "name": "payload_size_mean",
+        "shap_value": 0.02452574586634054,
+        "direction": "up",
+        "display": "payload_size_mean rising"
+      },
+      {
+        "name": "new_peer_count",
+        "shap_value": 0.017180516754963644,
+        "direction": "up",
+        "display": "new_peer_count rising"
+      }
+    ],
+    "driving_window": 29,
+    "model_version": "nidra-v0.1.0",
+    "schema_ver": "1.0",
+    "n_trajectories": 1000
+  }
+]

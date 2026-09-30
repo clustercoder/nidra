@@ -78,7 +78,7 @@ export function HeroArt({ className = "" }: { className?: string }) {
           strokeDasharray="4 5"
         />
         <text x="20" y="52" className="fill-gray-dark" fontSize="12">
-          one host · last 15 min
+          one host · last 30 min
         </text>
       </Frame>
 
@@ -99,7 +99,7 @@ export function HeroArt({ className = "" }: { className?: string }) {
         />
       </Badge>
       <text x="560" y="344" textAnchor="middle" className="fill-gray-dark" fontSize="12">
-        next 3 minutes
+        next 6 minutes
       </text>
     </svg>
   );

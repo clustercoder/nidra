@@ -380,8 +380,19 @@ def test_stub_forecast_latency_is_under_the_serving_budget(
 # --------------------------------------------------------------------- predictor load
 
 
-def test_loader_returns_the_stub_under_the_default_config(cfg: dict) -> None:
+def test_loader_returns_the_trained_model_under_the_default_config(cfg: dict) -> None:
+    """The default is the real ensemble. Worth asserting rather than assuming:
+    a deployment that quietly falls back to the placeholder still serves
+    forecasts, still validates against the schema, and is wrong about every
+    one of them."""
     predictor = load_predictor(cfg)
+    assert not isinstance(predictor, StubPredictor)
+    assert type(predictor).__name__ == "NidraPredictor"
+    assert isinstance(predictor, Predictor)
+
+
+def test_loader_still_returns_the_stub_when_asked_for_it(cfg: dict) -> None:
+    predictor = load_predictor({**cfg, "predictor": {"impl": "stub"}})
     assert isinstance(predictor, StubPredictor)
     assert isinstance(predictor, Predictor)
 

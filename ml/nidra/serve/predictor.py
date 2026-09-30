@@ -1,0 +1,693 @@
+"""NidraPredictor: the ONLY surface the backend imports.
+
+The backend must never import nidra.models.*, nidra.data.*, or
+nidra.explain.* directly — everything it needs is exposed through this
+one class. Loads the ensemble weights and scaler ONCE at construction,
+never per call. Stateless with respect to per-host sequence history:
+`forecast()` takes the caller's own [L, F] window buffer as an argument
+rather than holding one internally — sequence management belongs to the
+backend/Redis layer (IMPLEMENTATION-Backend.md §7), not here, so any
+inference worker can serve any host without coordination.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import numpy as np
+import torch
+
+from nidra.data.normalize import FeatureScaler
+from nidra.data.schema import (
+    FEATURE_ORDER,
+    SCHEMA_VERSION,
+    STAGE_LABELS,
+    validate_state_array_width,
+)
+from nidra.eval.calibrate import apply_platt_by_horizon, calibration_pooling_mismatch, load_calibration
+from nidra.explain.counterfactual import COUNTERFACTUAL_LABEL, compare_to_baseline
+from nidra.explain.saliency import temporal_saliency
+from nidra.data.attack_mapping import map_stage_distribution, progression_summary
+from nidra.eval.operating_point import OPERATING_POINT_FILENAME, load_operating_point
+from nidra.models.risk_pooling import pool_trajectories_np
+from nidra.explain.forecast_attribution import explain_forecast
+from nidra.explain.shap_runner import explain_current_risk, explain_predicted_stage, load_background, top_signals
+from nidra.models.risk_pooling import pool_ensemble_risk
+from nidra.models.build import world_model_from_config
+from nidra.models.world_model import RolloutOutput, WorldModel
+from nidra.utils.config import load_config
+
+logger = logging.getLogger(__name__)
+
+MODEL_VERSION = "nidra-v0.1.0"
+
+#: What `explain` actually does, reported alongside the attributions: three
+#: distinct mechanisms, not one score dressed up as an explanation.
+EXPLAIN_METHOD = "kernel-shap + input-gradient temporal saliency"
+
+
+def _as_distribution(weights: list[float]) -> list[float]:
+    """Per-window saliency as a distribution over the context, summing to 1.
+
+    `temporal_saliency` returns raw gradient magnitudes, whose scale means
+    nothing on its own and differs between requests. The serving contract —
+    and StubPredictor, and the console's bar chart — is a distribution, so the
+    normalization belongs here rather than in each consumer. `driving_window`
+    is an argmax and is unaffected.
+
+    An all-zero saliency (a context the model is entirely insensitive to) has
+    no distribution; it stays all-zero rather than becoming a fabricated
+    uniform one.
+    """
+    values = np.asarray(weights, dtype=float)
+    total = float(values.sum())
+    if values.size == 0 or total <= 0:
+        return [float(v) for v in values]
+    return [float(v) for v in values / total]
+
+
+def _curve_points(rollout: dict) -> list[dict]:
+    """One rollout's per-horizon risk as the curve the serving plane draws.
+
+    `k` counts from 1, matching HorizonPoint and the rest of the Predictor
+    protocol. The band is clipped into [0, 1] and ordered, because a
+    confidence interval that brackets its own point estimate is the only kind
+    the UI can draw — sampling noise at small n can otherwise put a quantile
+    marginally the wrong side of the mean.
+    """
+    mean = np.asarray(rollout["risk_mean_k"][0], dtype=float)
+    low = np.asarray(rollout["risk_ci_low_k"][0], dtype=float)
+    high = np.asarray(rollout["risk_ci_high_k"][0], dtype=float)
+    points = []
+    for k in range(len(mean)):
+        p = float(np.clip(mean[k], 0.0, 1.0))
+        points.append({
+            "k": k + 1,
+            "p_compromise": p,
+            "ci_low": float(np.clip(min(low[k], p), 0.0, 1.0)),
+            "ci_high": float(np.clip(max(high[k], p), 0.0, 1.0)),
+        })
+    return points
+
+
+class NidraPredictor:
+    """One class, loaded once, three methods: forecast, counterfactual,
+    explain. See IMPLEMENTATION-ML.md §7 and IMPLEMENTATION-Backend.md §7
+    for the exact contract the serving plane depends on."""
+
+    def __init__(
+        self,
+        weights_dir: str | Path,
+        scaler_path: str | Path,
+        config_path: str | Path | None = None,
+        seeds: list[int] | None = None,
+        device: str = "cpu",
+        apply_calibration: bool = False,
+    ):
+        self.cfg = load_config(config_path)
+        self.device = device
+        torch.set_num_threads(self.cfg.get("serving", {}).get("torch_num_threads", 2))
+
+        weights_dir = Path(weights_dir)
+        scaler_path = Path(scaler_path)
+        self._weights_dir = weights_dir
+        self._scaler_path = scaler_path
+        metadata_path = scaler_path.parent / "scaler_metadata.json"
+        self.scaler = FeatureScaler.load(scaler_path, metadata_path)
+
+        background_path = scaler_path.parent / "shap_background.npy"
+        self._background = load_background(background_path)
+        if self._background is None:
+            logger.warning(
+                "NidraPredictor: no serialized SHAP background at %s — falling back to the "
+                "per-call observed history as background (degraded: not the trained k-means "
+                "benign centroids). Run train_dynamics to generate one.", background_path,
+            )
+
+        seeds = seeds if seeds is not None else self.cfg["ensemble"]["seeds"]
+        self.models: list[WorldModel] = []
+        for seed in seeds:
+            model_path = weights_dir / f"model_seed_{seed}.pt"
+            if not model_path.exists():
+                logger.warning("NidraPredictor: missing weights for seed %d at %s, skipping", seed, model_path)
+                continue
+            model = self._build_model()
+            model.load_state_dict(torch.load(model_path, map_location=device))
+            model.eval()
+            model.freeze_all()
+            self.models.append(model)
+
+        if not self.models:
+            raise RuntimeError(f"NidraPredictor: no ensemble weights found in {weights_dir}")
+
+        self.n_samples_per_member = self.cfg["rollout"]["n_samples_per_member"]
+        self.K = self.cfg["windowing"]["horizon_length"]
+        self.L = self.cfg["windowing"]["context_length"]
+        self.risk_threshold = self.cfg["eval"]["risk_threshold"]
+        # See nidra.models.risk_pooling: how the sampled-trajectory dimension
+        # is reduced to a point estimate — "mean" is the historical default,
+        # "quantile" trades some precision for materially better recall at
+        # the mandated risk_threshold (see REAL_DATA_RESULTS.md). Must match
+        # whatever eval/run_eval.py used to measure the numbers this
+        # checkpoint is trusted against.
+        self.risk_pooling_method = self.cfg["rollout"].get("risk_pooling_method", "mean")
+        self.risk_pooling_quantile = self.cfg["rollout"].get("risk_pooling_quantile", 0.9)
+        # Order of the head-mean vs. trajectory-pooling reductions — kept in
+        # parity with eval.baselines.ensemble_world_model_forecast so the
+        # served statistic is the one that was measured. No-op under "mean".
+        self.risk_pooling_head_reduction = self.cfg["rollout"].get(
+            "risk_pooling_head_reduction", "before_pooling"
+        )
+        self.horizon_reduction = "max"
+
+        # The frozen operating point (eval/operating_point.py): pooling
+        # statistic, per-horizon Platt calibration and decision threshold,
+        # all selected on the VALIDATION split by nidra.eval.benchmark and
+        # written next to the weights. When it exists it overrides the
+        # config's pooling and the legacy risk_calibration.json path, so the
+        # served number is exactly the one the benchmark measured.
+        self.operating_point: dict | None = None
+        op_path = weights_dir / OPERATING_POINT_FILENAME
+        if op_path.exists():
+            op = load_operating_point(op_path)
+            if op.get("selected_on") != "val":
+                raise RuntimeError(f"operating point at {op_path} was not selected on validation ({op.get('selected_on')!r})")
+            self.operating_point = op
+            self.risk_pooling_method = op["pooling"]["method"]
+            self.risk_pooling_quantile = op["pooling"].get("quantile")
+            self.horizon_reduction = op["pooling"].get("horizon_reduction", "max")
+            self.risk_pooling_head_reduction = "before_pooling"
+            self.risk_threshold = float(op["threshold"]["f1_optimal_calibrated"])
+            logger.info("NidraPredictor: operating point %s from %s (threshold %.3f, mandated %.2f)",
+                        op.get("pooling_key"), op_path, self.risk_threshold, float(op["threshold"].get("mandated", 0.75)))
+
+        # Post-hoc calibration (nidra.scripts.fit_calibration) is OFF BY
+        # DEFAULT — pass apply_calibration=True to opt in. This is a
+        # deliberate finding from this project's own evaluation, not an
+        # oversight, and it is CHECKPOINT-DEPENDENT, not a fixed property of
+        # the technique (see REAL_DATA_RESULTS.md Run 2 addendum and Run 3):
+        # against the MVP-scale ensemble (artifacts_mvp_2017/), a correctly
+        # base-rate-respecting Platt fit measurably *reduces* recall at the
+        # mandated 0.75 threshold; against the full-scale ensemble
+        # (artifacts/, config/default.yaml), the same technique was
+        # re-fit and re-verified against the real pooled-ensemble path and
+        # was found to mildly *help* recall on both test and holdout splits
+        # (never hurting it) — though it does not fix the underlying
+        # miscalibration; recall stays low either way. Because one hardcoded
+        # default cannot correctly serve both checkpoints, the safe default
+        # stays False globally; REAL_DATA_RESULTS.md's Run 3 gives an
+        # explicit, evidence-backed recommendation to pass
+        # apply_calibration=True specifically when serving the full-scale
+        # artifacts. The file is still loaded (if present) and the flag is
+        # still supported for evaluation/comparison either way.
+        self._calibration = None
+        if self.operating_point is not None:
+            params = self.operating_point["calibration"]["params_by_k"]
+            if any(p.get("degenerate") for p in params):
+                logger.warning("NidraPredictor: operating-point calibration is degenerate at some horizon; "
+                               "serving the raw pooled score there")
+            self._calibration = params
+        elif apply_calibration:
+            calibration_loaded = load_calibration(weights_dir / "risk_calibration.json")
+            self._calibration = calibration_loaded[0] if calibration_loaded else None
+            # Serving must refuse a calibration fit against different pooling
+            # for the same reason run_eval does — it is the wrong remap for the
+            # statistic this predictor produces. Kept in parity with
+            # run_eval.py deliberately (the standing eval/serving-parity rule).
+            mismatch = (
+                calibration_pooling_mismatch(calibration_loaded[1] or {}, self.cfg)
+                if calibration_loaded else None
+            )
+            if self._calibration is not None and mismatch is not None:
+                logger.warning(
+                    "NidraPredictor: IGNORING stale calibration at %s — %s. Serving raw, uncalibrated "
+                    "p_compromise. Re-run nidra.scripts.fit_calibration against this config.",
+                    weights_dir / "risk_calibration.json", mismatch,
+                )
+                self._calibration = None
+            elif self._calibration is not None:
+                logger.warning(
+                    "NidraPredictor: apply_calibration=True — applying post-hoc risk calibration from %s. "
+                    "Whether this helps or hurts recall at threshold=0.75 is checkpoint-dependent — see "
+                    "REAL_DATA_RESULTS.md (Run 2 addendum: harmful at MVP scale; Run 3: mildly helpful at "
+                    "full scale) before relying on this for the weights directory currently in use.",
+                    weights_dir / "risk_calibration.json",
+                )
+            else:
+                logger.warning(
+                    "NidraPredictor: apply_calibration=True but no risk_calibration.json found in %s — "
+                    "falling back to raw, uncalibrated p_compromise (run nidra.scripts.fit_calibration first)",
+                    weights_dir,
+                )
+        logger.info("NidraPredictor: loaded %d ensemble member(s) from %s", len(self.models), weights_dir)
+
+    def _build_model(self) -> WorldModel:
+        """The shared constructor, not a hand-rolled copy of it. Serving that
+        builds its own architecture is a divergence no schema check can see —
+        both sides are WorldModels — and the head a config asks for has to be
+        the head every stage builds."""
+        return world_model_from_config(self.cfg).to(self.device)
+
+    def _validate_and_scale(self, states: np.ndarray) -> np.ndarray:
+        """states: [L, F] raw, unscaled, oldest-first. Fails loudly on any
+        schema mismatch rather than producing a silently wrong forecast."""
+        states = np.asarray(states, dtype="float32")
+        if states.ndim != 2:
+            raise ValueError(f"expected states of shape [L, F], got shape {states.shape}")
+        validate_state_array_width(states.shape[1])
+        if states.shape[0] != self.L:
+            raise ValueError(f"expected {self.L} windows of history (L), got {states.shape[0]}")
+        if not np.isfinite(states).all():
+            raise ValueError("states contains NaN or Inf — refusing to forecast on invalid input")
+        return self.scaler.transform(states)
+
+    @torch.no_grad()
+    def _risk_context(self, scaled: np.ndarray) -> dict:
+        """The trajectory-head inputs for the observed origin state, which a
+        conditional attribution holds fixed while SHAP perturbs the state.
+
+        Passed unconditionally: a per-state head's attribution ignores it
+        (`shap_runner._risk_predict_fn` reads only what the head declares),
+        and a trajectory head's attribution refuses to run without it rather
+        than silently attributing the head against a zero context.
+        """
+        return self.models[0].observed_context(torch.from_numpy(scaled).float().unsqueeze(0))
+
+    @torch.no_grad()
+    def _ensemble_rollout(self, scaled_states: np.ndarray) -> dict:
+        """Runs every ensemble member's rollout and pools trajectories
+        before scoring — ~n_samples_per_member * len(models) trajectories
+        total, matching the ~1000-trajectory target for a 5-seed ensemble
+        at 200 samples/member."""
+        x = torch.from_numpy(scaled_states).float().unsqueeze(0)  # [1, L, F]
+        # The WHOLE rollout output is pooled, not just the states: a
+        # trajectory head reads the hidden state, realized delta and
+        # log-variance of each step too, and pooling only the states left the
+        # served path unable to score the very head this phase selects (it
+        # raised a bare TypeError). A per-state head still sees only
+        # `states`, so its numbers are unchanged.
+        outs = [model.rollout(x, K=self.K, n_samples=self.n_samples_per_member, stochastic=True)
+                for model in self.models]
+        pooled = RolloutOutput.pool(outs)
+        pooled_states = pooled.states  # [1, S_total, K, F]
+
+        risk_list, stage_list = [], []
+        for model in self.models:
+            r, s = model.score_trajectory(pooled)
+            risk_list.append(r.reshape(1, pooled_states.shape[1], self.K))
+            stage_list.append(s.reshape(1, pooled_states.shape[1], self.K, -1))
+        per_head_risk = torch.stack(risk_list, dim=0)        # [M, 1, S_total, K]
+        # average head outputs across ensemble members too, not just samples
+        risk = per_head_risk.mean(dim=0)                     # [1, S_total, K]
+        stage = torch.stack(stage_list, dim=0).mean(dim=0)   # [1, S_total, K, n_stages]
+
+        q_low = self.cfg["rollout"]["ci_low_quantile"]
+        q_high = self.cfg["rollout"]["ci_high_quantile"]
+        if self.operating_point is not None:
+            # head-mean per trajectory, then the frozen statistic — the
+            # benchmark's exact reduction (eval/systems.py ScoreBundle.pooled)
+            risk_mean_k = pool_trajectories_np(risk[0].numpy(), self.risk_pooling_method, self.risk_pooling_quantile, axis=0)
+        else:
+            risk_mean_k = pool_ensemble_risk(
+                per_head_risk, sample_dim=2, head_dim=0, method=self.risk_pooling_method,
+                quantile=self.risk_pooling_quantile, head_reduction=self.risk_pooling_head_reduction,
+            )[0].numpy()
+        risk_ci_low_k = risk.quantile(q_low, dim=1)[0].numpy()
+        risk_ci_high_k = risk.quantile(q_high, dim=1)[0].numpy()
+        risk_raw_k = risk_mean_k.copy()
+        if self._calibration is not None:
+            # Calibrate p_compromise (and its CI band) — see __init__ and
+            # eval/calibrate.py. Monotonic, so it never changes WHICH
+            # trajectories rank riskiest, only whether the reported number
+            # is comparable to the 0.75 decision threshold.
+            risk_mean_k = apply_platt_by_horizon(risk_mean_k, self._calibration)
+            risk_ci_low_k = apply_platt_by_horizon(risk_ci_low_k, self._calibration)
+            risk_ci_high_k = apply_platt_by_horizon(risk_ci_high_k, self._calibration)
+        return {
+            "predicted_states_mean": pooled_states.mean(dim=1)[0].numpy(),   # [K, F]
+            "risk_mean_k": risk_mean_k,                                      # [K]
+            "risk_raw_k": risk_raw_k,                                        # [K] before calibration
+            "risk_traj_std_k": risk.std(dim=1)[0].numpy(),                   # [K] spread across trajectories
+            "risk_ci_low_k": risk_ci_low_k,
+            "risk_ci_high_k": risk_ci_high_k,
+            "stage_mean_k": stage.mean(dim=1)[0].numpy(),                     # [K, n_stages]
+            "n_trajectories": pooled_states.shape[1],
+        }
+
+    def forecast(self, states: np.ndarray, host_id: str, origin_ts: datetime) -> dict:
+        """states: [L, F] raw, unscaled, oldest-first. Returns a dict
+        matching the backend's shared `Forecast` schema (see
+        IMPLEMENTATION-Backend.md §3) — `tenant_id` is NOT included here;
+        the backend attaches it, since the ML layer has no notion of
+        tenancy."""
+        scaled = self._validate_and_scale(states)
+        rollout = self._ensemble_rollout(scaled)
+
+        observed_state = states[-1]
+        # Soft-vote every member, exactly as the forecast reduces the heads
+        # under the shipped `head_reduction: before_pooling`. This used to
+        # score the observed state with self.models[0] alone, which made the
+        # number a console renders as "risk right now" — and draws the
+        # forecast cone from — a different, noisier statistic than the pooled
+        # one it sits beside. On a real CIC-IDS2017 host, seed 0 alone scored
+        # 0 true positives against 4 false ones across 48 windows where the
+        # pooled forecast got 17 against 12.
+        # score_observed, not score_states: for the per-state head the two are
+        # the same call on scaled[-1], and a trajectory head additionally gets
+        # the encoder context of the history window it is entitled to read.
+        with torch.no_grad():
+            observed_batch = torch.from_numpy(scaled).float().unsqueeze(0)  # [1, L, F]
+            member_risk, member_stage = zip(
+                *(m.score_observed(observed_batch) for m in self.models)
+            )
+        observed_risk = float(torch.stack(member_risk).mean().item())
+        observed_stage_probs_t = torch.stack(member_stage).mean(dim=0)
+        observed_stage = STAGE_LABELS[int(observed_stage_probs_t.argmax(dim=-1).item())]
+
+        horizons = []
+        window_seconds = self.cfg["windowing"]["window_seconds"]
+        for k in range(self.K):
+            ts = origin_ts + timedelta(seconds=window_seconds * (k + 1))
+            stage_dist = {name: float(p) for name, p in zip(STAGE_LABELS, rollout["stage_mean_k"][k])}
+            # predicted_states_mean is in the model's internal scaled
+            # (RobustScaler + log1p) space — inverse-transform back to raw
+            # units before handing it to a consumer, which never operates in
+            # scaled space (see nidra.data.normalize.FeatureScaler docstring
+            # and the web-contract example, e.g. bytes_total in the
+            # thousands, not a small RobustScaler-normalized float).
+            raw_predicted = self.scaler.inverse_transform(rollout["predicted_states_mean"][k])
+            predicted_features = {name: float(v) for name, v in zip(FEATURE_ORDER, raw_predicted)}
+            horizons.append({
+                "k": k + 1,
+                "ts": ts.isoformat(),
+                "p_compromise": float(rollout["risk_mean_k"][k]),
+                "ci_low": float(rollout["risk_ci_low_k"][k]),
+                "ci_high": float(rollout["risk_ci_high_k"][k]),
+                "stage_dist": stage_dist,
+                "attack_mapping": map_stage_distribution(stage_dist),
+                "predicted_features": predicted_features,
+            })
+
+        lead_time_s = self._lead_time_from_curve(horizons, window_seconds, threshold=self.risk_threshold)
+        progression = progression_summary([h["stage_dist"] for h in horizons], window_seconds)
+        risk_curve = self._risk_curve(rollout, window_seconds)
+
+        background = self._shap_background(scaled)
+        attributions = explain_current_risk(
+            scaled[-1], background, self.models[0], nsamples=100, context=self._risk_context(scaled))
+        signals = self._signals(attributions, n=5)
+
+        saliency = temporal_saliency(self.models[0], scaled, target_feature=FEATURE_ORDER[0], horizon_k=0, K=self.K)
+
+        return {
+            "host_id": host_id,
+            "origin_ts": origin_ts.isoformat(),
+            "horizons": horizons,
+            "lead_time_s": lead_time_s,
+            "observed_stage": observed_stage,
+            "observed_risk": observed_risk,
+            "risk_curve": risk_curve,
+            "progression": progression,
+            "operating_point": self._operating_point_summary(),
+            "top_signals": signals,
+            "driving_window": saliency["driving_window"],
+            "model_version": MODEL_VERSION,
+            "schema_ver": SCHEMA_VERSION,
+            "n_trajectories": rollout["n_trajectories"],
+        }
+
+    @torch.no_grad()
+    def forecast_batch(self, states_batch: np.ndarray, chunk: int = 128, n_samples_per_member: int | None = None) -> dict:
+        """Risk curves for many contexts at once — the offline file pipeline
+        (nidra.cli.forecast) and anything else that scores a whole capture.
+        No explanations, no ATT&CK text: the same rollout, pooling,
+        calibration and threshold as forecast(), vectorised.
+
+        states_batch: [N, L, F] raw, oldest-first. Returns arrays:
+        p_attack_at_k [N, K] (calibrated when an operating point exists),
+        p_attack_at_k_raw, band_low/high [N, K], p_within_horizon [N],
+        above_threshold [N], stage_mean_k [N, K, n_stages]."""
+        states_batch = np.asarray(states_batch, dtype="float32")
+        if states_batch.ndim != 3 or states_batch.shape[1] != self.L:
+            raise ValueError(f"expected [N, {self.L}, F], got {states_batch.shape}")
+        validate_state_array_width(states_batch.shape[2])
+        if not np.isfinite(states_batch).all():
+            raise ValueError("states_batch contains NaN or Inf")
+        n_samples = n_samples_per_member or self.n_samples_per_member
+        q_low = self.cfg["rollout"]["ci_low_quantile"]
+        q_high = self.cfg["rollout"]["ci_high_quantile"]
+        N = states_batch.shape[0]
+        out_p, out_raw, out_lo, out_hi, out_stage = [], [], [], [], []
+        for lo in range(0, N, chunk):
+            xb = torch.from_numpy(self.scaler.transform(states_batch[lo:lo + chunk].reshape(-1, states_batch.shape[2]))
+                                  .reshape(-1, self.L, states_batch.shape[2])).float()
+            B = xb.shape[0]
+            # The whole RolloutOutput is pooled, not just `.states` — the same
+            # reason as in _ensemble_rollout: a trajectory head reads the
+            # hidden state, realized delta and log-variance of each step.
+            pooled = RolloutOutput.pool(
+                [m.rollout(xb, K=self.K, n_samples=n_samples, stochastic=True) for m in self.models])
+            S = pooled.states.shape[1]
+            risks, stages = [], []
+            for m in self.models:
+                r, st = m.score_trajectory(pooled)
+                risks.append(r.reshape(B, S, self.K))
+                stages.append(st.reshape(B, S, self.K, -1))
+            risk = torch.stack(risks).mean(0)                                  # [B, S, K] head-mean per trajectory
+            stage = torch.stack(stages).mean(0).mean(1)                        # [B, K, n_stages]
+            if self.operating_point is not None:
+                pk = pool_trajectories_np(risk.numpy(), self.risk_pooling_method, self.risk_pooling_quantile, axis=1)
+            else:
+                pk = pool_ensemble_risk(torch.stack(risks), sample_dim=2, head_dim=0, method=self.risk_pooling_method,
+                                        quantile=self.risk_pooling_quantile, head_reduction=self.risk_pooling_head_reduction).numpy()
+            raw = pk.copy()
+            lo_b = risk.quantile(q_low, dim=1).numpy()
+            hi_b = risk.quantile(q_high, dim=1).numpy()
+            if self._calibration is not None:
+                pk = apply_platt_by_horizon(pk, self._calibration)
+                lo_b = apply_platt_by_horizon(lo_b, self._calibration)
+                hi_b = apply_platt_by_horizon(hi_b, self._calibration)
+            out_p.append(pk); out_raw.append(raw); out_lo.append(lo_b); out_hi.append(hi_b); out_stage.append(stage.numpy())
+        p_k = np.clip(np.concatenate(out_p), 0.0, 1.0)
+        if self.horizon_reduction == "max":
+            composite = p_k.max(axis=1)
+        else:
+            composite = 1.0 - np.prod(1.0 - p_k, axis=1)
+        return {
+            "p_attack_at_k": p_k, "p_attack_at_k_raw": np.concatenate(out_raw),
+            "band_low": np.concatenate(out_lo), "band_high": np.concatenate(out_hi),
+            "p_within_horizon": composite, "above_threshold": composite >= self.risk_threshold,
+            "stage_mean_k": np.concatenate(out_stage), "threshold": float(self.risk_threshold),
+            "calibrated": self._calibration is not None, "n_trajectories": int(len(self.models) * n_samples),
+        }
+
+    def _risk_curve(self, rollout: dict, window_seconds: int) -> dict:
+        """The multi-horizon risk curve with uncertainty: per horizon the
+        pooled (calibrated when an operating point exists) probability that
+        t+k is an attack window, its trajectory band, and the composite
+        "any attack within the horizon" score that the threshold applies to."""
+        p_k = np.clip(np.asarray(rollout["risk_mean_k"], dtype="float64"), 0.0, 1.0)
+        composite = float(p_k.max()) if self.horizon_reduction == "max" else float(1.0 - np.prod(1.0 - p_k))
+        return {
+            "horizon_seconds": [int(window_seconds * (k + 1)) for k in range(self.K)],
+            "p_attack_at_k": [float(v) for v in p_k],
+            "p_attack_at_k_raw": [float(v) for v in rollout["risk_raw_k"]],
+            "band_low": [float(v) for v in rollout["risk_ci_low_k"]],
+            "band_high": [float(v) for v in rollout["risk_ci_high_k"]],
+            "trajectory_std": [float(v) for v in rollout["risk_traj_std_k"]],
+            "p_attack_within_horizon": composite,
+            "horizon_reduction": self.horizon_reduction,
+            "threshold": float(self.risk_threshold),
+            "above_threshold": bool(composite >= self.risk_threshold),
+            "calibrated": self._calibration is not None,
+        }
+
+    def _operating_point_summary(self) -> dict:
+        if self.operating_point is None:
+            return {"source": "config", "pooling_key": f"{self.risk_pooling_method}|q={self.risk_pooling_quantile}",
+                    "threshold": float(self.risk_threshold), "calibrated": self._calibration is not None}
+        op = self.operating_point
+        return {"source": "operating_point.json (selected on val)", "pooling_key": op.get("pooling_key"),
+                "threshold": float(self.risk_threshold), "threshold_mandated": float(op["threshold"].get("mandated", 0.75)),
+                "selected_at": op.get("selected_at"), "calibrated": True}
+
+    @property
+    def model_version(self) -> str:
+        """Which checkpoint is answering. Part of the Predictor protocol:
+        /api/v1/model reports it, and without it a running deployment cannot
+        say what is serving it."""
+        return MODEL_VERSION
+
+    def counterfactual(self, states: np.ndarray, feature_name: str, clamp_value: float) -> dict:
+        """Clamp one named feature to `clamp_value` for the entire rollout
+        and re-simulate, returning the clamped curve NEXT TO the unclamped
+        one. Explicitly labelled 'model-internal what-if' — see
+        explain/counterfactual.py. Never call this an intervention.
+
+        Both curves come back as `[{k, p_compromise, ci_low, ci_high}, ...]`,
+        k counting from 1, which is the shape the serving plane overlays and
+        the same shape StubPredictor returns. Returning the raw
+        `risk_mean_k`/`risk_ci_*_k` arrays instead is a clean miss against
+        `payload.get("original", [])`, so /api/v1/counterfactual answered 200
+        with two empty curves and nothing raised.
+
+        The baseline is a model output too, not ground truth — it is the same
+        rollout with nothing clamped, run at the same sample count so the two
+        curves are comparable.
+        """
+        scaled = self._validate_and_scale(states)
+        if feature_name not in FEATURE_ORDER:
+            raise ValueError(f"unknown feature {feature_name!r}")
+        clamped_scaled_value = self._scale_single_feature_value(feature_name, clamp_value)
+
+        # compare_to_baseline runs both rollouts on one code path under one
+        # seed, so the two curves share their trajectory noise and the gap
+        # between them is the clamp rather than Monte Carlo error. Drawing the
+        # baseline separately made that gap about 7x more variable across
+        # seeds than the curve itself — enough to flip its sign at a step
+        # where the clamp's real effect is small.
+        paired = compare_to_baseline(
+            scaled, self.models[0], feature_name, clamped_scaled_value,
+            K=self.K, n_samples=self.n_samples_per_member,
+        )
+        baseline, clamped = paired["baseline"], paired["counterfactual"]
+        return {
+            "label": COUNTERFACTUAL_LABEL,
+            "feature": feature_name,
+            # Kept under its old name too: `clamped_feature` is what the
+            # ml-side callers and REAL_DATA_RESULTS.md already read.
+            "clamped_feature": feature_name,
+            "clamp_value": clamp_value,
+            "model_version": MODEL_VERSION,
+            "original": _curve_points(baseline),
+            "counterfactual": _curve_points(clamped),
+        }
+
+    def explain(self, states: np.ndarray, horizon_k: int) -> dict:
+        """Full attribution bundle for one host/window: SHAP on observed
+        risk, temporal saliency, and SHAP on the predicted stage at
+        `horizon_k`. Three distinct mechanisms, kept distinct in the
+        response — see IMPLEMENTATION-ML.md §6.
+
+        `horizon_k` counts horizon steps from 1, matching the `k` on every
+        HorizonPoint a forecast returns, the `k` query parameter on
+        /api/v1/explain, and StubPredictor — one numbering across the whole
+        Predictor protocol. The rollout tensor is indexed from 0, and the
+        conversion is this method's business, not its caller's.
+
+        This used to be the one place that read `horizon_k` as a 0-based
+        index. Nothing converted at the boundary, so every /api/v1/explain
+        call indexed one step past the rollout and raised IndexError from
+        inside it — a 500 for a request that was correctly formed. The bound
+        below raises ValueError instead, which the API already translates
+        into a 422 for a step that really is out of range.
+        """
+        if not 1 <= horizon_k <= self.K:
+            raise ValueError(
+                f"horizon_k must be in 1..{self.K}, got {horizon_k}"
+            )
+        step_index = horizon_k - 1
+        scaled = self._validate_and_scale(states)
+        background = self._shap_background(scaled)
+
+        current_risk_attributions = explain_current_risk(
+            scaled[-1], background, self.models[0], nsamples=100, context=self._risk_context(scaled))
+
+        with torch.no_grad():
+            out = self.models[0].rollout(
+                torch.from_numpy(scaled).float().unsqueeze(0), K=self.K, n_samples=1, stochastic=False,
+            )
+        predicted_state = out.states[0, 0, step_index, :].numpy()
+        with torch.no_grad():
+            stage_probs = self.models[0].score_stage(torch.from_numpy(predicted_state).float().unsqueeze(0))
+        predicted_stage_idx = int(stage_probs.argmax(dim=-1).item())
+        stage_attributions = explain_predicted_stage(predicted_state, background, self.models[0], predicted_stage_idx, nsamples=100)
+
+        saliency_results = {
+            feat: temporal_saliency(self.models[0], scaled, target_feature=feat, horizon_k=step_index, K=self.K)
+            for feat in [a["feature"] for a in current_risk_attributions[:3]]
+        }
+
+        # The serving plane reads `top_signals`, `driving_window` and
+        # `window_importance` — the same names `forecast` returns them under.
+        # Leaving them out made /api/v1/explain answer with an empty signal
+        # list and a window_importance of [], which is an explanation that
+        # explains nothing, and pushed the mapping out into every caller.
+        leading = self._signals(current_risk_attributions, n=10)
+        leading_saliency = saliency_results.get(
+            leading[0]["name"] if leading else "", {}
+        )
+        # (d) the forecast itself: signed integrated-gradient contributions of
+        # every (history window, feature) cell to the composite within-horizon
+        # score, with a deletion-based faithfulness check on the same forward
+        # function — see explain/forecast_attribution.py.
+        forecast_attr = explain_forecast(self.models, scaled, self.scaler.zero_state_scaled(), self.K,
+                                         horizon_reduction=self.horizon_reduction)
+        return {
+            "current_risk_attributions": leading,
+            "top_signals": leading,
+            "forecast_attributions": forecast_attr,
+            "window_importance": _as_distribution(leading_saliency.get("window_importance", [])),
+            "driving_window": int(leading_saliency.get("driving_window", 0)),
+            "predicted_stage": STAGE_LABELS[predicted_stage_idx],
+            "predicted_stage_attributions": top_signals(stage_attributions, n=10),
+            "temporal_saliency": saliency_results,
+            "horizon_k": horizon_k,
+            # Which model produced this attribution, and how. Omitting them
+            # left /api/v1/explain answering "unknown" for both, so a response
+            # could not be tied back to the checkpoint that made it.
+            "method": EXPLAIN_METHOD,
+            "model_version": MODEL_VERSION,
+            "schema_ver": SCHEMA_VERSION,
+        }
+
+    def _shap_background(self, scaled_history: np.ndarray) -> np.ndarray:
+        """Uses the serialized k-means benign-centroid background computed
+        at training time (see train/train_dynamics.py). Falls back to the
+        observed history itself only when no background was serialized —
+        a documented degradation, not the random background the spec
+        explicitly warns is slow and noisy."""
+        if self._background is not None:
+            return self._background
+        return scaled_history
+
+    def _scale_single_feature_value(self, feature_name: str, raw_value: float) -> float:
+        idx = FEATURE_ORDER.index(feature_name)
+        dummy = np.zeros((1, len(FEATURE_ORDER)), dtype="float32")
+        dummy[0, idx] = raw_value
+        scaled = self.scaler.transform(dummy)
+        return float(scaled[0, idx])
+
+    def _signals(self, attributions: list[dict], n: int) -> list[dict]:
+        """SHAP attributions in the shape the serving plane's
+        `SignalAttribution` expects: `name`, not the ML side's `feature`, plus
+        display copy.
+
+        Shared by `forecast` and `explain` rather than written out in each.
+        It was inline in `forecast` only, so `explain` returned the raw
+        attributions and the API's `SignalAttribution.model_validate` failed
+        on the missing `name` — two producers of one contract, one of which
+        did not know about it.
+        """
+        return [
+            {"name": a["feature"], "shap_value": a["shap_value"],
+             "direction": a["direction"], "display": self._human_readable_signal(a)}
+            for a in top_signals(attributions, n=n)
+        ]
+
+    @staticmethod
+    def _human_readable_signal(attribution: dict) -> str:
+        direction_word = "rising" if attribution["direction"] == "up" else "falling"
+        return f"{attribution['feature']} {direction_word}"
+
+    @staticmethod
+    def _lead_time_from_curve(horizons: list[dict], window_seconds: int, threshold: float = 0.75, m: int = 2) -> float | None:
+        run = 0
+        for i, h in enumerate(horizons):
+            run = run + 1 if h["p_compromise"] >= threshold else 0
+            if run >= m:
+                return float(window_seconds * (i - m + 2))
+        return None

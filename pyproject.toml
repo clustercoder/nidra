@@ -71,6 +71,16 @@ packages = [
     "services.persister",
 ]
 
+# The `nidra` package has ONE source of truth, ml/nidra/, and is mapped into
+# place here rather than duplicated at the repo root. It used to exist in both
+# places; the root copy silently stopped being updated and was three fixes
+# behind by the time this was caught — including nidra/models/risk_pooling.py,
+# without which the served model scores F1 0.010 instead of 0.84 at the
+# mandated alert threshold. Imports are unchanged (`nidra.serve.predictor`);
+# only where the files live changed.
+[tool.setuptools.package-dir]
+nidra = "ml/nidra"
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
